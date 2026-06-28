@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mcp_hub
+          POSTGRES_PASSWORD: mcp_hub_prod_2026
+          POSTGRES_DB: mcp_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e ".[dev]"
+          pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pytest pytest-asyncio
+
+      - name: Lint with Ruff
+        run: |
+          pip install ruff
+          ruff check src/ --output-format=github
+
+      - name: Type check with mypy
+        run: |
+          pip install mypy
+          mypy src/mcp_hub/models/ --ignore-missing-imports || true
+
+      - name: Test with pytest
+        env:
+          MCP_HUB_DATABASE_URL: postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub
+        run: |
+          pytest tests/ -v --tb=short
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build package
+        run: |
+          pip install build
+          python -m build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

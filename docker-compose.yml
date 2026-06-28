@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mcp_hub
+      POSTGRES_PASSWORD: mcp_hub_prod_2026
+      POSTGRES_DB: mcp_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcp_hub -d mcp_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hub:
+    build: .
+    environment:
+      MCP_HUB_DATABASE_URL: postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@postgres:5432/mcp_hub
+      MCP_HUB_SECRET: change-this-in-production
+      MCP_HUB_HOST: 0.0.0.0
+      MCP_HUB_PORT: 3987
+    ports:
+      - "3987:3987"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

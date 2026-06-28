@@ -1,0 +1,36 @@
+[Unit]
+Description=MCP Server Hub - MCP 生态一站式管理平台
+Documentation=https://github.com/mcp-hub/mcp-hub
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=djl
+Group=djl
+WorkingDirectory=/home/djl/code/McpServerHub
+
+# Conda environment
+Environment=PATH=/home/djl/miniconda3/envs/McpServerHub/bin:/usr/local/bin:/usr/bin:/bin
+Environment=MCP_HUB_DATABASE_URL=postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub
+Environment=MCP_HUB_SECRET=mcp-hub-prod-secret-key
+Environment=MCP_HUB_LOG_DIR=/var/log/mcp-hub
+Environment=MCP_HUB_HOST=0.0.0.0
+Environment=MCP_HUB_PORT=3987
+
+ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --host 0.0.0.0 --port 3987 --workers 2 --log-level info
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
