@@ -14,24 +14,23 @@ def cli():
 
 
 # Import and register all subcommands
-from mcp_hub.cli.search import search, info, compare
-from mcp_hub.cli.install import install, uninstall, list_servers
-from mcp_hub.cli.manage import start, stop, restart, status_cmd
-from mcp_hub.cli.logs import logs
-from mcp_hub.cli.update import update, upgrade, rollback, version_history
+from mcp_hub.cli.auth import login, logout, whoami
+from mcp_hub.cli.community import favorite, favorites, rate, review
 from mcp_hub.cli.config import config
 from mcp_hub.cli.daemon import daemon, serve
-from mcp_hub.cli.init_cmd import init_cmd
-from mcp_hub.cli.quickstart import quickstart
-from mcp_hub.cli.publish import publish, my_servers, unpublish, stats
-from mcp_hub.cli.community import rate, review, favorite, favorites
-from mcp_hub.cli.trending import trending, top_rated, most_downloaded, new_releases
 from mcp_hub.cli.event import event
-from mcp_hub.cli.auth import login, logout, whoami
-from mcp_hub.cli.registry_sync import registry_sync
 from mcp_hub.cli.hub_install import hub_install
+from mcp_hub.cli.init_cmd import init_cmd
+from mcp_hub.cli.install import install, list_servers, uninstall
+from mcp_hub.cli.logs import logs
+from mcp_hub.cli.manage import restart, start, status_cmd, stop
 from mcp_hub.cli.prompt_install import prompt_install
-
+from mcp_hub.cli.publish import my_servers, publish, stats, unpublish
+from mcp_hub.cli.quickstart import quickstart
+from mcp_hub.cli.registry_sync import registry_sync
+from mcp_hub.cli.search import compare, info, search
+from mcp_hub.cli.trending import most_downloaded, new_releases, top_rated, trending
+from mcp_hub.cli.update import rollback, update, upgrade, version_history
 
 cli.add_command(search)
 cli.add_command(info)

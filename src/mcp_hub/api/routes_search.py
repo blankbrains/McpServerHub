@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import func, or_, select
+
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import ServerModel
 from mcp_hub.db.repositories import ServerRepository

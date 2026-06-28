@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
-import click
+import json
 from pathlib import Path
+
+import click
+
 from mcp_hub.core.registry import Registry
 
 
@@ -52,7 +54,7 @@ def publish(path: str, visibility: str, draft: bool):
             "visibility": visibility,
         }
         result_id = await registry.register_server(server_data)
-        click.echo(f"✅ 发布成功！")
+        click.echo("✅ 发布成功！")
         click.echo(f"   📍 {result_id}")
 
     asyncio.run(_run())

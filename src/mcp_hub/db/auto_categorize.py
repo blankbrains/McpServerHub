@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 
 # 分类关键词映射
 CATEGORY_RULES = [
@@ -67,9 +66,10 @@ def auto_categorize(name: str, desc: str, tags: list[str] | None = None,
 
 async def recategorize_all():
     """重新分类所有 Server。"""
+    from sqlalchemy import select
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
-    from sqlalchemy import select
 
     async with async_session_factory() as session:
         result = await session.execute(select(ServerModel))

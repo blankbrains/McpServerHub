@@ -9,17 +9,17 @@ from urllib.parse import urlencode
 import httpx
 
 from mcp_hub.config import get_settings
-from mcp_hub.db.repositories import UserRepository
 from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.repositories import UserRepository
 
 settings = get_settings()
 
 
 def simple_jwt_encode(payload: dict) -> str:
     """生产级 JWT 编码（纯 HMAC-SHA256，无外部依赖）。"""
+    import base64
     import hashlib
     import hmac
-    import base64
 
     secret = settings.SECRET_KEY
     header = base64.urlsafe_b64encode(
@@ -38,9 +38,9 @@ def simple_jwt_encode(payload: dict) -> str:
 
 def simple_jwt_decode(token: str) -> dict | None:
     """验证并解码 JWT。"""
+    import base64
     import hashlib
     import hmac
-    import base64
 
     secret = settings.SECRET_KEY
     parts = token.split(".")

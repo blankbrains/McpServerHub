@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
-import click
-from mcp_hub.core.event_bus import EventBus
+import json
 
+import click
+
+from mcp_hub.core.event_bus import EventBus
 
 _bus = EventBus()
 

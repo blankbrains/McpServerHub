@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-import sys
 from pathlib import Path
 
 import click
@@ -54,15 +52,16 @@ MCP_HUB_WORKERS=1
 
         # 启动
         import uvicorn
+
         from mcp_hub.api.app import create_app
 
         app = create_app(dev=True)
-        console.print(f"\n[bold green]🎉 MCP Server Hub 已启动！[/bold green]")
+        console.print("\n[bold green]🎉 MCP Server Hub 已启动！[/bold green]")
         console.print(f"  📍 Dashboard: [underline]http://localhost:{port}[/underline]")
         console.print(f"  📚 Market:    [underline]http://localhost:{port}/market[/underline]")
         console.print(f"  📖 API Docs:  [underline]http://localhost:{port}/docs[/underline]")
-        console.print(f"  🔌 MCP Gateway: [bold]mcp serve[/bold]")
-        console.print(f"\n[yellow]按 Ctrl+C 停止[/yellow]\n")
+        console.print("  🔌 MCP Gateway: [bold]mcp serve[/bold]")
+        console.print("\n[yellow]按 Ctrl+C 停止[/yellow]\n")
 
         uvicorn.run(app, host="0.0.0.0", port=port)
 

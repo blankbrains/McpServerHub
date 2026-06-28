@@ -8,7 +8,6 @@ import shutil
 import click
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 console = Console()
 
@@ -100,7 +99,7 @@ def prompt_install(server_id: str, copy: bool, json_out: bool):
     # Also show the manual equivalent
     console.print("\n[dim]等效命令（手动执行）:[/dim]")
     if not is_installed:
-        console.print(f"  pip install mcp-hub")
+        console.print("  pip install mcp-hub")
     console.print(f"  mcp install {resolved}")
 
 

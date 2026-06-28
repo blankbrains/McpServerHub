@@ -7,7 +7,6 @@ from sqlalchemy import select
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import ServerModel
 
-
 REAL_MCP_SERVERS = [
     {
         "id": "@modelcontextprotocol/server-filesystem",

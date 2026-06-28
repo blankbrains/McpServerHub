@@ -1,0 +1,38 @@
+{
+  "servers": [
+    {
+      "id": "@anthropic/web-search",
+      "name": "web-search",
+      "description": "搜索网页内容",
+      "author": "anthropic",
+      "categories": ["browser"],
+      "rating": 4.8,
+      "download_count": 12000
+    },
+    {
+      "id": "@community/sql-query",
+      "name": "sql-query",
+      "description": "数据库查询",
+      "author": "community",
+      "categories": ["database"],
+      "rating": 4.2,
+      "download_count": 8000
+    }
+  ],
+  "users": [
+    {
+      "id": "testuser",
+      "role": "user",
+      "email": "test@example.com",
+      "github_id": "12345"
+    }
+  ],
+  "reviews": [
+    {
+      "server_id": "@anthropic/web-search",
+      "user_id": "testuser",
+      "rating": 5,
+      "content": "非常好用！"
+    }
+  ]
+}

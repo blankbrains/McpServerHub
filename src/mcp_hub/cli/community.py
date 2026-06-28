@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+
 import click
 
-from mcp_hub.db.repositories import ReviewRepository, UserRepository
 from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.repositories import ReviewRepository, UserRepository
 
 
 @click.command("rate")

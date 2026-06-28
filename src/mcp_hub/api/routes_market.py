@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Depends, Query
+
 from mcp_hub.core.registry import Registry
-from mcp_hub.models.server import SearchParams, SearchResponse
+from mcp_hub.exceptions import ServerNotFoundError
+from mcp_hub.models.server import SearchResponse
 
 router = APIRouter(tags=["market"])
 
@@ -42,8 +44,7 @@ async def get_server(
     """获取 Server 详情。"""
     server = await registry.get_by_id(server_id)
     if not server:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"Server '{server_id}' 未找到")
+        raise ServerNotFoundError(server_id)
     return {"success": True, "data": server}
 
 
@@ -71,9 +72,10 @@ async def get_new_releases(registry: Registry = Depends(get_registry)):
 @router.get("/market/categories")
 async def get_categories():
     """获取分类列表。"""
-    from sqlalchemy import select, func, text
-    from mcp_hub.db.models import ServerModel
+    from sqlalchemy import func, select
+
     from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.models import ServerModel
 
     categories = [
         {"id": "browser", "name": "浏览器 & 搜索", "icon": "🌐"},

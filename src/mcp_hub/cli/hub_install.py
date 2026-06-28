@@ -6,11 +6,12 @@ import asyncio
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.panel import Panel
+
+from mcp_hub.exceptions import InstallError
 
 console = Console()
 
@@ -93,7 +94,7 @@ def hub_install(server_id: str | None, force: bool):
                     if info.stdout:
                         console.print(info.stdout)
                 else:
-                    raise Exception(result.stderr[:200])
+                    raise InstallError(server_id, reason=result.stderr[:200])
             except Exception as e:
                 # Fallback: generate config snippet
                 console.print(f"  ⚠️  Hub 安装失败: {e}")
@@ -109,10 +110,10 @@ def hub_install(server_id: str | None, force: bool):
                 }
                 import json
                 console.print(json.dumps(config, indent=2, ensure_ascii=False))
-                console.print(f"\n[yellow]  配置文件路径:[/yellow]")
-                console.print(f"  ~/.config/Claude/claude_desktop_config.json")
-                console.print(f"  ~/.cursor/mcp.json")
+                console.print("\n[yellow]  配置文件路径:[/yellow]")
+                console.print("  ~/.config/Claude/claude_desktop_config.json")
+                console.print("  ~/.cursor/mcp.json")
 
-        console.print(f"\n[bold green]✅ 安装完成！[/bold green]")
+        console.print("\n[bold green]✅ 安装完成！[/bold green]")
 
     asyncio.run(_run())

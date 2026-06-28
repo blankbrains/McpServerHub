@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+
 import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from mcp_hub.core.registry import Registry
 from mcp_hub.core.installer import Installer
-from mcp_hub.models.server import ServerMeta, InstallConfig
+from mcp_hub.core.registry import Registry
+from mcp_hub.models.server import InstallConfig, ServerMeta
 
 console = Console()
 
