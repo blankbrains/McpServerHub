@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import webbrowser
 from pathlib import Path
@@ -24,10 +25,8 @@ def login():
         click.echo(f"   {url}")
         click.echo()
 
-        try:
+        with contextlib.suppress(Exception):
             webbrowser.open(url)
-        except Exception:
-            pass
 
         code = click.prompt(
             "   授权完成后，请把浏览器地址栏 ?code= 后面的参数粘贴到此处",
@@ -66,10 +65,8 @@ def whoami():
     """查看当前用户。"""
     token_file = Path.home() / ".config" / "mcp-hub" / "token.json"
     if token_file.exists():
-        try:
+        with contextlib.suppress(Exception):
             data = json.loads(token_file.read_text())
             click.echo(f"👤 当前用户: {data.get('user_id', 'unknown')}")
             return
-        except Exception:
-            pass
     click.echo("👤 未登录 (使用 mcp login 登录)")

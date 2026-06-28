@@ -12,7 +12,7 @@ from mcp_hub.core.registry import Registry
 @click.command("trending")
 @click.option("--category", help="按分类筛选")
 @click.option("--json", "json_output", is_flag=True)
-def trending(category: str | None, json_output: bool):
+def trending(_category: str | None, json_output: bool):
     """热门趋势榜。"""
     import json
     async def _run():

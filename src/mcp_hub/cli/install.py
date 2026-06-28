@@ -94,7 +94,9 @@ def list_servers():
         click.echo(f"\n📦 已安装 {len(servers)} 个 Server:\n")
         for s in servers:
             status = s.get("status", "unknown")
-            icon = {"running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"}.get(status, "❓")
+            icon = {
+                "running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"
+            }.get(status, "❓")
             click.echo(f"  {icon} {s['id']}  v{s.get('current_version', s.get('version', '?'))}")
             click.echo(f"     {s.get('description', '')[:60]}")
     asyncio.run(_run())

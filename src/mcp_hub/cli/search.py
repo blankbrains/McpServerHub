@@ -33,7 +33,8 @@ def search(query: str, category: str | None, tag: str | None, sort: str, page: i
         )
 
         if json:
-            console.print_json(json.dumps({"success": True, "data": results, "meta": {"total": total}}))
+            response = {"success": True, "data": results, "meta": {"total": total}}
+            console.print_json(json.dumps(response))
             return
 
         if not results:
@@ -48,9 +49,16 @@ def search(query: str, category: str | None, tag: str | None, sort: str, page: i
         table.add_column("状态", justify="center")
 
         for s in results:
-            stars = "⭐" * min(int(s.get("rating", 0)), 5) + "☆" * max(5 - min(int(s.get("rating", 0)), 5), 0)
+            rating_val = int(s.get("rating", 0))
+            filled = min(rating_val, 5)
+            empty = max(5 - filled, 0)
+            stars = "⭐" * filled + "☆" * empty
             status = s.get("status", "not_installed")
-            status_icon = {"running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"}.get(status, "❓")
+            status_map = {
+                "running": "🟢", "stopped": "⏹",
+                "error": "🔴", "not_installed": "📥",
+            }
+            status_icon = status_map.get(status, "❓")
             cats = ", ".join(s.get("categories", [])[:2])
             table.add_row(
                 s["id"],
@@ -81,11 +89,17 @@ def info(server_id: str, json_output: bool):
             console.print_json(json.dumps({"success": True, "data": s}))
             return
 
-        status_icon = {"running": "🟢 运行中", "stopped": "⏹ 已停止", "error": "🔴 异常", "not_installed": "📥 未安装"}.get(
-            s.get("status", ""), s.get("status", "未知")
-        )
+        st_map = {
+            "running": "🟢 运行中", "stopped": "⏹ 已停止",
+            "error": "🔴 异常", "not_installed": "📥 未安装",
+        }
+        status_icon = st_map.get(s.get("status", ""), s.get("status", "未知"))
         stars = "⭐" * min(int(s.get("rating", 0)), 5)
-        security = {"verified": "🔒 安全认证", "reviewed": "⚪ 已审查", "unreviewed": "⚠️ 未审查"}.get(
+        sec_map = {
+            "verified": "🔒 安全认证", "reviewed": "⚪ 已审查",
+            "unreviewed": "⚠️ 未审查",
+        }
+        security = sec_map.get(
             s.get("security_level", ""), s.get("security_level", "")
         )
 
@@ -128,7 +142,11 @@ def compare(server_a: str, server_b: str):
         table.add_column(f"📦 {a['id']}", style="green")
         table.add_column(f"📦 {b['id']}", style="yellow")
 
-        for key in ["version", "rating", "review_count", "download_count", "security_level", "license"]:
+        compare_keys = [
+            "version", "rating", "review_count", "download_count",
+            "security_level", "license",
+        ]
+        for key in compare_keys:
             table.add_row(key, str(a.get(key, "")), str(b.get(key, "")))
 
         console.print(table)

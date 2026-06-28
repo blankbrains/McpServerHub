@@ -57,7 +57,11 @@ def upgrade(server_name: str):
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         vm = VersionManager()
 
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as p:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as p:
             p.add_task(f"📦 正在升级 {sid}...", total=None)
             result = await vm.update_server(sid)
 
@@ -109,7 +113,12 @@ def version_history(server_name: str):
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         async with async_session_factory() as session:
             rows = await session.execute(
-                text("SELECT version, action, status, created_at FROM install_history WHERE server_id = :sid ORDER BY created_at DESC LIMIT 20"),
+                text(
+                    "SELECT version, action, status, created_at "
+                    "FROM install_history "
+                    "WHERE server_id = :sid "
+                    "ORDER BY created_at DESC LIMIT 20"
+                ),
                 {"sid": sid},
             )
             records = rows.fetchall()

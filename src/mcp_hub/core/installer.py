@@ -55,7 +55,13 @@ class Installer:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             if proc.returncode != 0:
-                return {"success": False, "error": f"安装失败 (code={proc.returncode}): {stderr.decode()[:300]}"}
+                return {
+                    "success": False,
+                    "error": (
+                        f"安装失败 (code={proc.returncode}): "
+                        f"{stderr.decode()[:300]}"
+                    ),
+                }
             return {"success": True, "detail": stdout.decode()[:200]}
         except asyncio.TimeoutError:
             return {"success": False, "error": "安装超时"}
@@ -71,7 +77,10 @@ class Installer:
         from mcp_hub.db.database import async_session_factory
         async with async_session_factory() as session:
             await session.execute(
-                text("INSERT INTO install_history (server_id, version, action, status) VALUES (:sid, :ver, 'install', 'success')"),
+                text(
+                    "INSERT INTO install_history (server_id, version, action, status) "
+                    "VALUES (:sid, :ver, 'install', 'success')"
+                ),
                 {"sid": meta.name, "ver": meta.version or "?"},
             )
             await session.commit()

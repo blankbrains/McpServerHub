@@ -77,15 +77,13 @@ def _needs_translation(desc: str) -> bool:
         return False
     if _ZH_PATTERN.search(desc):
         return False  # 已有中文
-    if not _EN_PATTERN.search(desc):
-        return False  # 没有有意义的英文内容
-    return True
+    return bool(_EN_PATTERN.search(desc))
 
 
 async def translate_descriptions() -> int:
     """批量翻译英文描述为中文。"""
     # 简化翻译：常见技术术语的中文映射
-    GLOSSARY = {
+    _glossary = {
         "server": "服务",
         "integration": "集成",
         "management": "管理",
@@ -132,7 +130,7 @@ async def translate_descriptions() -> int:
                 break
 
         # 词汇替换
-        for eng, cn in GLOSSARY.items():
+        for eng, cn in _glossary.items():
             translated = re.sub(rf"\b{eng}\b", cn, translated, flags=re.IGNORECASE)
 
         # 如果翻译结果和原文差异不大，尝试用 API
@@ -202,15 +200,10 @@ async def translate_descriptions() -> int:
 
 async def enrich_all():
     """一键执行：生成图标 + 翻译描述。"""
-    print("🖼️  生成图标...")
-    icons = await generate_icons()
-    print(f"   ✅ 生成了 {icons} 个图标")
+    await generate_icons()
 
-    print("\n🌐 翻译描述...")
-    translated = await translate_descriptions()
-    print(f"   ✅ 翻译了 {translated} 条描述")
+    await translate_descriptions()
 
-    print(f"\n📊 总数: {icons} 图标 + {translated} 翻译")
 
 
 if __name__ == "__main__":

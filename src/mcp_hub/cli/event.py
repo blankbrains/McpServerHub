@@ -59,6 +59,6 @@ def list_events():
 
 @event.command("history")
 @click.argument("topic", required=False)
-def event_history(topic: str | None):
+def event_history(_topic: str | None):
     """查看事件历史。"""
     click.echo("📋 事件历史 (开发中)")

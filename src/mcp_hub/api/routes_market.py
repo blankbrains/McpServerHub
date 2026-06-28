@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
 from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import ServerNotFoundError
 from mcp_hub.models.server import SearchResponse
 
 router = APIRouter(tags=["market"])
-
-
-def get_registry():
-    return Registry()
 
 
 @router.get("/market/search")
@@ -23,9 +19,9 @@ async def search_servers(
     sort: str = Query("hot", description="排序: hot/rating/downloads/new"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    registry: Registry = Depends(get_registry),
 ):
     """搜索 MCP Server。"""
+    registry = Registry()
     results, total = await registry.search(
         q=q, category=category, tag=tag, sort=sort,
         page=page, page_size=page_size,
@@ -37,11 +33,9 @@ async def search_servers(
 
 
 @router.get("/market/servers/{server_id:path}")
-async def get_server(
-    server_id: str,
-    registry: Registry = Depends(get_registry),
-):
+async def get_server(server_id: str):
     """获取 Server 详情。"""
+    registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
         raise ServerNotFoundError(server_id)
@@ -49,22 +43,25 @@ async def get_server(
 
 
 @router.get("/market/trending")
-async def get_trending(registry: Registry = Depends(get_registry)):
+async def get_trending():
     """热门趋势榜。"""
+    registry = Registry()
     results = await registry.get_trending()
     return {"success": True, "data": results}
 
 
 @router.get("/market/top-rated")
-async def get_top_rated(registry: Registry = Depends(get_registry)):
+async def get_top_rated():
     """评分最高榜。"""
+    registry = Registry()
     results = await registry.get_top_rated()
     return {"success": True, "data": results}
 
 
 @router.get("/market/new-releases")
-async def get_new_releases(registry: Registry = Depends(get_registry)):
+async def get_new_releases():
     """最新发布。"""
+    registry = Registry()
     results = await registry.get_new_releases()
     return {"success": True, "data": results}
 

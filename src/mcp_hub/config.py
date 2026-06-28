@@ -43,8 +43,6 @@ def _require_env(key: str) -> str:
     """获取必需的环境变量，缺失则报错退出。"""
     value = os.getenv(key)
     if not value:
-        print(f"❌ 缺少必要配置: {key}", file=sys.stderr)
-        print(f"   请在 .env 文件中设置 {key}=<value>", file=sys.stderr)
         sys.exit(1)
     return value
 

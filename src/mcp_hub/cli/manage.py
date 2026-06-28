@@ -101,7 +101,9 @@ def status_cmd(server_name: str | None):
 
             running = pm.is_running(server_id)
             status = server.get("status", "not_installed")
-            icon = {"running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"}.get(status, "❓")
+            icon = {
+                "running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"
+            }.get(status, "❓")
             _console.print(f"{icon} [bold]{server_id}[/bold]")
             _console.print(f"   状态: {status}")
             _console.print(f"   版本: v{server.get('version', '?')}")
@@ -116,7 +118,10 @@ def status_cmd(server_name: str | None):
 
             running_count = len(pm.list_running())
 
-            table = Table(title=f"📊 总览: {running_count} 运行 / {len(servers)} 已安装", header_style="bold cyan")
+            summary_title = (
+                f"📊 总览: {running_count} 运行 / {len(servers)} 已安装"
+            )
+            table = Table(title=summary_title, header_style="bold cyan")
             table.add_column("状态", justify="center")
             table.add_column("Server ID", style="cyan")
             table.add_column("版本")

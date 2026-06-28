@@ -131,8 +131,8 @@ class McpGateway:
                             started.append(sid)
                             # 更新 DB 状态
                             await registry.update_status(sid, "running")
-                    except Exception as e:
-                        print(f"  [warn] {sid}: {e}", file=sys.stderr)
+                    except Exception:
+                        pass
 
         return started
 
@@ -256,7 +256,7 @@ class McpGateway:
 
         elif method == "prompts/list":
             all_prompts = []
-            for sid, server in self._servers.items():
+            for _sid, server in self._servers.items():
                 result = await server._send_request("prompts/list", {})
                 if result and "prompts" in result:
                     all_prompts.extend(result["prompts"])
@@ -271,6 +271,6 @@ class McpGateway:
 
     async def shutdown(self):
         """关闭所有子 Server。"""
-        for sid, server in list(self._servers.items()):
+        for _sid, server in list(self._servers.items()):
             await server.close()
         self._servers.clear()

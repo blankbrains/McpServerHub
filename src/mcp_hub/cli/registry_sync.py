@@ -132,7 +132,9 @@ async def sync_from_pypi(client: httpx.AsyncClient, dry_run: bool) -> int:
                         info = info_resp.json().get("info", {})
                         ver = info.get("version", "?")
                         desc = (info.get("summary", "") or "")[:200]
-                        home = info.get("home_page", "") or info.get("project_urls", {}).get("Source", "")
+                        home = info.get("home_page", "") or info.get(
+                            "project_urls", {}
+                        ).get("Source", "")
 
                         console.print(f"  ✅ {pkg_name}@[green]{ver}[/green]")
                         if not dry_run:

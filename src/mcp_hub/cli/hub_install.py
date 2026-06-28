@@ -98,7 +98,9 @@ def hub_install(server_id: str | None, force: bool):
             except Exception as e:
                 # Fallback: generate config snippet
                 console.print(f"  ⚠️  Hub 安装失败: {e}")
-                console.print("\n[bold cyan]📋 请手动添加配置到 claude_desktop_config.json:[/bold cyan]\n")
+                console.print(
+                    "\n[bold cyan]📋 请手动添加配置到 claude_desktop_config.json:[/bold cyan]\n"
+                )
                 display_name = server_id.split("/")[-1] if "/" in server_id else server_id
                 config = {
                     "mcpServers": {

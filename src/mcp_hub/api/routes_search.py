@@ -69,7 +69,11 @@ async def get_authors():
     async with async_session_factory() as session:
         from sqlalchemy import text
         rows = await session.execute(
-            text("SELECT author, COUNT(*) as cnt FROM servers WHERE author != '' GROUP BY author ORDER BY cnt DESC LIMIT 30")
+            text(
+                "SELECT author, COUNT(*) as cnt FROM servers "
+                "WHERE author != '' GROUP BY author "
+                "ORDER BY cnt DESC LIMIT 30"
+            )
         )
         authors = [{"id": r[0], "name": r[0], "count": r[1]} for r in rows]
     return {"success": True, "data": authors}

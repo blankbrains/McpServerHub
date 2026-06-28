@@ -16,7 +16,8 @@ def logs(server_name: str, lines: int, follow: bool):
     import time
 
     server_id = f"@community/{server_name}" if "/" not in server_name else server_name
-    log_file = Path.home() / ".config" / "mcp-hub" / "logs" / f"{server_id.replace('/', '_').replace('@', '')}.log"
+    safe_name = server_id.replace("/", "_").replace("@", "")
+    log_file = Path.home() / ".config" / "mcp-hub" / "logs" / f"{safe_name}.log"
 
     if not log_file.exists():
         click.echo(f"📭 日志文件不存在: {log_file}")
