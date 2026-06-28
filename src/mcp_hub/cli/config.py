@@ -1,0 +1,77 @@
+"""配置管理命令。"""
+
+from __future__ import annotations
+
+import json
+import asyncio
+import click
+from mcp_hub.core.installer import ConfigManager
+
+
+@click.group("config")
+def config():
+    """管理 Server 配置。"""
+
+
+@config.command("list")
+@click.argument("server_name", required=True)
+def list_config(server_name: str):
+    """查看 Server 配置。"""
+    async def _run():
+        cm = ConfigManager()
+        server_id = f"@community/{server_name}" if "/" not in server_name else server_name
+        cfg = await cm.list_config(server_id)
+        click.echo(json.dumps(cfg, indent=2, ensure_ascii=False))
+    asyncio.run(_run())
+
+
+@config.command("set")
+@click.argument("server_name", required=True)
+@click.argument("key", required=True)
+@click.argument("value", required=True)
+def set_config(server_name: str, key: str, value: str):
+    """设置环境变量。"""
+    async def _run():
+        cm = ConfigManager()
+        server_id = f"@community/{server_name}" if "/" not in server_name else server_name
+        ok = await cm.set_config(server_id, key, value)
+        if ok:
+            click.echo(f"✅ {key}={value} 已设置")
+        else:
+            click.echo(f"❌ {server_id} 未找到")
+    asyncio.run(_run())
+
+
+@config.command("export")
+@click.argument("file", required=False)
+def export_config(file: str | None):
+    """导出配置。"""
+    from mcp_hub.core.installer import ConfigManager
+    async def _run():
+        cm = ConfigManager()
+        cfg = await cm._load_config()
+        output = json.dumps(cfg, indent=2, ensure_ascii=False)
+        if file:
+            with open(file, "w", encoding="utf-8") as f:
+                f.write(output)
+            click.echo(f"✅ 配置已导出到 {file}")
+        else:
+            click.echo(output)
+    asyncio.run(_run())
+
+
+@config.command("import")
+@click.argument("file", required=True)
+def import_config(file: str):
+    """导入配置。"""
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        from mcp_hub.core.installer import ConfigManager
+        cm = ConfigManager()
+        cm._save_config(cfg)
+        click.echo(f"✅ 配置已从 {file} 导入")
+    except FileNotFoundError:
+        click.echo(f"❌ 文件未找到: {file}")
+    except json.JSONDecodeError:
+        click.echo(f"❌ 无效的 JSON 文件: {file}")

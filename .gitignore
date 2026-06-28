@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+
+# Data
+data/
+*.db
+
+# Node
+node_modules/
+src/mcp_hub/web/static/
+src/mcp_hub/web/node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+#MD文件
+*.md

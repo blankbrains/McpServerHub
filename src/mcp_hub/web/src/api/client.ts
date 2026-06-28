@@ -1,0 +1,148 @@
+const API_BASE = '/api/v1'
+
+export interface ServerInfo {
+  id: string
+  name: string
+  display_name: string
+  description: string
+  author: string
+  categories: string[]
+  tags: string[]
+  rating: number
+  review_count: number
+  download_count: number
+  status: string
+  version: string
+  homepage: string
+  license: string
+  security_level: string
+}
+
+export async function apiGet<T>(path: string): Promise<{ success: boolean; data: T; meta?: any }> {
+  const res = await fetch(`${API_BASE}${path}`)
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export async function apiPost<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export async function searchServers(params: {
+  q?: string
+  category?: string
+  sort?: string
+  page?: number
+}): Promise<{ data: ServerInfo[]; meta: { total: number } }> {
+  const qs = new URLSearchParams()
+  if (params.q) qs.set('q', params.q)
+  if (params.category) qs.set('category', params.category)
+  if (params.sort) qs.set('sort', params.sort)
+  if (params.page) qs.set('page', String(params.page))
+  const res = await apiGet<ServerInfo[]>(`/market/search?${qs}`)
+  return { data: res.data, meta: res.meta || { total: res.data.length } }
+}
+
+export async function getServer(id: string): Promise<ServerInfo> {
+  const res = await apiGet<ServerInfo>(`/market/servers/${encodeURIComponent(id)}`)
+  return res.data
+}
+
+export async function getTrending(): Promise<ServerInfo[]> {
+  const res = await apiGet<ServerInfo[]>('/market/trending')
+  return res.data
+}
+
+export async function getTopRated(): Promise<ServerInfo[]> {
+  const res = await apiGet<ServerInfo[]>('/market/top-rated')
+  return res.data
+}
+
+export async function healthCheck(): Promise<any> {
+  return apiGet('/health')
+}
+
+export async function installServer(serverId: string): Promise<any> {
+  return apiPost('/servers/install', { server_id: serverId })
+}
+
+export async function startServer(serverId: string): Promise<any> {
+  return apiPost(`/servers/${encodeURIComponent(serverId)}/start`)
+}
+
+export async function stopServer(serverId: string): Promise<any> {
+  return apiPost(`/servers/${encodeURIComponent(serverId)}/stop`)
+}
+
+export async function rateServer(serverId: string, rating: number, content?: string): Promise<any> {
+  return apiPost('/community/rate', { server_id: serverId, rating, content: content || '' })
+}
+
+export async function favoriteServer(serverId: string): Promise<any> {
+  return apiPost('/community/favorite', { server_id: serverId })
+}
+
+// === Auth ===
+
+export interface AuthState {
+  token: string | null
+  userId: string | null
+}
+
+export function getAuthState(): AuthState {
+  const token = localStorage.getItem('mcp_hub_token')
+  const userId = localStorage.getItem('mcp_hub_user')
+  return { token, userId }
+}
+
+export function setAuth(token: string, userId: string) {
+  localStorage.setItem('mcp_hub_token', token)
+  localStorage.setItem('mcp_hub_user', userId)
+}
+
+export function clearAuth() {
+  localStorage.removeItem('mcp_hub_token')
+  localStorage.removeItem('mcp_hub_user')
+}
+
+export function getLoginUrl(): string {
+  return '/api/v1/auth/login'
+}
+
+export async function getMe(): Promise<any> {
+  const { token } = getAuthState()
+  if (!token) throw new Error('Not logged in')
+  const res = await fetch(`${API_BASE}/auth/me?token=${encodeURIComponent(token)}`)
+  if (!res.ok) throw new Error('Auth failed')
+  return res.json()
+}
+
+// === SSE / Realtime ===
+
+export function connectLogSSE(serverId: string, onLine: (line: string) => void): EventSource {
+  const es = new EventSource(`${API_BASE}/realtime/logs/${encodeURIComponent(serverId)}`)
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data)
+      if (d.line) onLine(d.line)
+    } catch { /* ignore */ }
+  }
+  return es
+}
+
+export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
+  const es = new EventSource(`${API_BASE}/realtime/status`)
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data)
+      if (d.type === 'status') onStatus(d)
+    } catch { /* ignore */ }
+  }
+  return es
+}
