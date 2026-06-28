@@ -1,17 +1,17 @@
-# MCP Server Hub 配置（从环境变量或 .env 文件读取）
+"""MCP Server Hub 配置 — 所有敏感信息仅从 .env 或环境变量读取。"""
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from functools import lru_cache
 
 
 def _find_dotenv() -> Path | None:
-    """从当前目录或上级目录查找 .env 文件。"""
     paths = [
         Path.cwd() / ".env",
-        Path(__file__).parent.parent.parent / ".env",  # 项目根目录
+        Path(__file__).parent.parent.parent / ".env",
         Path.home() / ".config" / "mcp-hub" / ".env",
     ]
     for p in paths:
@@ -21,7 +21,6 @@ def _find_dotenv() -> Path | None:
 
 
 def _load_dotenv() -> None:
-    """简易 .env 文件加载（不依赖 python-dotenv 库）。"""
     env_file = _find_dotenv()
     if not env_file:
         return
@@ -33,39 +32,40 @@ def _load_dotenv() -> None:
             key, _, value = line.partition("=")
             key = key.strip()
             value = value.strip().strip("\"'")
-            if key not in os.environ:  # 环境变量优先
+            if key not in os.environ:
                 os.environ[key] = value
 
 
-# 启动时自动加载 .env
 _load_dotenv()
 
 
+def _require_env(key: str) -> str:
+    """获取必需的环境变量，缺失则报错退出。"""
+    value = os.getenv(key)
+    if not value:
+        print(f"❌ 缺少必要配置: {key}", file=sys.stderr)
+        print(f"   请在 .env 文件中设置 {key}=<value>", file=sys.stderr)
+        sys.exit(1)
+    return value
+
+
 class Settings:
-    """所有配置项集中管理。"""
+    """所有配置项集中管理 — 敏感字段无默认值，仅从 .env 读取。"""
 
-    # 数据库
-    DATABASE_URL: str = os.getenv(
-        "MCP_HUB_DATABASE_URL",
-        "postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub",
-    )
+    # === 数据库 ===
+    DATABASE_URL: str = _require_env("MCP_HUB_DATABASE_URL")
 
-    # JWT
-    SECRET_KEY: str = os.getenv("MCP_HUB_SECRET", "mcp-hub-prod-secret-key")
+    # === JWT 密钥 ===
+    SECRET_KEY: str = _require_env("MCP_HUB_SECRET")
 
-    # GitHub OAuth
-    GITHUB_CLIENT_ID: str = os.getenv(
-        "MCP_HUB_GITHUB_CLIENT_ID", "your_github_client_id"
-    )
-    GITHUB_CLIENT_SECRET: str = os.getenv(
-        "MCP_HUB_GITHUB_CLIENT_SECRET", "your_github_client_secret"
-    )
+    # === GitHub OAuth（必须在 .env 中配置）===
+    GITHUB_CLIENT_ID: str = _require_env("MCP_HUB_GITHUB_CLIENT_ID")
+    GITHUB_CLIENT_SECRET: str = _require_env("MCP_HUB_GITHUB_CLIENT_SECRET")
     GITHUB_REDIRECT_URI: str = os.getenv(
-        "MCP_HUB_GITHUB_REDIRECT_URI",
-        "http://localhost:3987/api/v1/auth/callback",
+        "MCP_HUB_GITHUB_REDIRECT_URI", "http://localhost:3987/api/v1/auth/callback"
     )
 
-    # 服务
+    # === 服务配置（有合理默认值）===
     HOST: str = os.getenv("MCP_HUB_HOST", "0.0.0.0")
     PORT: int = int(os.getenv("MCP_HUB_PORT", "3987"))
     CORS_ORIGINS: str = os.getenv("MCP_HUB_CORS_ORIGINS", "http://localhost:3987")
@@ -82,5 +82,4 @@ class Settings:
 
 @lru_cache()
 def get_settings() -> Settings:
-    """获取全局配置（带缓存）。"""
     return Settings()
