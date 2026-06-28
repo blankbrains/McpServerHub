@@ -18,7 +18,7 @@ from mcp_hub.cli.search import search, info, compare
 from mcp_hub.cli.install import install, uninstall, list_servers
 from mcp_hub.cli.manage import start, stop, restart, status_cmd
 from mcp_hub.cli.logs import logs
-from mcp_hub.cli.update import update, rollback
+from mcp_hub.cli.update import update, upgrade, rollback, version_history
 from mcp_hub.cli.config import config
 from mcp_hub.cli.daemon import daemon, serve
 from mcp_hub.cli.init_cmd import init_cmd
@@ -45,7 +45,9 @@ cli.add_command(restart)
 cli.add_command(status_cmd)
 cli.add_command(logs)
 cli.add_command(update)
+cli.add_command(upgrade)
 cli.add_command(rollback)
+cli.add_command(version_history)
 cli.add_command(config)
 cli.add_command(daemon)
 cli.add_command(serve)

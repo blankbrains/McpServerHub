@@ -78,17 +78,38 @@ def create_app(dev: bool = False) -> FastAPI:
     index_html = static_dir / "index.html" if static_dir.exists() else None
 
     if index_html and index_html.exists():
-        # 挂载静态资源（JS/CSS/字体等）
+        # 挂载 assets 静态资源
         app.mount(
             "/assets",
             StaticFiles(directory=str(static_dir / "assets")),
             name="web_assets",
         )
 
+        # 根目录静态文件
+        _static_root_files = {}
+        for _f in ["favicon.svg", "favicon.ico", "logo.svg"]:
+            _p = static_dir / _f
+            if _p.exists():
+                _static_root_files[_f] = _p
+
+        @app.get("/favicon.svg")
+        async def favicon_svg():
+            if "favicon.svg" in _static_root_files:
+                return FileResponse(str(_static_root_files["favicon.svg"]))
+            return FileResponse(str(index_html))
+
+        @app.get("/logo.svg")
+        async def logo_svg():
+            if "logo.svg" in _static_root_files:
+                return FileResponse(str(_static_root_files["logo.svg"]))
+            return FileResponse(str(index_html))
+
         @app.api_route("/{path:path}", methods=["GET"])
         async def serve_spa(path: str):
-            """所有非 API 的 GET 请求返回 index.html（SPA 回退）。"""
-            # API 路径不会走到这里（已在上面注册）
+            # 根静态文件
+            if path in _static_root_files:
+                return FileResponse(str(_static_root_files[path]))
+            # SPA 回退
             return FileResponse(str(index_html))
 
     else:
