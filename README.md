@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔵 MCP Server Hub
+# <svg width="40" height="40" viewBox="0 0 64 64" style="vertical-align:middle"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#8B5CF6"/></linearGradient></defs><circle cx="32" cy="32" r="30" fill="url(#g)"/><text x="32" y="34" text-anchor="middle" fill="white" font-size="24" font-weight="700" font-family="system-ui,sans-serif">M</text></svg> MCP Server Hub
 
 **The missing platform for the MCP ecosystem**
 
@@ -11,13 +11,13 @@ Discover · Install · Manage · Publish · Community
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-316192?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
-[![GitHub Stars](https://img.shields.io/badge/dynamic/json?style=flat-square&label=stars&query=stargazers_count&url=https%3A%2F%2Fapi.github.com%2Frepos%2Fyour-org%2Fmcp-hub)](https://github.com/your-org/mcp-hub)
+[![GitHub Stars](https://img.shields.io/badge/dynamic/json?style=flat-square&label=stars&query=stargazers_count&url=https%3A%2F%2Fapi.github.com%2Frepos%2Fblankbrains%2FMcpServerHub)](https://github.com/blankbrains/McpServerHub)
 
 ---
 
 <p align="center">
-  <i>One tool to rule them all.</i><br>
-  <b>Search</b> the marketplace → <b>Install</b> with one command → <b>Auto-configure</b> for Claude Code / Cursor → <b>Manage</b> everything from CLI, Dashboard, or MCP itself.
+  <b>970+ MCP Servers</b> · <b>36 CLI commands</b> · <b>16 categories</b> · <b>20 tags</b><br>
+  Search → Install → Auto-configure → Manage. One platform.
 </p>
 
 </div>
