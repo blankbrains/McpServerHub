@@ -16,7 +16,7 @@
 ---
 
 <p align="center">
-  <b>970+ 个 MCP Server</b> · <b>36 个 CLI 命令</b> · <b>16 个分类</b> · <b>20 个标签</b><br>
+  <b>970+ 个 MCP Server</b> · <b>39 个 CLI 命令</b> · <b>16 个分类</b> · <b>20 个标签</b><br>
   搜索 → 安装 → 自动配置 → 管理。一个平台搞定。
 </p>
 
@@ -179,52 +179,55 @@ http://localhost:3987
   restart <server>     重启
   status [server]      查看状态
   logs <server>        查看日志（-f 实时跟踪）
-  update [server]      检查/更新
+  update [server]      检查更新
+  upgrade <server>     升级到最新版
   rollback <server>    回滚版本
-  config               管理配置
+  version-history <s>  版本历史
+  config               配置管理
 
 🔧  系统
-  daemon start        启动 Hub 服务
-  daemon stop         停止 Hub 服务
-  daemon status       Hub 状态
-  serve               启动 MCP 网关（stdio）
-  init                一键初始化（PostgreSQL）
-  quickstart          零配置启动（SQLite，30 秒）
+  daemon               管理 Hub 守护进程
+  serve                启动 MCP 网关（stdio）
+  init                 一键初始化（PostgreSQL）
+  quickstart           零配置启动（SQLite，30 秒）
 
 👤  认证
-  login               GitHub 登录
-  logout              退出
-  whoami              当前用户
+  login                GitHub 登录
+  logout               退出
+  whoami               当前用户
 
 📤  发布
-  publish <path>      发布你的 Server
-  my-servers          已发布列表
-  unpublish <server>  下架
-  stats <server>      统计
+  publish <path>       发布你的 Server
+  my-servers           已发布列表
+  unpublish <server>   下架
+  stats <server>       统计
 
 ⭐  社区
-  rate <srv> <n>      评分 (1-5)
-  review <srv>        写/查看评价
-  favorite <srv>      收藏
-  favorites           收藏列表
-  trending            热门趋势
-  top-rated           评分最高
-  most-downloaded     下载最多
-  new-releases        最新发布
+  rate <srv> <n>       评分 (1-5)
+  review <srv>         写/查看评价
+  favorite <srv>       收藏
+  favorites            收藏列表
+  trending             热门趋势
+  top-rated            评分最高
+  most-downloaded      下载最多
+  new-releases         最新发布
 
 🎯  高级
-  prompt-install      生成 AI 安装提示词
-  hub-install         自动检测/安装 Hub
-  registry-sync       从 npm/PyPI/GitHub 同步 Server
+  prompt-install       生成 AI 安装提示词
+  hub-install          自动检测/安装 Hub
+  registry-sync        从 npm/PyPI/GitHub 同步 Server
 
 📡  事件
-  event publish       发布事件
-  event subscribe     订阅事件
+  event publish        发布事件
+  event subscribe      订阅事件
+  event list           列出事件
+  event history        事件历史
 
 ⚙️  配置
-  config download     下载配置
-  config upload       上传本地配置
-  export config       导出分享
+  config list          查看配置
+  config apply         写入本地 Agent 配置文件
+  config export        导出 mcp.json
+  config import        导入 mcp.json
 ```
 
 ---
