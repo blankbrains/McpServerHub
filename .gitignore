@@ -33,6 +33,10 @@ Thumbs.db
 # Lockfiles (auto-generated, pyproject.toml is the source of truth)
 uv.lock
 
+# Alembic (local migration tool)
+alembic.ini
+alembic/
+
 # Project docs (local only)
 PROJECT_SNAPSHOT.md
 *开发文档.md
