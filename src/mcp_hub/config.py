@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,10 +39,14 @@ _load_dotenv()
 
 
 def _require_env(key: str) -> str:
-    """获取必需的环境变量，缺失则报错退出。"""
+    """获取必需的环境变量，缺失则抛出明确错误（避免 sys.exit 破坏测试收集）。"""
     value = os.getenv(key)
     if not value:
-        sys.exit(1)
+        raise OSError(
+            f"缺少必需的环境变量: {key}\n"
+            f"请在项目根目录创建 .env 文件并设置 {key}=<value>\n"
+            f"或通过 export {key}=<value> 设置"
+        )
     return value
 
 

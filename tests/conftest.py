@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+# ⚠️  必须在任何 mcp_hub 模块导入之前设置环境变量，避免 Settings 类定义时因缺少
+# 必需环境变量而抛出 OSError。
+import os
+
+os.environ.setdefault("MCP_HUB_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("MCP_HUB_SECRET", "test-secret-key")
+os.environ.setdefault("MCP_HUB_GITHUB_CLIENT_ID", "test-client-id")
+os.environ.setdefault("MCP_HUB_GITHUB_CLIENT_SECRET", "test-client-secret")
+
 import json
 import tempfile
 from pathlib import Path

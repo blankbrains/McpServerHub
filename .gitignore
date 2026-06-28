@@ -36,6 +36,7 @@ uv.lock
 # Alembic (local migration tool)
 alembic.ini
 alembic/
+src/mcp_hub/db/migrations.py
 
 # Project docs (local only)
 PROJECT_SNAPSHOT.md
