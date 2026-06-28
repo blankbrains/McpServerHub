@@ -63,15 +63,15 @@ MCP（Model Context Protocol）正在爆发式增长 — 400+ Server、100k+ Sta
 ### 1. 安装
 
 ```bash
-pip install mcp-hub
+pip install mcp-hub-cli
 ```
 
 <details>
 <summary><b>🐳 或用 Docker</b></summary>
 
 ```bash
-git clone https://github.com/your-org/mcp-hub
-cd mcp-hub
+git clone https://github.com/blankbrains/McpServerHub
+cd McpServerHub
 docker-compose up -d
 # 打开 http://localhost:3987
 ```
