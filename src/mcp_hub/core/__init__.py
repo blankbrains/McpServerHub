@@ -17,6 +17,8 @@ __all__ = [
     "VersionManager",
     "ConfigManager",
     "ProcessManager",
+    "ManagedProcess",
+    "get_process_manager",
     "HealthChecker",
     "EventBus",
     "SecurityScanner",

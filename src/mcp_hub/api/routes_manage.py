@@ -174,7 +174,7 @@ async def get_server_config(
 
 
 @router.get("/servers/config/download")
-async def download_all_config(agent: str = "generic"):
+async def download_all_config(_agent: str = "generic"):
     """下载所有已安装 Server 的配置（mcp.json 格式），用于导入本地 Agent。"""
     import tempfile
 
@@ -192,10 +192,12 @@ async def download_all_config(agent: str = "generic"):
         config["mcpServers"][name] = {"command": cmd}
 
     # 写入临时文件并返回
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
     import json
-    json.dump(config, tmp, indent=2, ensure_ascii=False)
-    tmp.close()
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(config, tmp, indent=2, ensure_ascii=False)
 
     return FileResponse(
         tmp.name,
@@ -212,7 +214,8 @@ async def get_logs(
 ):
     """获取 Server 日志。"""
     from pathlib import Path
-    log_file = Path.home() / ".config" / "mcp-hub" / "logs" / f"{server_id.replace('/', '_').replace('@', '')}.log"
+    safe_name = server_id.replace("/", "_").replace("@", "")
+    log_file = Path.home() / ".config" / "mcp-hub" / "logs" / f"{safe_name}.log"
     if not log_file.exists():
         return {"success": True, "data": [], "message": "日志文件不存在"}
 

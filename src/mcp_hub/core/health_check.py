@@ -143,13 +143,12 @@ class HealthChecker:
 
             # L2: 按间隔执行
             last_l2 = self._last_check[sid].get(2, 0.0)
-            if now - last_l2 >= LEVEL_INTERVALS[2]:
-                if proc.process and proc.process.stdin:
-                    l2 = await self.check_l2(sid, proc.process.stdin)
-                    results.append(l2)
-                    self._last_check[sid][2] = now
-                    if not l2.passed:
-                        await registry.update_status(sid, "error")
+            if now - last_l2 >= LEVEL_INTERVALS[2] and proc.process and proc.process.stdin:
+                l2 = await self.check_l2(sid, proc.process.stdin)
+                results.append(l2)
+                self._last_check[sid][2] = now
+                if not l2.passed:
+                    await registry.update_status(sid, "error")
 
             # L3: 按间隔执行
             last_l3 = self._last_check[sid].get(3, 0.0)
@@ -212,7 +211,7 @@ class HealthChecker:
         self,
         server_id: str,
         process_manager: ProcessManager,
-        registry: Registry,
+        _registry: Registry,
     ) -> bool:
         """自动重启失败的 Server（最多 3 次）。"""
         proc = process_manager.get(server_id)

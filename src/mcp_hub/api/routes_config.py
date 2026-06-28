@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
@@ -27,9 +28,11 @@ async def download_config():
         config["mcpServers"][name] = {"command": cmd}
 
     import tempfile
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
-    json.dump(config, tmp, indent=2, ensure_ascii=False)
-    tmp.close()
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(config, tmp, indent=2, ensure_ascii=False)
 
     return FileResponse(
         tmp.name,
@@ -39,13 +42,13 @@ async def download_config():
 
 
 @router.post("/config/upload")
-async def upload_config(file: UploadFile = File(...)):
+async def upload_config(file: Annotated[UploadFile, File(...)]):
     """上传本地的 mcp.json 配置文件。"""
     content = await file.read()
     try:
         config = json.loads(content)
-    except json.JSONDecodeError:
-        raise ConfigError("无效的 JSON 文件")
+    except json.JSONDecodeError as err:
+        raise ConfigError("无效的 JSON 文件") from err
 
     # 分析上传的配置，返回可安装的 Server 列表
     servers = config.get("mcpServers", {})

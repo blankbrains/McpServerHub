@@ -6,21 +6,21 @@ import json
 
 # 分类关键词映射
 CATEGORY_RULES = [
-    ("browser", ["web", "browser", "search", "scraping", "crawl", "html", "http", "url", "link", "page"]),
-    ("database", ["database", "sql", "postgres", "mysql", "sqlite", "mongodb", "redis", "couch", "dynamo", "db ", "query", "table", "schema"]),
-    ("developer-tools", ["git", "github", "code", "developer", "ide", "lint", "build", "deploy", "ci/cd", "devops", "terminal", "cli"]),
-    ("ai", ["ai", "llm", "gpt", "chatgpt", "claude", "openai", "anthropic", "machine learning", "nlp", "rag", "embedding", "vector", "language model", "prompt"]),
-    ("communication", ["slack", "discord", "teams", "telegram", "email", "messaging", "chat", "notification", "mail", "sms"]),
-    ("cloud", ["aws", "azure", "gcp", "cloud", "s3", "lambda", "ec2", "kubernetes", "k8s", "docker", "container"]),
-    ("monitoring", ["monitor", "logging", "observability", "sentry", "grafana", "prometheus", "alert", "metric", "trace", "debug"]),
-    ("storage", ["file", "filesystem", "storage", "s3", "blob", "object storage", "fs ", "file system"]),
-    ("apis", ["api", "rest", "graphql", "integration", "webhook", "oauth", "auth", "authentication"]),
-    ("design", ["figma", "design", "ui", "ux", "sketch", "image", "photo", "video", "media"]),
-    ("finance", ["finance", "payment", "stripe", "bank", "crypto", "blockchain", "wallet", "invoice"]),
-    ("maps", ["map", "maps", "geo", "location", "coordinate", "geocoding", "navigation"]),
-    ("security", ["security", "vulnerability", "scan", "audit", "compliance", "encrypt", "certificate"]),
+    ("browser", ["web", "browser", "search", "scraping", "crawl", "html", "http", "url", "link", "page"]),  # noqa: E501
+    ("database", ["database", "sql", "postgres", "mysql", "sqlite", "mongodb", "redis", "couch", "dynamo", "db ", "query", "table", "schema"]),  # noqa: E501
+    ("developer-tools", ["git", "github", "code", "developer", "ide", "lint", "build", "deploy", "ci/cd", "devops", "terminal", "cli"]),  # noqa: E501
+    ("ai", ["ai", "llm", "gpt", "chatgpt", "claude", "openai", "anthropic", "machine learning", "nlp", "rag", "embedding", "vector", "language model", "prompt"]),  # noqa: E501
+    ("communication", ["slack", "discord", "teams", "telegram", "email", "messaging", "chat", "notification", "mail", "sms"]),  # noqa: E501
+    ("cloud", ["aws", "azure", "gcp", "cloud", "s3", "lambda", "ec2", "kubernetes", "k8s", "docker", "container"]),  # noqa: E501
+    ("monitoring", ["monitor", "logging", "observability", "sentry", "grafana", "prometheus", "alert", "metric", "trace", "debug"]),  # noqa: E501
+    ("storage", ["file", "filesystem", "storage", "s3", "blob", "object storage", "fs ", "file system"]),  # noqa: E501
+    ("apis", ["api", "rest", "graphql", "integration", "webhook", "oauth", "auth", "authentication"]),  # noqa: E501
+    ("design", ["figma", "design", "ui", "ux", "sketch", "image", "photo", "video", "media"]),  # noqa: E501
+    ("finance", ["finance", "payment", "stripe", "bank", "crypto", "blockchain", "wallet", "invoice"]),  # noqa: E501
+    ("maps", ["map", "maps", "geo", "location", "coordinate", "geocoding", "navigation"]),  # noqa: E501
+    ("security", ["security", "vulnerability", "scan", "audit", "compliance", "encrypt", "certificate"]),  # noqa: E501
     ("social-media", ["twitter", "reddit", "linkedin", "instagram", "social", "post", "tweet"]),
-    ("productivity", ["calendar", "todo", "task", "note", "notion", "obsidian", "productivity", "organize"]),
+    ("productivity", ["calendar", "todo", "task", "note", "notion", "obsidian", "productivity", "organize"]),  # noqa: E501
 ]
 
 # 代码语言标签
@@ -41,7 +41,7 @@ def auto_categorize(name: str, desc: str, tags: list[str] | None = None,
     """根据名称、描述和标签自动推断分类。"""
     text = f"{name} {desc} {json.dumps(tags or [])}".lower()
     # 清理 GitHub 标签噪声
-    noise = ["mcp", "mcp-server", "modelcontextprotocol", "model-context-protocol", "ai", "agentic-ai"]
+    noise = ["mcp", "mcp-server", "modelcontextprotocol", "model-context-protocol", "ai", "agentic-ai"]  # noqa: E501
     for n in noise:
         text = text.replace(n, " ")
 
@@ -95,7 +95,6 @@ async def recategorize_all():
                     updated += 1
 
         await session.commit()
-        print(f"✅ 重新分类完成: {updated}/{len(servers)} 个 Server 分类已更新")
 
 
 if __name__ == "__main__":

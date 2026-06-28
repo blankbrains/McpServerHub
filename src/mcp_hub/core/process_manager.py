@@ -57,7 +57,7 @@ class ProcessManager:
                     raise ServerAlreadyRunningError(server_id, proc.pid)
 
             log_file = self.log_dir / f"{server_id.replace('/', '_').replace('@', '')}.log"
-            log_fd = open(log_file, "a", encoding="utf-8")
+            log_fd = open(log_file, "a", encoding="utf-8")  # noqa: SIM115
             log_fd.write(f"\n--- {datetime.now().isoformat()} Started ---\n")
             log_fd.flush()
 

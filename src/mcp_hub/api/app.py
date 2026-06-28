@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     logger.info("db.initializing")
     try:
         from mcp_hub.db.database import init_db
@@ -64,7 +64,7 @@ def create_app(dev: bool = False) -> FastAPI:
 
     # === Exception Handler ===
     @app.exception_handler(McpHubError)
-    async def mcp_hub_error_handler(request: Request, exc: McpHubError):
+    async def mcp_hub_error_handler(_request: Request, exc: McpHubError):
         return JSONResponse(
             status_code=exc.http_status,
             content={

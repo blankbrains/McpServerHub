@@ -35,7 +35,6 @@ class SecurityScanner:
         network_access = False
         file_access = False
         description = server_data.get("description", "").lower()
-        tags = server_data.get("tags", [])
 
         # Check for network access
         if any(w in description for w in ["web", "api", "http", "search", "network"]):

@@ -25,7 +25,6 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
         checks = []
         checks.append(("Python", sys.version.split()[0], True))
 
-        pg_ok = False
         try:
             import subprocess
             result = subprocess.run(
@@ -33,7 +32,6 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
             )
             if result.returncode == 0:
                 pg_ver = result.stdout.strip()
-                pg_ok = True
                 checks.append(("PostgreSQL", pg_ver, True))
             else:
                 checks.append(("PostgreSQL", "未找到", False))
@@ -109,8 +107,18 @@ MCP_HUB_WORKERS=2
         # Step 6: 开机自启
         click.echo("\n🔄 开机自启配置...")
         try:
-            cron_job = f"@reboot sleep 5 && cd {os.getcwd()} && {sys.executable} -m uvicorn mcp_hub.api.app:create_app --host 0.0.0.0 --port {os.environ.get('MCP_HUB_PORT', '3987')} --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
-            result = os.system(f'(crontab -l 2>/dev/null | grep -v "mcp-hub"; echo "{cron_job}") | crontab -')
+            mcp_port = os.environ.get('MCP_HUB_PORT', '3987')
+            cron_job = (
+                f"@reboot sleep 5 && cd {os.getcwd()}"
+                f" && {sys.executable} -m uvicorn mcp_hub.api.app:create_app"
+                f" --host 0.0.0.0 --port {mcp_port}"
+                f" --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
+            )
+            crontab_cmd = (
+                f'(crontab -l 2>/dev/null | grep -v "mcp-hub";'
+                f' echo "{cron_job}") | crontab -'
+            )
+            result = os.system(crontab_cmd)
             if result == 0:
                 click.echo("   ✅ crontab 开机自启已配置")
             else:

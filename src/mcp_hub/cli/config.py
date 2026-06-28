@@ -71,8 +71,8 @@ def import_config(file: str):
     """导入配置。"""
     try:
         with open(file, encoding="utf-8") as f:
-            cfg = json.load(f)
-        cm = ConfigManager()
+            json.load(f)
+        ConfigManager()
         click.echo(f"✅ 配置已从 {file} 导入")
     except FileNotFoundError:
         click.echo(f"❌ 文件未找到: {file}")

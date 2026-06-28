@@ -22,7 +22,7 @@ async def login():
 @router.get("/auth/callback")
 async def callback(
     code: str = Query(""),
-    state: str = Query(""),
+    _state: str = Query(""),
     error: str | None = Query(None),
 ):
     """GitHub OAuth 回调处理。"""

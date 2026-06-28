@@ -32,7 +32,7 @@ REAL_MCP_SERVERS = [
         "id": "@modelcontextprotocol/server-github",
         "name": "server-github",
         "display_name": "GitHub",
-        "description": "GitHub API 集成 - 管理仓库、Issue、PR、代码搜索。需要配置 GITHUB_TOKEN 环境变量。",
+        "description": "GitHub API 集成 - 管理仓库、Issue、PR、代码搜索。需要配置 GITHUB_TOKEN 环境变量。",  # noqa: E501
         "author": "modelcontextprotocol",
         "publisher_type": "organization",
         "publisher_verified": True,
@@ -292,7 +292,7 @@ REAL_MCP_SERVERS = [
         "id": "@anthropic/server-code-analyzer",
         "name": "server-code-analyzer",
         "display_name": "Code Analyzer",
-        "description": "代码静态分析 - 安全漏洞扫描、代码质量检查、最佳实践建议。支持多种编程语言。",
+        "description": "代码静态分析 - 安全漏洞扫描、代码质量检查、最佳实践建议。支持多种编程语言。",  # noqa: E501
         "author": "anthropic",
         "publisher_type": "organization",
         "publisher_verified": True,
@@ -328,7 +328,7 @@ REAL_MCP_SERVERS = [
         "id": "@community/server-weather",
         "name": "server-weather",
         "display_name": "Weather",
-        "description": "实时天气查询 - 当前天气、预报、历史数据、空气质量、紫外线指数。全球城市覆盖。",
+        "description": "实时天气查询 - 当前天气、预报、历史数据、空气质量、紫外线指数。全球城市覆盖。",  # noqa: E501
         "author": "community",
         "categories": '["apis", "weather"]',
         "tags": '["weather", "forecast", "climate"]',
@@ -362,7 +362,7 @@ REAL_MCP_SERVERS = [
         "id": "@community/server-docker",
         "name": "server-docker",
         "display_name": "Docker",
-        "description": "Docker 容器管理 - 启动、停止容器，查看日志，管理镜像，docker-compose 编排。",
+        "description": "Docker 容器管理 - 启动、停止容器，查看日志，管理镜像，docker-compose 编排。",  # noqa: E501
         "author": "community",
         "categories": '["devops", "containers"]',
         "tags": '["docker", "container", "devops"]',
@@ -500,4 +500,3 @@ async def seed_database() -> int:
 if __name__ == "__main__":
     import asyncio
     n = asyncio.run(seed_database())
-    print(f"Seeded {n} real MCP servers")

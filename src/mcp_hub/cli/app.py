@@ -14,23 +14,23 @@ def cli():
 
 
 # Import and register all subcommands
-from mcp_hub.cli.auth import login, logout, whoami
-from mcp_hub.cli.community import favorite, favorites, rate, review
-from mcp_hub.cli.config import config
-from mcp_hub.cli.daemon import daemon, serve
-from mcp_hub.cli.event import event
-from mcp_hub.cli.hub_install import hub_install
-from mcp_hub.cli.init_cmd import init_cmd
-from mcp_hub.cli.install import install, list_servers, uninstall
-from mcp_hub.cli.logs import logs
-from mcp_hub.cli.manage import restart, start, status_cmd, stop
-from mcp_hub.cli.prompt_install import prompt_install
-from mcp_hub.cli.publish import my_servers, publish, stats, unpublish
-from mcp_hub.cli.quickstart import quickstart
-from mcp_hub.cli.registry_sync import registry_sync
-from mcp_hub.cli.search import compare, info, search
-from mcp_hub.cli.trending import most_downloaded, new_releases, top_rated, trending
-from mcp_hub.cli.update import rollback, update, upgrade, version_history
+from mcp_hub.cli.auth import login, logout, whoami  # noqa: E402
+from mcp_hub.cli.community import favorite, favorites, rate, review  # noqa: E402
+from mcp_hub.cli.config import config  # noqa: E402
+from mcp_hub.cli.daemon import daemon, serve  # noqa: E402
+from mcp_hub.cli.event import event  # noqa: E402
+from mcp_hub.cli.hub_install import hub_install  # noqa: E402
+from mcp_hub.cli.init_cmd import init_cmd  # noqa: E402
+from mcp_hub.cli.install import install, list_servers, uninstall  # noqa: E402
+from mcp_hub.cli.logs import logs  # noqa: E402
+from mcp_hub.cli.manage import restart, start, status_cmd, stop  # noqa: E402
+from mcp_hub.cli.prompt_install import prompt_install  # noqa: E402
+from mcp_hub.cli.publish import my_servers, publish, stats, unpublish  # noqa: E402
+from mcp_hub.cli.quickstart import quickstart  # noqa: E402
+from mcp_hub.cli.registry_sync import registry_sync  # noqa: E402
+from mcp_hub.cli.search import compare, info, search  # noqa: E402
+from mcp_hub.cli.trending import most_downloaded, new_releases, top_rated, trending  # noqa: E402
+from mcp_hub.cli.update import rollback, update, upgrade, version_history  # noqa: E402
 
 cli.add_command(search)
 cli.add_command(info)

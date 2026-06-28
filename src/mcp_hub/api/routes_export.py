@@ -31,9 +31,10 @@ async def export_config(share: bool = False):
             "server_count": len(installed),
         }
 
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
-    json.dump(config, tmp, indent=2, ensure_ascii=False)
-    tmp.close()
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(config, tmp, indent=2, ensure_ascii=False)
 
     fn = "mcp-hub-share.json" if share else "mcp-hub-config.json"
     return FileResponse(tmp.name, media_type="application/json", filename=fn)

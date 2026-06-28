@@ -43,9 +43,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/mcp-hub"
-Documentation = "https://github.com/your-org/mcp-hub#readme"
-Source = "https://github.com/your-org/mcp-hub"
+Homepage = "https://github.com/blankbrains/McpServerHub"
+Documentation = "https://github.com/blankbrains/McpServerHub#readme"
+Source = "https://github.com/blankbrains/McpServerHub"
 
 [project.scripts]
 mcp = "mcp_hub.cli.app:cli"
