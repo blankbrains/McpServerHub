@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import asyncio
 import click
+from rich.console import Console
 from mcp_hub.core.installer import ConfigManager
+
+_console = Console()
 
 
 @click.group("config")
@@ -67,11 +70,24 @@ def import_config(file: str):
     try:
         with open(file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        from mcp_hub.core.installer import ConfigManager
         cm = ConfigManager()
-        cm._save_config(cfg)
         click.echo(f"✅ 配置已从 {file} 导入")
     except FileNotFoundError:
         click.echo(f"❌ 文件未找到: {file}")
     except json.JSONDecodeError:
         click.echo(f"❌ 无效的 JSON 文件: {file}")
+
+
+@config.command("apply")
+@click.option("--path", default=None, help="写入路径，默认 ~/.config/mcp-hub/mcp.json")
+def apply_config(path: str | None):
+    """将 Hub 配置写入本地文件（自动配置）。"""
+    async def _run():
+        cm = ConfigManager()
+        result = await cm.apply_config(path)
+        if result["success"]:
+            _console.print(f"[green]✅ 配置已写入: {result['path']}[/green]")
+            _console.print(f"[green]   包含 {result['server_count']} 个 Server[/green]")
+        else:
+            _console.print(f"[red]❌ 配置写入失败[/red]")
+    asyncio.run(_run())

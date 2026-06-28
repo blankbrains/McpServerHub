@@ -118,6 +118,17 @@ class EventModel(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class InstallHistoryModel(Base):
+    __tablename__ = "install_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
+    version = Column(String(50), default="")
+    action = Column(String(50), nullable=False)  # install / update / rollback / uninstall
+    status = Column(String(50), default="success")
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
