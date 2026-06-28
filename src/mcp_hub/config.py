@@ -55,14 +55,14 @@ class Settings:
 
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = os.getenv(
-        "MCP_HUB_GITHUB_CLIENT_ID", "REDACTED_OLD_OAUTH_CLIENT_ID"
+        "MCP_HUB_GITHUB_CLIENT_ID", "your_github_client_id"
     )
     GITHUB_CLIENT_SECRET: str = os.getenv(
-        "MCP_HUB_GITHUB_CLIENT_SECRET", "REDACTED_OLD_OAUTH_CLIENT_SECRET"
+        "MCP_HUB_GITHUB_CLIENT_SECRET", "your_github_client_secret"
     )
     GITHUB_REDIRECT_URI: str = os.getenv(
         "MCP_HUB_GITHUB_REDIRECT_URI",
-        "http://172.19.138.78:3987/api/v1/auth/callback",
+        "http://localhost:3987/api/v1/auth/callback",
     )
 
     # 服务
