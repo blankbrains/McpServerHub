@@ -27,5 +27,6 @@ Thumbs.db
 # Logs
 *.log
 
-#MD文件
-*.md
+# Sensitive (actual .env with real secrets, not the example)
+.env
+!.env.example
