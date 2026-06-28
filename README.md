@@ -1,6 +1,6 @@
 <div align="center">
 
-# <svg width="40" height="40" viewBox="0 0 64 64" style="vertical-align:middle"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#8B5CF6"/></linearGradient></defs><circle cx="32" cy="32" r="30" fill="url(#g)"/><text x="32" y="34" text-anchor="middle" fill="white" font-size="24" font-weight="700" font-family="system-ui,sans-serif">M</text></svg> MCP Server Hub
+# <img src="logo.svg" width="40" height="40" style="vertical-align:middle" alt="M"> MCP Server Hub
 
 **MCP 生态的缺失拼图**
 
