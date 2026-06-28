@@ -7,7 +7,7 @@ import json
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from mcp_hub.core.process_manager import get_process_manager
@@ -29,14 +29,14 @@ async def stream_logs(server_id: str, lines: int = 50):
     async def event_stream():
         # 发送初始日志
         if log_file.exists():
-            with open(log_file, "r", encoding="utf-8") as f:
+            with open(log_file, encoding="utf-8") as f:
                 all_lines = f.readlines()
                 for line in all_lines[-lines:]:
                     yield f"data: {json.dumps({'type': 'log', 'line': line.rstrip()})}\n\n"
 
         # 实时跟踪
         if log_file.exists():
-            with open(log_file, "r", encoding="utf-8") as f:
+            with open(log_file, encoding="utf-8") as f:
                 f.seek(0, 2)  # 跳到文件末尾
                 while True:
                     line = f.readline()

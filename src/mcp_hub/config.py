@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 
 def _find_dotenv() -> Path | None:
@@ -80,6 +80,6 @@ class Settings:
         return [o.strip() for o in origins.split(",") if o.strip()]
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
+
+from mcp_hub.exceptions import ConfigError
 
 router = APIRouter(tags=["config"])
 
@@ -43,7 +45,7 @@ async def upload_config(file: UploadFile = File(...)):
     try:
         config = json.loads(content)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="无效的 JSON 文件")
+        raise ConfigError("无效的 JSON 文件")
 
     # 分析上传的配置，返回可安装的 Server 列表
     servers = config.get("mcpServers", {})

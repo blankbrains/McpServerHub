@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
+
 import click
 from rich.console import Console
-from mcp_hub.core.installer import ConfigManager
+
+from mcp_hub.core.config_manager import ConfigManager
 
 _console = Console()
 
@@ -49,7 +51,7 @@ def set_config(server_name: str, key: str, value: str):
 @click.argument("file", required=False)
 def export_config(file: str | None):
     """导出配置。"""
-    from mcp_hub.core.installer import ConfigManager
+    from mcp_hub.core.config_manager import ConfigManager
     async def _run():
         cm = ConfigManager()
         cfg = await cm._load_config()
@@ -68,7 +70,7 @@ def export_config(file: str | None):
 def import_config(file: str):
     """导入配置。"""
     try:
-        with open(file, "r", encoding="utf-8") as f:
+        with open(file, encoding="utf-8") as f:
             cfg = json.load(f)
         cm = ConfigManager()
         click.echo(f"✅ 配置已从 {file} 导入")
@@ -89,5 +91,5 @@ def apply_config(path: str | None):
             _console.print(f"[green]✅ 配置已写入: {result['path']}[/green]")
             _console.print(f"[green]   包含 {result['server_count']} 个 Server[/green]")
         else:
-            _console.print(f"[red]❌ 配置写入失败[/red]")
+            _console.print("[red]❌ 配置写入失败[/red]")
     asyncio.run(_run())

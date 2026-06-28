@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from mcp_hub.core.auth import AuthService, simple_jwt_decode
+from mcp_hub.core.auth import AuthService
+from mcp_hub.exceptions import AuthError, TokenInvalidError
 
 router = APIRouter(tags=["auth"])
 auth_service = AuthService()
@@ -26,13 +27,13 @@ async def callback(
 ):
     """GitHub OAuth 回调处理。"""
     if error:
-        raise HTTPException(status_code=400, detail=f"GitHub 授权失败: {error}")
+        raise AuthError(f"GitHub 授权失败: {error}")
     if not code:
-        raise HTTPException(status_code=400, detail="缺少授权码")
+        raise AuthError("缺少授权码")
 
     result = await auth_service.authenticate_with_github(code)
     if not result["success"]:
-        raise HTTPException(status_code=401, detail=result.get("error", "认证失败"))
+        raise AuthError(result.get("error", "认证失败"))
 
     # 返回 HTML 页面，关闭窗口并将 token 传给前端
     token = result["token"]
@@ -65,11 +66,11 @@ async def get_current_user(request: Request):
         token = request.query_params["token"]
 
     if not token:
-        raise HTTPException(status_code=401, detail="未登录")
+        raise AuthError("未登录")
 
     user = await auth_service.verify_token(token)
     if not user:
-        raise HTTPException(status_code=401, detail="token 无效或已过期")
+        raise TokenInvalidError()
 
     return {"success": True, "data": user}
 

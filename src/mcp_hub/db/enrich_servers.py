@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import json
 import re
 
 import httpx
-from sqlalchemy import select, func
+from sqlalchemy import select
 
-from mcp_hub.db.database import async_session_factory, engine
-from mcp_hub.db.models import ServerModel, Base
+from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.models import ServerModel
 
 # ========== 图标生成 ==========
 

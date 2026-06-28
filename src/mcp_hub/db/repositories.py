@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from typing import Any
 
-from sqlalchemy import select, func, or_, text, desc, update, delete
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mcp_hub.db.models import (
-    ServerModel,
-    ReviewModel,
-    UserModel,
     FavoriteModel,
-    HealthLogModel,
+    ReviewModel,
+    ServerModel,
+    UserModel,
 )
 
 

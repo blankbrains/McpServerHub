@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
-import click
 from pathlib import Path
+
+import click
 
 
 @click.command("logs")
@@ -24,7 +24,7 @@ def logs(server_name: str, lines: int, follow: bool):
         return
 
     def tail():
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_file, encoding="utf-8") as f:
             content = f.read()
             all_lines = content.splitlines()
             for line in all_lines[-lines:]:

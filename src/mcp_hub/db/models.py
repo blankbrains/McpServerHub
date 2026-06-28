@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import datetime
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
-    Float,
-    Text,
-    DateTime,
     Boolean,
+    Column,
+    DateTime,
+    Float,
     ForeignKey,
+    Integer,
+    String,
+    Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship
+
 from mcp_hub.db.database import Base
 
 
@@ -133,6 +132,6 @@ class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), nullable=False)
+    server_id = Column(String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
     topic = Column(String(255), nullable=False)
     created_at = Column(DateTime, server_default=func.now())

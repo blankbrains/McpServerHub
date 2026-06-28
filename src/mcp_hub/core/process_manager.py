@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+
+from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -18,6 +22,7 @@ class ManagedProcess:
     started_at: float | None = None
     restart_count: int = 0
     log_file: Path | None = None
+    last_keepalive_ok: float | None = None  # timestamp of last successful keepalive ping
 
 
 # 全局进程管理器单例
@@ -49,7 +54,7 @@ class ProcessManager:
             if server_id in self._processes:
                 proc = self._processes[server_id]
                 if proc.process and proc.process.returncode is None:
-                    raise RuntimeError(f"Server {server_id} 已在运行 (PID: {proc.pid})")
+                    raise ServerAlreadyRunningError(server_id, proc.pid)
 
             log_file = self.log_dir / f"{server_id.replace('/', '_').replace('@', '')}.log"
             log_fd = open(log_file, "a", encoding="utf-8")
@@ -77,12 +82,24 @@ class ProcessManager:
                 log_file=log_file,
             )
             self._processes[server_id] = managed
+            logger.info(
+                "process.spawned",
+                server_id=server_id,
+                pid=process.pid,
+                command=full_cmd,
+            )
 
             # Small delay to check if process died immediately
             await asyncio.sleep(0.5)
             if process.returncode is not None and process.returncode != 0:
                 error_msg = log_file.read_text().splitlines()[-5:] if log_file.exists() else []
-                raise RuntimeError(f"进程启动后立即退出 (code={process.returncode}): {''.join(error_msg)}")
+                logger.error(
+                    "process.startup_failed",
+                    server_id=server_id,
+                    exit_code=process.returncode,
+                    stderr=''.join(error_msg)[:500],
+                )
+                raise ProcessStartupError(server_id, process.returncode, ''.join(error_msg))
 
             # Start keep-alive pings for stdio-based MCP servers
             self._start_keepalive(server_id)
@@ -103,6 +120,7 @@ class ProcessManager:
                         try:
                             proc.process.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
                             await proc.process.stdin.drain()
+                            proc.last_keepalive_ok = asyncio.get_event_loop().time()
                         except (BrokenPipeError, OSError):
                             break
                     await asyncio.sleep(10)
@@ -135,6 +153,7 @@ class ProcessManager:
             pass
         finally:
             self._processes.pop(server_id, None)
+            logger.info("process.killed", server_id=server_id, pid=pid)
 
         if proc.log_file:
             with open(proc.log_file, "a", encoding="utf-8") as f:

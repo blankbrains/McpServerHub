@@ -18,7 +18,6 @@ src/mcp_hub/web/node_modules/
 
 # IDE
 .idea/
-.vscode/
 
 # OS
 .DS_Store
@@ -28,7 +27,5 @@ Thumbs.db
 *.log
 
 # Sensitive (actual .env with real secrets, not the example)
-.env
-!.env.example
 .env
 !.env.example

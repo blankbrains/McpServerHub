@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from mcp_hub.core.registry import Registry
 from mcp_hub.core.process_manager import get_process_manager
+from mcp_hub.core.registry import Registry
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import ServerModel
 

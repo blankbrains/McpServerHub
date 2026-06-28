@@ -7,12 +7,11 @@ import json
 
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 from mcp_hub.core.registry import Registry
-from mcp_hub.models.server import SearchParams
 
 console = Console()
 
@@ -103,7 +102,7 @@ def info(server_id: str, json_output: bool):
         info_text.append(f"   {security}\n")
         info_text.append(f"   📌 {status_icon}\n")
 
-        console.print(Panel(info_text, title=f"Server 详情", border_style="cyan"))
+        console.print(Panel(info_text, title="Server 详情", border_style="cyan"))
 
     asyncio.run(_run())
 

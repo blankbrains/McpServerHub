@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from mcp_hub.db.repositories import ServerRepository
 from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.repositories import ServerRepository
 
 
 class Registry:

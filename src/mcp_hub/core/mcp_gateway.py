@@ -14,8 +14,8 @@ import json
 import sys
 from typing import Any
 
-from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
+from mcp_hub.exceptions import GatewayError
 
 
 class ManagedMCP:
@@ -76,7 +76,11 @@ class ManagedMCP:
                     if "result" in response:
                         return response["result"]
                     elif "error" in response:
-                        raise Exception(response["error"].get("message", str(response["error"])))
+                        raise GatewayError(
+                            response["error"].get("message", str(response["error"])),
+                            server_id=self.server_id,
+                            details={"raw_error": response["error"]},
+                        )
                     return response
 
         except asyncio.TimeoutError:

@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+echo "🔍 Running Ruff..."
+uv run ruff check src/
+
+echo "🔍 Running mypy..."
+uv run mypy src/
+
+echo "🔍 Running pytest..."
+uv run pytest -x --tb=short
+
+echo "✅ All checks passed!"

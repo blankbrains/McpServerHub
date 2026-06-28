@@ -8,7 +8,6 @@ import webbrowser
 from pathlib import Path
 
 import click
-import httpx
 
 from mcp_hub.core.auth import AuthService
 
@@ -21,7 +20,7 @@ def login():
         url = auth.get_github_login_url()
 
         click.echo("🔑 正在打开 GitHub 登录页面...")
-        click.echo(f"   如果浏览器没有自动打开，请访问:")
+        click.echo("   如果浏览器没有自动打开，请访问:")
         click.echo(f"   {url}")
         click.echo()
 

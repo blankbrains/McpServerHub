@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+
 import click
-from mcp_hub.core.registry import Registry
+
 from mcp_hub.core.process_manager import ProcessManager
+from mcp_hub.core.registry import Registry
 
 
 @click.command("start")

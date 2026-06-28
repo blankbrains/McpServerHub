@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
-from mcp_hub.core.installer import VersionManager
+from mcp_hub.core.version_manager import VersionManager
 
 console = Console()
 
@@ -99,8 +100,10 @@ def rollback(server_name: str, version: str | None):
 def version_history(server_name: str):
     """查看 Server 的版本历史。"""
     import asyncio
-    from mcp_hub.db.database import async_session_factory
+
     from sqlalchemy import text
+
+    from mcp_hub.db.database import async_session_factory
 
     async def _run():
         sid = f"@community/{server_name}" if "/" not in server_name else server_name

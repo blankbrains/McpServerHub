@@ -72,7 +72,7 @@ MCP_HUB_WORKERS=2
             env_path.write_text(env_content)
             click.echo(f"   ✅ 配置文件: {env_path}")
         else:
-            click.echo(f"   ⏭️  .env 已存在，跳过 (使用 --force 覆盖)")
+            click.echo("   ⏭️  .env 已存在，跳过 (使用 --force 覆盖)")
 
         # Step 4: 初始化数据库
         click.echo("\n🗄️  数据库初始化...")
@@ -104,7 +104,7 @@ MCP_HUB_WORKERS=2
             mcp_config.write_text(json.dumps(default_config, indent=2, ensure_ascii=False))
             click.echo(f"   ✅ MCP 配置: {mcp_config}")
         else:
-            click.echo(f"   ⏭️  mcp.json 已存在，跳过")
+            click.echo("   ⏭️  mcp.json 已存在，跳过")
 
         # Step 6: 开机自启
         click.echo("\n🔄 开机自启配置...")
@@ -120,7 +120,7 @@ MCP_HUB_WORKERS=2
 
         click.echo("\n" + "=" * 50)
         click.echo("🎉 MCP Server Hub 初始化完成！")
-        click.echo(f"   启动: mcp daemon start")
+        click.echo("   启动: mcp daemon start")
         click.echo(f"   查看: http://localhost:{os.environ.get('MCP_HUB_PORT', '3987')}")
         click.echo("=" * 50)
 

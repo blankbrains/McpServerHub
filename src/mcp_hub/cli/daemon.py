@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import sys
+
 import click
-from mcp_hub.core.registry import Registry
-from mcp_hub.core.health_check import HealthChecker
+
 from mcp_hub.core.process_manager import ProcessManager
 
 
@@ -22,10 +21,11 @@ def daemon():
 def start_daemon(host: str, port: int, dev: bool):
     """启动 MCP Hub 守护进程。"""
     import uvicorn
+
     from mcp_hub.api.app import create_app
 
     app = create_app()
-    click.echo(f"🚀 MCP Server Hub 正在启动...")
+    click.echo("🚀 MCP Server Hub 正在启动...")
     click.echo(f"   📍 API: http://{host}:{port}/api/v1")
     click.echo(f"   📊 Dashboard: http://{host}:{port}/")
     if dev:
@@ -43,7 +43,6 @@ def stop_daemon():
 @daemon.command("status")
 def daemon_status():
     """查看 Hub 状态。"""
-    import asyncio
     async def _run():
         pm = ProcessManager()
         running = pm.list_running()
@@ -68,7 +67,6 @@ def daemon_disable():
 @click.command("serve")
 def serve():
     """启动 MCP 协议网关（stdio 模式），供 Claude Code 等 Agent 连接。"""
-    import asyncio
     from mcp_hub.core.mcp_gateway import McpGateway
 
     click.echo("🔌 MCP Hub Gateway 已启动（stdio 模式）")

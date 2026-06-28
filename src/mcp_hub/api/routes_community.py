@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from mcp_hub.db.repositories import ReviewRepository, UserRepository
+
 from mcp_hub.db.database import get_session
+from mcp_hub.db.repositories import ReviewRepository, UserRepository
 
 router = APIRouter(tags=["community"])
 

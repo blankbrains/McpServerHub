@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,32 +11,34 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from mcp_hub import __version__
-from mcp_hub.config import get_settings
-from mcp_hub.api.routes_market import router as market_router
-from mcp_hub.api.routes_manage import router as manage_router
-from mcp_hub.api.routes_community import router as community_router
-from mcp_hub.api.routes_health import router as health_router
 from mcp_hub.api.routes_auth import router as auth_router
-from mcp_hub.api.routes_realtime import router as realtime_router
+from mcp_hub.api.routes_community import router as community_router
 from mcp_hub.api.routes_config import router as config_router
-from mcp_hub.api.routes_search import router as search_router
 from mcp_hub.api.routes_export import router as export_router
+from mcp_hub.api.routes_health import router as health_router
+from mcp_hub.api.routes_manage import router as manage_router
+from mcp_hub.api.routes_market import router as market_router
+from mcp_hub.api.routes_realtime import router as realtime_router
+from mcp_hub.api.routes_search import router as search_router
+from mcp_hub.config import get_settings
+from mcp_hub.exceptions import McpHubError
+from mcp_hub.logging_config import get_logger
 
-logger = logging.getLogger("mcp_hub")
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing database...")
+    logger.info("db.initializing")
     try:
         from mcp_hub.db.database import init_db
         await init_db()
-        logger.info("Database initialized successfully")
+        logger.info("db.initialized")
     except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
+        logger.error("db.init_failed", error=str(e))
         raise
     yield
-    logger.info("Shutting down...")
+    logger.info("app.shutting_down")
 
 
 def create_app(dev: bool = False) -> FastAPI:
@@ -60,6 +61,21 @@ def create_app(dev: bool = False) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # === Exception Handler ===
+    @app.exception_handler(McpHubError)
+    async def mcp_hub_error_handler(request: Request, exc: McpHubError):
+        return JSONResponse(
+            status_code=exc.http_status,
+            content={
+                "success": False,
+                "error": {
+                    "code": exc.code,
+                    "message": str(exc),
+                    "details": exc.details,
+                },
+            },
+        )
 
     # === API Routes (优先级最高) ===
     app.include_router(market_router, prefix="/api/v1")

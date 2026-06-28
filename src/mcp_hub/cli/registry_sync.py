@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 
 import click
 import httpx
@@ -45,7 +44,7 @@ async def sync_from_npm(client: httpx.AsyncClient, dry_run: bool) -> int:
     for keyword in NPM_SEARCH_KEYWORDS:
         try:
             resp = await client.get(
-                f"https://registry.npmjs.org/-/v1/search",
+                "https://registry.npmjs.org/-/v1/search",
                 params={
                     "text": keyword,
                     "size": 100,
@@ -215,9 +214,10 @@ async def sync_from_github(client: httpx.AsyncClient, dry_run: bool) -> int:
 
 async def _register_npm_package(name: str, ver: str, desc: str, homepage: str, keywords: list):
     """注册 npm 包到数据库。"""
+    from sqlalchemy import select
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
-    from sqlalchemy import select
 
     parts = name.split("/")
     server_id = name if name.startswith("@") else f"@npm/{name}"
@@ -266,9 +266,10 @@ async def _register_npm_package(name: str, ver: str, desc: str, homepage: str, k
 
 async def _register_pypi_package(name: str, ver: str, desc: str, homepage: str):
     """注册 PyPI 包到数据库。"""
+    from sqlalchemy import select
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
-    from sqlalchemy import select
 
     server_id = f"@pypi/{name}"
     display = name.replace("mcp-server-", "").replace("mcp-", "").replace("-", " ").title()
@@ -299,9 +300,10 @@ async def _register_pypi_package(name: str, ver: str, desc: str, homepage: str):
 
 async def _register_github_repo(full_name: str, desc: str, stars: int, topics: list, lang: str):
     """注册 GitHub 仓库到数据库。"""
+    from sqlalchemy import select
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
-    from sqlalchemy import select
 
     server_id = f"@github/{full_name}"
     name = full_name.split("/")[-1]
@@ -377,9 +379,10 @@ def registry_sync(dry_run: bool, source: str):
             console.print("[yellow]  (dry-run 模式，未写入数据库)[/yellow]")
 
         # 显示统计
+        from sqlalchemy import func, select
+
         from mcp_hub.db.database import async_session_factory
         from mcp_hub.db.models import ServerModel
-        from sqlalchemy import select, func
 
         async with async_session_factory() as session:
             cnt = (await session.execute(select(func.count(ServerModel.id)))).scalar()

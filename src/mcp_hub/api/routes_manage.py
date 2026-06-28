@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
-from mcp_hub.core.registry import Registry
+
 from mcp_hub.core.installer import Installer
 from mcp_hub.core.process_manager import get_process_manager
-from mcp_hub.models.server import ServerMeta, InstallConfig
+from mcp_hub.core.registry import Registry
+from mcp_hub.exceptions import (
+    ConfigError,
+    ProcessStartupError,
+    ServerAlreadyRunningError,
+    ServerNotFoundError,
+)
+from mcp_hub.models.server import InstallConfig, ServerMeta
 
 router = APIRouter(tags=["manage"])
 
@@ -22,7 +29,7 @@ async def install_server(req: InstallRequest):
     registry = Registry()
     server_data = await registry.get_by_id(req.server_id)
     if not server_data:
-        raise HTTPException(status_code=404, detail=f"Server '{req.server_id}' 未找到")
+        raise ServerNotFoundError(req.server_id)
 
     meta = ServerMeta(
         name=server_data["id"],
@@ -58,7 +65,7 @@ async def get_status(server_id: str):
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
-        raise HTTPException(status_code=404, detail="Server 未找到")
+        raise ServerNotFoundError(server_id)
 
     pm = get_process_manager()
     running = pm.is_running(server_id)
@@ -80,21 +87,20 @@ async def start_server(server_id: str):
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
-        raise HTTPException(status_code=404, detail="Server 未找到")
+        raise ServerNotFoundError(server_id)
 
     command = server.get("install_command", "")
     if not command:
-        raise HTTPException(status_code=400, detail="没有安装命令")
+        raise ConfigError("没有安装命令", {"server_id": server_id})
 
     parts = command.split()
     pm = get_process_manager()
     try:
         await pm.spawn(server_id, parts[0], parts[1:])
-    except RuntimeError as e:
-        detail = str(e)
-        if "已在运行" in detail:
-            raise HTTPException(status_code=409, detail=detail)
-        raise HTTPException(status_code=500, detail=detail)
+    except ServerAlreadyRunningError as e:
+        raise e  # 直接透传，已是 McpHubError
+    except ProcessStartupError as e:
+        raise e  # 直接透传，已是 McpHubError
 
     await registry.update_status(server_id, "running")
     return {"success": True, "message": f"{server_id} 已启动"}
@@ -118,7 +124,7 @@ async def uninstall_server(server_id: str):
 
     server = await registry.get_by_id(server_id)
     if not server:
-        raise HTTPException(status_code=404, detail="Server 未找到")
+        raise ServerNotFoundError(server_id)
 
     # 停止进程
     await pm.kill(server_id)
@@ -153,10 +159,10 @@ async def get_server_config(
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
-        raise HTTPException(status_code=404, detail="Server 未找到")
+        raise ServerNotFoundError(server_id)
 
     command = server.get("install_command", "")
-    from mcp_hub.core.installer import get_config_for_agent
+    from mcp_hub.core.config_manager import get_config_for_agent
     return {
         "success": True,
         "data": get_config_for_agent(
@@ -170,13 +176,14 @@ async def get_server_config(
 @router.get("/servers/config/download")
 async def download_all_config(agent: str = "generic"):
     """下载所有已安装 Server 的配置（mcp.json 格式），用于导入本地 Agent。"""
-    from fastapi.responses import FileResponse
     import tempfile
+
+    from fastapi.responses import FileResponse
 
     registry = Registry()
     installed = await registry.get_installed()
     if not installed:
-        raise HTTPException(status_code=404, detail="没有已安装的 Server")
+        raise ServerNotFoundError("（已安装列表）")
 
     config = {"mcpServers": {}}
     for s in installed:
@@ -209,6 +216,6 @@ async def get_logs(
     if not log_file.exists():
         return {"success": True, "data": [], "message": "日志文件不存在"}
 
-    with open(log_file, "r", encoding="utf-8") as f:
+    with open(log_file, encoding="utf-8") as f:
         all_lines = f.readlines()
     return {"success": True, "data": all_lines[-lines:]}
