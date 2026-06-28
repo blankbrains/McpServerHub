@@ -20,7 +20,7 @@ MCP 生态的一站式管理平台。发现 · 安装 · 管理 · 发布 · 社
 src/mcp_hub/
 ├── api/           # FastAPI 路由（market/manage/community/health/auth/realtime/config/search/export）
 ├── cli/           # 36 个 CLI 命令（search/install/manage/quickstart/registry-sync/hub-install/prompt-install 等）
-├── core/          # 核心服务（registry/installer/process_manager/health_check/event_bus/mcp_gateway/auth/security）
+├── core/          # 核心服务（registry/installer/process_manager/health_check/event_bus/mcp_gateway/auth/security_scanner/version_manager/config_manager）
 ├── db/            # 数据库（SQLAlchemy ORM + repositories + seed + auto_categorize + enrich）
 └── web/           # React 前端（Dashboard/Market/ServerDetail/MyServers/ConfigPage）
 deploy/            # 部署脚本（install.sh + install.md + systemd + docker + logging）
@@ -65,12 +65,21 @@ docker-compose up -d
 ## 数据库
 
 - PostgreSQL 生产 / SQLite 快速体验
-- 7 张表：servers / reviews / users / favorites / health_logs / events / subscriptions
+- 8 张表：servers / reviews / users / favorites / health_logs / events / subscriptions / install_history
 - ServerModel.id 格式：`@org/server-name`
+
+## 基础设施
+
+- **异常体系**: `exceptions.py` — McpHubError 基类 + 12 个子类，FastAPI 全局 handler
+- **结构化日志**: `logging_config.py` — structlog 配置，JSON/console 双模式
+- **API Schema**: `api/schemas.py` — ApiResponse/ErrorDetail 统一响应格式
+- **数据库迁移**: Alembic + `db/migrations.py` — 版本化异步迁移
+- **IDE**: `.vscode/settings.json` + `extensions.json`
+- **Git hooks**: `.hooks/pre-commit` — Ruff + mypy + pytest
 
 ## 开发测试规则
 
-每次新增或修改模块都要写相应测试。
+每次新增或修改模块都要写相应测试。当前 60 个测试覆盖 exceptions/logging/health_check/models/api_schemas。
 
 ## 计划规划规则
 

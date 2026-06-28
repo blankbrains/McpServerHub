@@ -271,6 +271,8 @@ http://localhost:3987
 | **API** | FastAPI + uvicorn | 高性能异步框架 |
 | **数据库** | PostgreSQL 16+ | 生产级、asyncpg |
 | **ORM** | SQLAlchemy 2.0 | 成熟异步 ORM |
+| **迁移** | Alembic | 版本化数据库迁移 |
+| **日志** | structlog | 结构化 JSON 日志 |
 | **CLI** | Click + Rich | 漂亮的终端输出 |
 | **前端** | React 19 + Tailwind | 现代、快速、响应式 |
 | **构建** | Vite | 即时 HMR、优化构建 |
@@ -289,7 +291,7 @@ http://localhost:3987
 | ✅ P1 | **完成** | `mcp init`、Docker、PyPI 就绪 |
 | ✅ P2 | **完成** | Dashboard：SSE 日志、实时状态 |
 | ✅ P3 | **完成** | CLI：Rich 表格、旋转动画、颜色 |
-| ✅ P4 | **完成** | 测试 (9/9)、GitHub Actions CI |
+| ✅ P4 | **完成** | 测试 (60 tests)、GitHub Actions CI |
 | ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
 
 ---
