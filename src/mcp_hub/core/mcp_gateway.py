@@ -238,7 +238,25 @@ class McpGateway:
             return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
         elif method == "resources/list":
-            return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}}
+            # Aggregate resources from all servers
+            all_resources = []
+            for sid, server in self._servers.items():
+                result = await server._send_request("resources/list", {})
+                if result and "resources" in result:
+                    prefix = sid.replace("@", "").replace("/", "_")
+                    for r in result["resources"]:
+                        r["uri"] = f"{prefix}://{r.get('uri', '')}"
+                        r["description"] = f"[{sid}] {r.get('description', '')}"
+                        all_resources.append(r)
+            return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": all_resources}}
+
+        elif method == "prompts/list":
+            all_prompts = []
+            for sid, server in self._servers.items():
+                result = await server._send_request("prompts/list", {})
+                if result and "prompts" in result:
+                    all_prompts.extend(result["prompts"])
+            return {"jsonrpc": "2.0", "id": req_id, "result": {"prompts": all_prompts}}
 
         else:
             return {

@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
 import ServerDetail from './pages/ServerDetail'
 import MyServers from './pages/MyServers'
+import ConfigPage from './pages/ConfigPage'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/market" element={<Market />} />
         <Route path="/servers/:id" element={<ServerDetail />} />
         <Route path="/my-servers" element={<MyServers />} />
+        <Route path="/config" element={<ConfigPage />} />
       </Routes>
     </Layout>
   )

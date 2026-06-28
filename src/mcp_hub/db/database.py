@@ -1,4 +1,4 @@
-"""PostgreSQL 异步数据库引擎 — 生产配置。"""
+"""数据库引擎 — 同时支持 PostgreSQL（生产）和 SQLite（quickstart）。"""
 
 from __future__ import annotations
 
@@ -12,20 +12,26 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 DATABASE_URL = os.environ.get(
     "MCP_HUB_DATABASE_URL",
     "postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub",
 )
 
-# Production connection pool settings
+# Automatically select driver based on URL
+if DATABASE_URL.startswith("sqlite"):
+    _connect_args = {"check_same_thread": False}
+    _pool = {"poolclass": NullPool}  # SQLite doesn't need pool
+else:
+    _connect_args = {}
+    _pool = {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True, "pool_recycle": 3600}
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    **_pool,
+    connect_args=_connect_args,
 )
 
 async_session_factory = async_sessionmaker(
@@ -58,12 +64,11 @@ async def get_db():
 
 
 async def init_db():
-    """初始化数据库：创建所有表。"""
+    """初始化数据库：创建所有表 + 种子数据。"""
     from mcp_hub.db.models import Base  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Seed default data
     from mcp_hub.db.seed import seed_database
     await seed_database()

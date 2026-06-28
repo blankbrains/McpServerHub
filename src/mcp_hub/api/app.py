@@ -6,8 +6,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from mcp_hub import __version__
@@ -18,13 +19,15 @@ from mcp_hub.api.routes_community import router as community_router
 from mcp_hub.api.routes_health import router as health_router
 from mcp_hub.api.routes_auth import router as auth_router
 from mcp_hub.api.routes_realtime import router as realtime_router
+from mcp_hub.api.routes_config import router as config_router
+from mcp_hub.api.routes_search import router as search_router
+from mcp_hub.api.routes_export import router as export_router
 
 logger = logging.getLogger("mcp_hub")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理。"""
     logger.info("Initializing database...")
     try:
         from mcp_hub.db.database import init_db
@@ -38,7 +41,6 @@ async def lifespan(app: FastAPI):
 
 
 def create_app(dev: bool = False) -> FastAPI:
-    """创建 FastAPI 应用（生产入口）。"""
     settings = get_settings()
 
     app = FastAPI(
@@ -59,26 +61,45 @@ def create_app(dev: bool = False) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Routes
+    # === API Routes (优先级最高) ===
     app.include_router(market_router, prefix="/api/v1")
     app.include_router(manage_router, prefix="/api/v1")
     app.include_router(community_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(realtime_router, prefix="/api/v1")
+    app.include_router(config_router, prefix="/api/v1")
+    app.include_router(search_router, prefix="/api/v1")
+    app.include_router(export_router, prefix="/api/v1")
 
-    # Web static files
+    # === Web Dashboard SPA ===
+    # 所有非 API 路径都返回 index.html，让 React Router 处理
     static_dir = Path(__file__).parent.parent / "web" / "static"
-    if static_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="web")
+    index_html = static_dir / "index.html" if static_dir.exists() else None
 
-    @app.get("/")
-    async def root():
-        return {
-            "name": "MCP Server Hub",
-            "version": __version__,
-            "docs": "/docs",
-            "api": "/api/v1",
-        }
+    if index_html and index_html.exists():
+        # 挂载静态资源（JS/CSS/字体等）
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(static_dir / "assets")),
+            name="web_assets",
+        )
+
+        @app.api_route("/{path:path}", methods=["GET"])
+        async def serve_spa(path: str):
+            """所有非 API 的 GET 请求返回 index.html（SPA 回退）。"""
+            # API 路径不会走到这里（已在上面注册）
+            return FileResponse(str(index_html))
+
+    else:
+        # 没有前端时返回 JSON
+        @app.get("/")
+        async def root():
+            return {
+                "name": "MCP Server Hub",
+                "version": __version__,
+                "docs": "/docs",
+                "api": "/api/v1",
+            }
 
     return app

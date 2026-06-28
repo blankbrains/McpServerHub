@@ -6,6 +6,7 @@ const navItems = [
   { path: '/', label: '仪表盘', icon: '📊' },
   { path: '/market', label: '市场', icon: '🏪' },
   { path: '/my-servers', label: '我的 Server', icon: '📦' },
+  { path: '/config', label: '配置', icon: '⚙️' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -55,7 +56,13 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
               <Link to="/" className="flex items-center gap-2">
-                <span className="text-2xl">🔵</span>
+                <svg width="32" height="32" viewBox="0 0 64 64" className="flex-shrink-0">
+                  <defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#3B82F6"/><stop offset="100%" stopColor="#8B5CF6"/>
+                  </linearGradient></defs>
+                  <circle cx="32" cy="32" r="30" fill="url(#lg)"/>
+                  <text x="32" y="36" text-anchor="middle" fill="white" font-size="26" fontWeight="800" fontFamily="system-ui,sans-serif">M</text>
+                </svg>
                 <span className="font-bold text-xl text-gray-900">MCP Hub</span>
               </Link>
               <nav className="flex items-center gap-1">
