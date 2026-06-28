@@ -291,7 +291,7 @@ http://localhost:3987
 | ✅ P1 | **完成** | `mcp init`、Docker、PyPI 就绪 |
 | ✅ P2 | **完成** | Dashboard：SSE 日志、实时状态 |
 | ✅ P3 | **完成** | CLI：Rich 表格、旋转动画、颜色 |
-| ✅ P4 | **完成** | 测试 (60 tests)、GitHub Actions CI |
+| ✅ P4 | **完成** | 测试、GitHub Actions CI |
 | ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
 
 ---
