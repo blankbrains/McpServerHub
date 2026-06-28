@@ -29,3 +29,6 @@ Thumbs.db
 # Sensitive (actual .env with real secrets, not the example)
 .env
 !.env.example
+
+# Lockfiles (auto-generated, pyproject.toml is the source of truth)
+uv.lock
