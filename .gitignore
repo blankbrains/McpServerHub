@@ -32,3 +32,8 @@ Thumbs.db
 
 # Lockfiles (auto-generated, pyproject.toml is the source of truth)
 uv.lock
+
+# Project docs (local only)
+PROJECT_SNAPSHOT.md
+*开发文档.md
+*项目文档.md
