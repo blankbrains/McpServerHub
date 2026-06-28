@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mcp_hub.core.auth import simple_jwt_encode, simple_jwt_decode
+from mcp_hub.core.auth import simple_jwt_decode, simple_jwt_encode
 
 
 def test_jwt_encode_decode():
@@ -25,7 +25,8 @@ def test_jwt_has_valid_structure():
     parts = token.split(".")
     assert len(parts) == 3
     # header
-    import json, base64
+    import base64
+    import json
     header = json.loads(base64.urlsafe_b64decode(parts[0] + "=="))
     assert header["alg"] == "HS256"
     assert header["typ"] == "JWT"

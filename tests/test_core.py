@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mcp_hub.models.server import ServerMeta, InstallConfig, SecurityInfo
+from mcp_hub.models.server import InstallConfig, SecurityInfo, ServerMeta
 
 
 def test_server_meta_creation():
@@ -12,7 +12,11 @@ def test_server_meta_creation():
         version="1.0.0",
         description="File system access",
         author="modelcontextprotocol",
-        install=InstallConfig(type="npx", package="server-filesystem", command="npx -y @modelcontextprotocol/server-filesystem /tmp"),
+        install=InstallConfig(
+            type="npx",
+            package="server-filesystem",
+            command="npx -y @modelcontextprotocol/server-filesystem /tmp",
+        ),
     )
     assert meta.name == "@modelcontextprotocol/server-filesystem"
     assert meta.display_name == "server-filesystem"
