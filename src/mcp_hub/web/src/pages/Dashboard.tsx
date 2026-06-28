@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE, ServerInfo } from '../api/client'
+import { Link, useNavigate } from 'react-router-dom'
+import { healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE, ServerInfo, downloadConfig, uploadConfig } from '../api/client'
 import ServerCard from '../components/ServerCard'
 
 export default function Dashboard() {
@@ -9,9 +9,17 @@ export default function Dashboard() {
   const [topRated, setTopRated] = useState<ServerInfo[]>([])
   const [installed, setInstalled] = useState<ServerInfo[]>([])
   const [runningCount, setRunningCount] = useState<number>(0)
+  const [totalAvailable, setTotalAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
   const [logs, setLogs] = useState<string[]>([])
   const [selectedLog, setSelectedLog] = useState<string>('')
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
+  })
+  const [recent, setRecent] = useState<ServerInfo[]>(() => {
+    try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
+  })
+  const [uploadResult, setUploadResult] = useState<any>(null)
 
   useEffect(() => {
     async function load() {
@@ -26,6 +34,8 @@ export default function Dashboard() {
         setTrending(t.slice(0, 6))
         setTopRated(r.slice(0, 6))
         if (inst.data) setInstalled(inst.data)
+        const healthR = await apiGet<any>('/health/servers')
+        if (healthR.data?.total_available) setTotalAvailable(healthR.data.total_available)
       } catch (e) {
         console.error('Failed to load dashboard:', e)
       } finally {
@@ -34,12 +44,40 @@ export default function Dashboard() {
     }
     load()
 
-    // Real-time status via SSE
     const es = connectStatusSSE((data) => {
       setRunningCount(Object.keys(data.running || {}).length)
     })
     return () => es.close()
   }, [])
+
+  // Listen for storage changes (favorites from other tabs)
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const fav = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
+        setFavorites(fav)
+        const rec = JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]')
+        setRecent(rec)
+      } catch {}
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [])
+
+  const handleDownloadConfig = async () => {
+    const blob = await downloadConfig()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'mcp-hub-config.json'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleUploadConfig = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const r = await uploadConfig(file)
+    setUploadResult(r)
+  }
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载中...</div></div>
@@ -49,11 +87,71 @@ export default function Dashboard() {
     <div className="space-y-8">
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" />
-        <StatCard icon="📦" label="已安装" value={String(installed.length)} color="purple" />
-        <StatCard icon="🏪" label="可用 Server" value={String(trending.length > 0 ? trending[0].download_count > 0 ? 15 : 10 : 10)} color="blue" />
-        <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" />
+        <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" to="/my-servers" />
+        <StatCard icon="📦" label="已安装" value={String(installed.length)} color="purple" to="/my-servers" />
+        <StatCard icon="🏪" label="可用 Server" value={String(totalAvailable || trending.length)} color="blue" to="/market" />
+        <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" to="/" />
       </div>
+
+      {/* Config Section */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">⚙️ 配置管理</h2>
+          <Link to="/config" className="text-sm text-blue-600 hover:text-blue-800">管理配置 →</Link>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-4 flex-wrap">
+            <button onClick={handleDownloadConfig} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+              📥 下载配置
+            </button>
+            <label className="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium cursor-pointer">
+              📤 上传配置
+              <input type="file" accept=".json" onChange={handleUploadConfig} className="hidden" />
+            </label>
+          </div>
+          {uploadResult && (
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+              {uploadResult.message || '配置上传成功'}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Recent */}
+      {recent.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">🕐 最近查看</h2>
+            <button onClick={() => { localStorage.removeItem('mcp_hub_recent'); setRecent([]) }} className="text-sm text-gray-400 hover:text-gray-600">
+              清除记录
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recent.map((s) => (
+              <ServerCard key={s.id} server={s} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Favorites */}
+      {favorites.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">⭐ 收藏的 Server</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {installed.filter((s) => favorites.includes(s.id)).map((s) => (
+              <ServerCard key={s.id} server={s} />
+            ))}
+            {installed.filter((s) => favorites.includes(s.id)).length === 0 && (
+              <div className="col-span-3 text-center py-8 text-gray-400">
+                还没有收藏任何 Server，在市场页面点击 ⭐ 收藏
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Installed Servers */}
       <section>
@@ -110,21 +208,31 @@ export default function Dashboard() {
   )
 }
 
-function StatCard({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
+function StatCard({ icon, label, value, color, to }: { icon: string; label: string; value: string; color: string; to?: string }) {
   const colors: Record<string, string> = {
-    green: 'bg-green-50 border-green-200',
-    blue: 'bg-blue-50 border-blue-200',
-    purple: 'bg-purple-50 border-purple-200',
+    green: 'bg-green-50 border-green-200 hover:bg-green-100',
+    blue: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
+    purple: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
+  }
+  const content = (
+    <div className="flex items-center gap-3">
+      <span className="text-2xl">{icon}</span>
+      <div>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <p className="text-sm text-gray-500">{label}</p>
+      </div>
+    </div>
+  )
+  if (to) {
+    return (
+      <Link to={to} className={`rounded-xl border p-4 block transition-colors cursor-pointer ${colors[color] || colors.blue}`}>
+        {content}
+      </Link>
+    )
   }
   return (
     <div className={`rounded-xl border p-4 ${colors[color] || colors.blue}`}>
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
-        <div>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-sm text-gray-500">{label}</p>
-        </div>
-      </div>
+      {content}
     </div>
   )
 }

@@ -25,6 +25,7 @@ class ServerModel(Base):
     id = Column(String(255), primary_key=True)  # @org/server-name
     name = Column(String(255), nullable=False)
     display_name = Column(String(255), default="")
+    icon_url = Column(Text, nullable=True)  # SVG data URL
     description = Column(Text, default="")
     author = Column(String(255), default="")
     publisher_type = Column(String(50), default="individual")

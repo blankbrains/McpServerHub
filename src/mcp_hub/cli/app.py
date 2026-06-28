@@ -22,11 +22,15 @@ from mcp_hub.cli.update import update, rollback
 from mcp_hub.cli.config import config
 from mcp_hub.cli.daemon import daemon, serve
 from mcp_hub.cli.init_cmd import init_cmd
+from mcp_hub.cli.quickstart import quickstart
 from mcp_hub.cli.publish import publish, my_servers, unpublish, stats
 from mcp_hub.cli.community import rate, review, favorite, favorites
 from mcp_hub.cli.trending import trending, top_rated, most_downloaded, new_releases
 from mcp_hub.cli.event import event
 from mcp_hub.cli.auth import login, logout, whoami
+from mcp_hub.cli.registry_sync import registry_sync
+from mcp_hub.cli.hub_install import hub_install
+from mcp_hub.cli.prompt_install import prompt_install
 
 
 cli.add_command(search)
@@ -46,6 +50,10 @@ cli.add_command(config)
 cli.add_command(daemon)
 cli.add_command(serve)
 cli.add_command(init_cmd)
+cli.add_command(quickstart)
+cli.add_command(registry_sync)
+cli.add_command(hub_install)
+cli.add_command(prompt_install)
 cli.add_command(publish)
 cli.add_command(my_servers)
 cli.add_command(unpublish)

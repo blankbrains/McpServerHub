@@ -30,6 +30,7 @@ class ServerRepository:
             "id": server.id,
             "name": server.name,
             "display_name": server.display_name,
+            "icon_url": server.icon_url or "",
             "description": server.description or "",
             "author": server.author or "",
             "current_version": server.current_version or "",

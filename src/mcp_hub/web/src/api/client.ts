@@ -4,6 +4,7 @@ export interface ServerInfo {
   id: string
   name: string
   display_name: string
+  icon_url?: string
   description: string
   author: string
   categories: string[]
@@ -45,6 +46,7 @@ export async function searchServers(params: {
   if (params.category) qs.set('category', params.category)
   if (params.sort) qs.set('sort', params.sort)
   if (params.page) qs.set('page', String(params.page))
+  qs.set('page_size', '9')
   const res = await apiGet<ServerInfo[]>(`/market/search?${qs}`)
   return { data: res.data, meta: res.meta || { total: res.data.length } }
 }
@@ -145,4 +147,39 @@ export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
     } catch { /* ignore */ }
   }
   return es
+}
+
+export async function uploadConfig(file: File): Promise<any> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${API_BASE}/config/upload`, { method: 'POST', body: form })
+  return res.json()
+}
+
+export async function downloadConfig(): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/config/download`)
+  return res.blob()
+}
+
+export async function exportConfig(share: boolean): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/export/config?share=${share}`)
+  return res.blob()
+}
+
+export async function searchAdvanced(params: {
+  q?: string; category?: string; tag?: string; author?: string; language?: string; install_type?: string; security_level?: string; sort?: string; page?: number; page_size?: number
+}): Promise<{ success: boolean; data: ServerInfo[]; meta: { total: number; page: number; page_size: number } }> {
+  const qs = new URLSearchParams()
+  if (params.q) qs.set('q', params.q)
+  if (params.category) qs.set('category', params.category)
+  if (params.tag) qs.set('tag', params.tag)
+  if (params.author) qs.set('author', params.author)
+  if (params.language) qs.set('language', params.language)
+  if (params.install_type) qs.set('install_type', params.install_type)
+  if (params.security_level) qs.set('security_level', params.security_level)
+  if (params.sort) qs.set('sort', params.sort)
+  if (params.page) qs.set('page', String(params.page))
+  qs.set('page_size', '9')
+  const res = await fetch(`${API_BASE}/search/advanced?${qs}`)
+  return res.json()
 }

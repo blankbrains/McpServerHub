@@ -91,7 +91,10 @@ async def start_server(server_id: str):
     try:
         await pm.spawn(server_id, parts[0], parts[1:])
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        detail = str(e)
+        if "已在运行" in detail:
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=500, detail=detail)
 
     await registry.update_status(server_id, "running")
     return {"success": True, "message": f"{server_id} 已启动"}
@@ -105,6 +108,94 @@ async def stop_server(server_id: str):
     await pm.kill(server_id)
     await registry.update_status(server_id, "stopped")
     return {"success": True, "message": f"{server_id} 已停止"}
+
+
+@router.post("/servers/{server_id:path}/uninstall")
+async def uninstall_server(server_id: str):
+    """卸载 Server。"""
+    registry = Registry()
+    pm = get_process_manager()
+
+    server = await registry.get_by_id(server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server 未找到")
+
+    # 停止进程
+    await pm.kill(server_id)
+    # 重置状态
+    await registry.update_status(server_id, "not_installed")
+
+    # 清理残留
+    try:
+        cmd = server.get("install_command", "")
+        if cmd and "pip" in cmd:
+            pkg = server.get("install_package", "")
+            if pkg:
+                import asyncio
+                proc = await asyncio.create_subprocess_exec(
+                    "pip", "uninstall", "-y", pkg,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.wait()
+    except Exception:
+        pass  # 清理失败不影响卸载
+
+    return {"success": True, "message": f"{server_id} 已卸载"}
+
+
+@router.get("/servers/{server_id:path}/config")
+async def get_server_config(
+    server_id: str,
+    agent: str = "generic",
+):
+    """获取 Server 配置（用于复制到本地 Agent）。"""
+    registry = Registry()
+    server = await registry.get_by_id(server_id)
+    if not server:
+        raise HTTPException(status_code=404, detail="Server 未找到")
+
+    command = server.get("install_command", "")
+    from mcp_hub.core.installer import get_config_for_agent
+    return {
+        "success": True,
+        "data": get_config_for_agent(
+            server_name=server_id.split("/")[-1],
+            command=command,
+            agent=agent,
+        ),
+    }
+
+
+@router.get("/servers/config/download")
+async def download_all_config(agent: str = "generic"):
+    """下载所有已安装 Server 的配置（mcp.json 格式），用于导入本地 Agent。"""
+    from fastapi.responses import FileResponse
+    import tempfile
+
+    registry = Registry()
+    installed = await registry.get_installed()
+    if not installed:
+        raise HTTPException(status_code=404, detail="没有已安装的 Server")
+
+    config = {"mcpServers": {}}
+    for s in installed:
+        cmd = s.get("install_command", "")
+        name = s["id"].split("/")[-1]
+        config["mcpServers"][name] = {"command": cmd}
+
+    # 写入临时文件并返回
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+    import json
+    json.dump(config, tmp, indent=2, ensure_ascii=False)
+    tmp.close()
+
+    return FileResponse(
+        tmp.name,
+        media_type="application/json",
+        filename="mcp-hub-config.json",
+        headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
+    )
 
 
 @router.get("/servers/{server_id:path}/logs")

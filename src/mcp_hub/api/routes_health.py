@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from sqlalchemy import select, func
+
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.process_manager import get_process_manager
+from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.models import ServerModel
 
 router = APIRouter(tags=["health"])
 
@@ -25,14 +29,17 @@ async def servers_health():
     registry = Registry()
     pm = get_process_manager()
     installed = await registry.get_installed()
-    all_servers = await registry.search(page=1, page_size=1)
-    total_available = all_servers[1] if len(all_servers) == 2 else 0
+
+    # 直接从 DB 获取总计数
+    async with async_session_factory() as session:
+        total = (await session.execute(select(func.count(ServerModel.id)))).scalar() or 0
+
     running = len(pm.list_running())
 
     return {
         "success": True,
         "data": {
-            "total_available": total_available,
+            "total_available": total,
             "total_installed": len(installed),
             "running": running,
             "stopped": len(installed) - running,

@@ -71,16 +71,42 @@ async def get_new_releases(registry: Registry = Depends(get_registry)):
 @router.get("/market/categories")
 async def get_categories():
     """获取分类列表。"""
+    from sqlalchemy import select, func, text
+    from mcp_hub.db.models import ServerModel
+    from mcp_hub.db.database import async_session_factory
+
     categories = [
-        {"id": "browser", "name": "浏览器 & 搜索"},
-        {"id": "database", "name": "数据库"},
-        {"id": "developer-tools", "name": "开发者工具"},
-        {"id": "ai", "name": "AI & 机器学习"},
-        {"id": "communication", "name": "通信 & 协作"},
-        {"id": "monitoring", "name": "监控 & 调试"},
-        {"id": "cloud", "name": "云服务"},
-        {"id": "tools", "name": "工具 & 实用"},
-        {"id": "storage", "name": "存储 & 文件"},
-        {"id": "language", "name": "语言 & 翻译"},
+        {"id": "browser", "name": "浏览器 & 搜索", "icon": "🌐"},
+        {"id": "database", "name": "数据库", "icon": "🗄️"},
+        {"id": "developer-tools", "name": "开发者工具", "icon": "🛠️"},
+        {"id": "ai", "name": "AI & 机器学习", "icon": "🤖"},
+        {"id": "communication", "name": "通信 & 协作", "icon": "💬"},
+        {"id": "cloud", "name": "云服务 & DevOps", "icon": "☁️"},
+        {"id": "monitoring", "name": "监控 & 调试", "icon": "📊"},
+        {"id": "storage", "name": "存储 & 文件", "icon": "💾"},
+        {"id": "security", "name": "安全 & 合规", "icon": "🔒"},
+        {"id": "finance", "name": "金融 & 支付", "icon": "💰"},
+        {"id": "maps", "name": "地图 & 位置", "icon": "🗺️"},
+        {"id": "design", "name": "设计 & 媒体", "icon": "🎨"},
+        {"id": "social-media", "name": "社交媒体", "icon": "📱"},
+        {"id": "productivity", "name": "效率 & 笔记", "icon": "📝"},
+        {"id": "apis", "name": "API & 集成", "icon": "🔌"},
+        {"id": "tools", "name": "通用 & 其他", "icon": "🧰"},
     ]
+
+    # 获取每个分类的 Server 数量
+    async with async_session_factory() as session:
+        for cat in categories:
+            result = await session.execute(
+                select(func.count(ServerModel.id))
+                .where(ServerModel.categories.ilike(f"%{cat['id']}%"))
+            )
+            cat["count"] = result.scalar() or 0
+
+    # 过滤掉数量为 0 的分类，但保留有数量的
+    categories = [c for c in categories if c["count"] > 0]
+
+    # 按数量降序排列
+    categories.sort(key=lambda c: c["count"], reverse=True)
+
     return {"success": True, "data": categories}
