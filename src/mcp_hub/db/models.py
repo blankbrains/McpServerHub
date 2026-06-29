@@ -59,6 +59,7 @@ class ReviewModel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
     user_id = Column(String(255), nullable=False)
+    parent_id = Column(Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True)
     rating = Column(Integer, nullable=False)
     content = Column(Text, default="")
     created_at = Column(DateTime, server_default=func.now())

@@ -55,6 +55,7 @@ export default function ServerDetail() {
   const [reviewText, setReviewText] = useState('')
   const [reviewRating, setReviewRating] = useState(5)
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [replyTo, setReplyTo] = useState<any>(null)
   const currentUser = localStorage.getItem('mcp_hub_user') || 'anonymous'
 
   useEffect(() => {
@@ -145,15 +146,18 @@ export default function ServerDetail() {
     if (!reviewText.trim()) { setMessage('请填写评价内容'); return }
     setSubmittingReview(true)
     try {
+      const body: any = { server_id: server.id, rating: reviewRating, content: reviewText.trim() }
+      if (replyTo) body.parent_id = replyTo.id
       const res = await fetch('/api/v1/community/rate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser },
-        body: JSON.stringify({ server_id: server.id, rating: reviewRating, content: reviewText.trim() }),
+        body: JSON.stringify(body),
       })
       const r = await res.json()
       if (r.success) {
         setMessage('评价已提交')
         setReviewText('')
+        setReplyTo(null)
         // Reload reviews
         const r2 = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
         if (r2.data) setReviews(r2.data)
@@ -390,7 +394,7 @@ export default function ServerDetail() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-xl">💬</span>
-          <h2 className="font-semibold text-gray-900">评价 ({reviews.length})</h2>
+          <h2 className="font-semibold text-gray-900">评价</h2>
         </div>
 
         {/* Review list */}
@@ -399,21 +403,46 @@ export default function ServerDetail() {
             <p className="text-sm text-gray-400">暂无评价，来写第一条吧！</p>
           ) : (
             reviews.map((r: any) => (
-              <div key={r.id} className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">{r.user_id}</span>
-                    <span className="text-xs">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+              <div key={r.id}>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700">{r.user_id}</span>
+                      <span className="text-xs">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{r.created_at?.slice(0, 10)}</span>
+                      {r.user_id === currentUser && (
+                        <button onClick={() => handleDeleteReview(r.id)} className="text-xs text-red-500 hover:text-red-700">删除</button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{r.created_at?.slice(0, 10)}</span>
-                    {r.user_id === currentUser && (
-                      <button onClick={() => handleDeleteReview(r.id)}
-                        className="text-xs text-red-500 hover:text-red-700">删除</button>
-                    )}
-                  </div>
+                  {r.content && <p className="text-sm text-gray-600 mb-2">{r.content}</p>}
+                  <button onClick={() => {
+                    setReplyTo(r)
+                    document.getElementById('review-input')?.focus()
+                  }} className="text-xs text-blue-500 hover:text-blue-700">↩ 回复</button>
+
+                  {/* Replies */}
+                  {r.replies && r.replies.length > 0 && (
+                    <div className="ml-4 mt-2 pl-3 border-l-2 border-gray-200 space-y-2">
+                      {r.replies.map((reply: any) => (
+                        <div key={reply.id} className="p-2 bg-white rounded">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-gray-600">{reply.user_id}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">{reply.created_at?.slice(0, 10)}</span>
+                              {reply.user_id === currentUser && (
+                                <button onClick={() => handleDeleteReview(reply.id)} className="text-xs text-red-500">删除</button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-0.5">{reply.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {r.content && <p className="text-sm text-gray-600">{r.content}</p>}
               </div>
             ))
           )}
@@ -421,20 +450,23 @@ export default function ServerDetail() {
 
         {/* Review form */}
         <div className="border-t border-gray-100 pt-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">写评价</p>
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            {replyTo ? `↩ 回复 ${replyTo.user_id}` : '写评价'}
+            {replyTo && <button onClick={() => setReplyTo(null)} className="ml-2 text-xs text-gray-400 hover:text-gray-600">取消回复</button>}
+          </p>
           <div className="flex items-center gap-1 mb-3">
             {[1,2,3,4,5].map(n => (
               <button key={n} onClick={() => setReviewRating(n)}
                 className={`text-xl ${n <= reviewRating ? '' : 'opacity-30'}`}>★</button>
             ))}
           </div>
-          <textarea value={reviewText} onChange={e => setReviewText(e.target.value)}
+          <textarea id="review-input" value={reviewText} onChange={e => setReviewText(e.target.value)}
             placeholder="分享你的使用体验..."
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
           <button onClick={handleSubmitReview} disabled={submittingReview || !reviewText.trim()}
             className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            {submittingReview ? '提交中...' : '提交评价'}
+            {submittingReview ? '提交中...' : replyTo ? '提交回复' : '提交评价'}
           </button>
         </div>
       </div>
