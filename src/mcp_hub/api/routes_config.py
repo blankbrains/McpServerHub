@@ -129,6 +129,46 @@ async def upload_config(file: Annotated[UploadFile, File(...)]):
     }
 
 
+@router.post("/config/build")
+async def build_config(data: dict):
+    """根据指定的 Server ID 列表生成 mcp.json 配置文件。
+
+    请求体: {"servers": ["@anthropic/web-search", "@github/github-mcp-server"]}
+    生成的配置包含这些 Server 的安装命令 + Hub 网关入口。
+    """
+    server_ids = data.get("servers", [])
+    if not server_ids:
+        return {"success": False, "error": "server 列表为空"}
+
+    registry = Registry()
+    config = {"mcpServers": {}}
+
+    for sid in server_ids:
+        server = await registry.get_by_id(sid)
+        if server:
+            cmd = server.get("install_command", "")
+            name = sid.split("/")[-1]
+            if cmd:
+                config["mcpServers"][name] = {"command": cmd}
+
+    # 添加 Hub 网关
+    config["mcpServers"]["mcp-hub-gateway"] = {
+        "command": "mcp",
+        "args": ["serve"],
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(config, tmp, indent=2, ensure_ascii=False)
+
+    return FileResponse(
+        tmp.name,
+        media_type="application/json",
+        filename="mcp-hub-config.json",
+    )
+
+
 @router.post("/config/generate")
 async def generate_config():
     """生成完整的 mcp.json 配置文件，包含所有已安装 Server + Hub 网关。"""

@@ -6,7 +6,7 @@ const navItems = [
   { path: '/', label: '仪表盘', icon: '📊' },
   { path: '/market', label: '市场', icon: '🏪' },
   { path: '/my-servers', label: '我的 Server', icon: '📦' },
-  { path: '/config', label: '配置', icon: '⚙️' },
+  { path: '/my-config', label: '配置', icon: '⚙️' },
   { path: '/builder', label: '构建', icon: '🛠️' },
 ]
 

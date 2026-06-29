@@ -6,6 +6,7 @@ import ServerDetail from './pages/ServerDetail'
 import MyServers from './pages/MyServers'
 import ConfigPage from './pages/ConfigPage'
 import Builder from './pages/Builder'
+import MyConfig from './pages/MyConfig'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/servers/:id" element={<ServerDetail />} />
         <Route path="/my-servers" element={<MyServers />} />
         <Route path="/config" element={<ConfigPage />} />
+        <Route path="/my-config" element={<MyConfig />} />
         <Route path="/builder" element={<Builder />} />
       </Routes>
     </Layout>
