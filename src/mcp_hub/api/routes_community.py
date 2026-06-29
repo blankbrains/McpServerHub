@@ -15,6 +15,7 @@ class RateRequest(BaseModel):
     server_id: str
     rating: int = Field(default=5, ge=1, le=5)
     content: str = ""
+    parent_id: int | None = None
 
 
 class FavoriteRequest(BaseModel):
@@ -28,7 +29,7 @@ async def rate_server(req: RateRequest, x_user_id: str = Header("api-user")):  #
     """
     async with get_session() as session:
         repo = ReviewRepository(session)
-        result = await repo.rate(req.server_id, x_user_id, req.rating, req.content)
+        result = await repo.rate(req.server_id, x_user_id, req.rating, req.content, req.parent_id)
     return {"success": True, "message": f"评分 {req.rating} 星已提交", "data": result}
 
 

@@ -126,6 +126,38 @@ export default function MyConfig() {
         <Link to="/market" className="text-sm text-blue-600 hover:text-blue-800">去市场添加 →</Link>
       </div>
 
+      {/* Workflow Guide */}
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
+        <h2 className="font-semibold text-gray-900 mb-3">📋 完整工作流程</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
+          <div className="bg-white rounded-lg p-3 border border-blue-100">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">1</span>
+            <p className="font-medium text-gray-800">上传配置</p>
+            <p className="text-xs text-gray-500 mt-0.5">上传你本地的 claude_desktop_config.json，Hub 自动识别 Server</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 border border-blue-100">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">2</span>
+            <p className="font-medium text-gray-800">浏览添加</p>
+            <p className="text-xs text-gray-500 mt-0.5">在市场浏览，悬停 Server 卡片点击「+ 添加」</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 border border-blue-100">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">3</span>
+            <p className="font-medium text-gray-800">下载配置</p>
+            <p className="text-xs text-gray-500 mt-0.5">点击下方按钮下载完整的 mcp-hub-config.json</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 border border-blue-100">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">4</span>
+            <p className="font-medium text-gray-800">覆盖本地</p>
+            <p className="text-xs text-gray-500 mt-0.5">用下载的文件替换本地的 claude_desktop_config.json，重启 Claude Code 即可</p>
+          </div>
+        </div>
+        <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+          <p className="font-medium">💡 监控说明</p>
+          <p>替换配置并启动 Claude Code 后，MCP Server 会运行在你的本地机器上。
+          Hub 的监控功能（健康检查、Token 分析、日志）需要在 daemon 模式下使用。</p>
+        </div>
+      </div>
+
       {/* Upload */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-2">📤 上传本地配置</h2>

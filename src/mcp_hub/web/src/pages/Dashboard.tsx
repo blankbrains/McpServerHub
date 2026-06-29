@@ -159,57 +159,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Gateway Connection Guide */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">🔌 接入 Claude Code</h2>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm text-gray-600 mb-3">
-            将以下配置添加到你的 <code className="bg-gray-100 px-1 rounded text-xs">claude_desktop_config.json</code>，Hub 管理的所有 MCP Server 都会自动出现在 Claude Code 中。
-          </p>
-          <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-3">
-            <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">{JSON.stringify({
-              mcpServers: {
-                "mcp-hub": {
-                  command: "mcp",
-                  args: ["serve"],
-                },
-              },
-            }, null, 2)}</pre>
-          </div>
-          <p className="text-xs text-gray-400">
-            💡 安装任意 Server 后运行 <code className="bg-gray-100 px-1 rounded">mcp serve</code>，所有工具自动聚合到这一入口。
-            无需手动修改配置文件。
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button onClick={async () => {
-              try {
-                const res = await fetch('/api/v1/config/download')
-                const blob = await res.blob()
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url; a.download = 'mcp-hub-config.json'; a.click()
-                URL.revokeObjectURL(url)
-              } catch {}
-            }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
-              📥 下载完整配置
-            </button>
-            <button onClick={async () => {
-              try {
-                const text = JSON.stringify({
-                  mcpServers: { "mcp-hub": { command: "mcp", args: ["serve"] } }
-                }, null, 2)
-                await navigator.clipboard.writeText(text)
-                alert('配置已复制到剪贴板')
-              } catch {}
-            }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-              📋 复制网关配置
-            </button>
-          </div>
-        </div>
-      </section>
-
       {/* Config Section */}
       <section>
         <div className="flex items-center justify-between mb-4">

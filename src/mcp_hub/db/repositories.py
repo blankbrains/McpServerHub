@@ -196,7 +196,17 @@ class ReviewRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def rate(self, server_id: str, user_id: str, rating: int, content: str = "") -> dict:
+    async def rate(self, server_id: str, user_id: str, rating: int, content: str = "", parent_id: int | None = None) -> dict:  # noqa: E501
+        if parent_id:
+            # 回复已有评价
+            review = ReviewModel(
+                server_id=server_id, user_id=user_id, rating=rating,
+                content=content, parent_id=parent_id,
+            )
+            self.session.add(review)
+            await self.session.commit()
+            return {"rating": rating, "review_count": 0, "parent_id": parent_id}
+
         existing = await self.session.execute(
             select(ReviewModel).where(
                 ReviewModel.server_id == server_id,
@@ -239,20 +249,29 @@ class ReviewRepository:
         result = await self.session.execute(
             select(ReviewModel)
             .where(ReviewModel.server_id == server_id)
-            .order_by(ReviewModel.created_at.desc())
+            .order_by(ReviewModel.created_at.asc())
             .limit(limit)
         )
-        return [
-            {
+        reviews = []
+        for r in result.scalars().all():
+            reviews.append({
                 "id": r.id,
                 "server_id": r.server_id,
                 "user_id": r.user_id,
+                "parent_id": r.parent_id,
                 "rating": r.rating,
                 "content": r.content or "",
                 "created_at": str(r.created_at) if r.created_at else "",
-            }
-            for r in result.scalars().all()
-        ]
+            })
+        # 构建树结构：顶层评价按时间降序，回复在 replies 里
+        top = [r for r in reviews if r["parent_id"] is None]
+        reply_map = {}
+        for r in reviews:
+            if r["parent_id"] is not None:
+                reply_map.setdefault(r["parent_id"], []).append(r)
+        for t in top:
+            t["replies"] = reply_map.get(t["id"], [])
+        return top
 
     async def get_review(self, review_id: int) -> ReviewModel | None:
         result = await self.session.execute(
