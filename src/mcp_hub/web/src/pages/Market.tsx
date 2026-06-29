@@ -156,7 +156,28 @@ export default function Market() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servers.map((s) => (<ServerCard key={s.id} server={s} />))}
+            {servers.map((s) => (
+              <div key={s.id} className="relative group">
+                <ServerCard server={s} />
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+                    if (!existing.find((x: any) => x.name === s.id)) {
+                      const cmd = 'install_command' in s ? (s as any).install_command : ''
+                      existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
+                      localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+                      alert(`已添加 ${s.id} 到我的配置`)
+                    } else {
+                      alert('该 Server 已在你的配置中')
+                    }
+                  }}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+                >
+                  + 添加
+                </button>
+              </div>
+            ))}
             {servers.length === 0 && <div className="col-span-3 text-center py-16 text-gray-400">😕 没有找到匹配的 Server</div>}
           </div>
 
