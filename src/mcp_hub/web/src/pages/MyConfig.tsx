@@ -239,6 +239,29 @@ export default function MyConfig() {
             </div>
           </div>
         )}
+
+        {/* CLI Sync Command */}
+        {servers.length > 0 && (
+          <div className="bg-gray-50 rounded-lg p-4 mt-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">🔄 一键同步到本地（CLI）</p>
+            <p className="text-xs text-gray-500 mb-2">在你的本地机器上运行以下命令，自动下载配置并写入本地文件：</p>
+            <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
+              <pre className="text-green-400 text-xs font-mono">
+                {`mcp config sync --server ${window.location.origin}`}
+              </pre>
+            </div>
+            <button onClick={() => {
+              navigator.clipboard.writeText(`mcp config sync --server ${window.location.origin}`)
+              setMessage('命令已复制到剪贴板')
+              setTimeout(() => setMessage(''), 3000)
+            }} className="mt-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors">
+              📋 复制命令
+            </button>
+            <p className="text-xs text-gray-400 mt-2">
+              需要在本机安装 mcp-hub-cli 并已启动 Hub daemon。命令会自动将配置写入 ~/.config/Claude/claude_desktop_config.json
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
