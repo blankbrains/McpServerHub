@@ -7,6 +7,8 @@ interface ServerCardProps {
   showInstall?: boolean
 }
 
+function fmtNum(n: number): string { return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')}K` : String(n) }
+
 function SecBadge({ level }: { level: string }) {
   const cfg: Record<string, { icon: string; color: string }> = {
     verified: { icon: '🟢', color: 'text-green-600' },
@@ -55,8 +57,8 @@ export default function ServerCard({ server }: ServerCardProps) {
       </p>
 
       <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
-        <span>{stars}</span>
-        <span>📥 {server.download_count}</span>
+        <span title={String(server.rating)}>{'★'.repeat(Math.round(server.rating))}{'☆'.repeat(5 - Math.round(server.rating))}</span>
+        <span>📥 {fmtNum(server.download_count)}</span>
         <span>💬 {server.review_count}</span>
       </div>
 

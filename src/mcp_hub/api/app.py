@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from mcp_hub import __version__
 from mcp_hub.api.routes_auth import router as auth_router
+from mcp_hub.api.routes_builder import router as builder_router
 from mcp_hub.api.routes_community import router as community_router
 from mcp_hub.api.routes_config import router as config_router
 from mcp_hub.api.routes_export import router as export_router
@@ -85,6 +86,7 @@ def create_app(dev: bool = False) -> FastAPI:
     app.include_router(community_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(builder_router, prefix="/api/v1")
     app.include_router(realtime_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(search_router, prefix="/api/v1")

@@ -50,6 +50,13 @@ export default function ServerDetail() {
   const [reliability, setReliability] = useState<any>(null)
   const [extraLoading, setExtraLoading] = useState(true)
 
+  // Review states
+  const [reviews, setReviews] = useState<any[]>([])
+  const [reviewText, setReviewText] = useState('')
+  const [reviewRating, setReviewRating] = useState(5)
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const currentUser = localStorage.getItem('mcp_hub_user') || 'anonymous'
+
   useEffect(() => {
     if (!id) return
     const sid = decodeURIComponent(id)
@@ -63,6 +70,7 @@ export default function ServerDetail() {
       scanServerSecurity(sid).then(r => setSecurity(r.data)).catch(() => {}),
       analyzeServerTokens(sid).then(r => setTokenAnalysis(r.data)).catch(() => {}),
       getServerReliability(sid).then(r => setReliability(r.data)).catch(() => {}),
+      apiGet<any[]>(`/community/reviews/${encodeURIComponent(sid)}`).then(r => setReviews(r.data || [])).catch(() => {}),
     ]).finally(() => setExtraLoading(false))
   }, [id])
 
@@ -133,7 +141,47 @@ export default function ServerDetail() {
     setMessage(r.favorited ? '已收藏' : '已取消收藏')
   }
 
-  const stars = '⭐'.repeat(Math.round(server.rating))
+  const handleSubmitReview = async () => {
+    if (!reviewText.trim()) { setMessage('请填写评价内容'); return }
+    setSubmittingReview(true)
+    try {
+      const res = await fetch('/api/v1/community/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser },
+        body: JSON.stringify({ server_id: server.id, rating: reviewRating, content: reviewText.trim() }),
+      })
+      const r = await res.json()
+      if (r.success) {
+        setMessage('评价已提交')
+        setReviewText('')
+        // Reload reviews
+        const r2 = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
+        if (r2.data) setReviews(r2.data)
+      } else {
+        setMessage(r.error || '提交失败')
+      }
+    } catch { setMessage('网络错误') }
+    finally { setSubmittingReview(false) }
+  }
+
+  const handleDeleteReview = async (reviewId: number) => {
+    if (!window.confirm('确定要删除此评价吗？')) return
+    try {
+      const res = await fetch(`/api/v1/community/review/delete/${reviewId}`, {
+        method: 'POST',
+        headers: { 'x-user-id': currentUser },
+      })
+      const r = await res.json()
+      if (r.success) {
+        setReviews(reviews.filter(r => r.id !== reviewId))
+        setMessage('评价已删除')
+      } else {
+        setMessage(r.error || '删除失败')
+      }
+    } catch { setMessage('网络错误') }
+  }
+
+  function fmtNum(n: number): string { return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')}K` : String(n) }
   const securityLabels: Record<string, string> = {
     verified: '🔒 安全认证',
     reviewed: '⚪ 已审查',
@@ -157,9 +205,9 @@ export default function ServerDetail() {
         <p className="text-gray-600 mb-4">{server.description || '暂无描述'}</p>
 
         <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-          <span>{stars} {server.rating}</span>
+          <span><StarRating rating={server.rating} size="sm" showValue /></span>
           <span>💬 {server.review_count} 评价</span>
-          <span>📥 {server.download_count} 次下载</span>
+          <span>📥 {fmtNum(server.download_count)} 次下载</span>
           <span>📄 {server.license}</span>
         </div>
 
@@ -317,7 +365,7 @@ export default function ServerDetail() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {(() => { const u = reliability.uptime_stats?.find(u => u.window === '24h'); return u ? (u.uptime_pct != null ? u.uptime_pct.toFixed(1) : '-') : '-'; })()}%
+                {(() => { const u = (reliability.uptime_stats as any[])?.find((u: any) => u.window === '24h'); return u ? (u.uptime_pct != null ? u.uptime_pct.toFixed(1) : '-') : '-'; })()}%
               </p>
               <p className="text-xs text-gray-500">24h Uptime</p>
             </div>
@@ -337,6 +385,59 @@ export default function ServerDetail() {
           )}
         </div>
       )}
+
+      {/* Reviews */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xl">💬</span>
+          <h2 className="font-semibold text-gray-900">评价 ({reviews.length})</h2>
+        </div>
+
+        {/* Review list */}
+        <div className="space-y-3 mb-6">
+          {reviews.length === 0 ? (
+            <p className="text-sm text-gray-400">暂无评价，来写第一条吧！</p>
+          ) : (
+            reviews.map((r: any) => (
+              <div key={r.id} className="p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">{r.user_id}</span>
+                    <span className="text-xs">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">{r.created_at?.slice(0, 10)}</span>
+                    {r.user_id === currentUser && (
+                      <button onClick={() => handleDeleteReview(r.id)}
+                        className="text-xs text-red-500 hover:text-red-700">删除</button>
+                    )}
+                  </div>
+                </div>
+                {r.content && <p className="text-sm text-gray-600">{r.content}</p>}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Review form */}
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">写评价</p>
+          <div className="flex items-center gap-1 mb-3">
+            {[1,2,3,4,5].map(n => (
+              <button key={n} onClick={() => setReviewRating(n)}
+                className={`text-xl ${n <= reviewRating ? '' : 'opacity-30'}`}>★</button>
+            ))}
+          </div>
+          <textarea value={reviewText} onChange={e => setReviewText(e.target.value)}
+            placeholder="分享你的使用体验..."
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
+          <button onClick={handleSubmitReview} disabled={submittingReview || !reviewText.trim()}
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {submittingReview ? '提交中...' : '提交评价'}
+          </button>
+        </div>
+      </div>
 
       {/* SaaS: 本地使用 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -427,17 +528,6 @@ export default function ServerDetail() {
         </div>
       )}
 
-      {/* Rating */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-3">评分</h2>
-        <StarRating
-          rating={myRating || Math.round(server.rating)}
-          interactive
-          onChange={handleRate}
-          size="lg"
-          reviewCount={server.review_count}
-        />
-      </div>
     </div>
   )
 }
