@@ -16,7 +16,7 @@
 ---
 
 <p align="center">
-  <b>970+ 个 MCP Server</b> · <b>39 个 CLI 命令</b> · <b>16 个分类</b> · <b>20 个标签</b><br>
+  <b>980+ 个 MCP Server</b> · <b>46 个 CLI 命令</b> · <b>16 个分类</b> · <b>206 个测试</b><br>
   搜索 → 安装 → 自动配置 → 管理。一个平台搞定。
 </p>
 
@@ -54,6 +54,12 @@ MCP（Model Context Protocol）正在爆发式增长 — 400+ Server、100k+ Sta
                           └─────── 🔗 MCP 网关 ────────┘
                         Claude Code/Cursor 的单一 stdio 入口
                         一个配置文件，所有 Server 自动发现。
+
+新增功能:
+  🛡️ 安全评分  — 四维评分体系，安装前自动扫描，危险 Server 阻止安装
+  📊 Token 分析 — 分析工具定义占上下文比，自动生成优化描述
+  🛠️ Server Builder — 交互式/网页端创建 MCP Server 项目，下载 ZIP
+  📈 质量监控  — Uptime 追踪、可靠性评分、最稳定 Server 排行榜
 ```
 
 ---
@@ -173,6 +179,20 @@ http://localhost:3987
   uninstall <server>    卸载
   list                 列出已安装
 
+🔒  安全
+  security <server>    安全评分扫描
+  security --all       批量扫描全部
+
+📊  Token
+  analyze <server>     Token 消耗分析
+  analyze --all        批量分析
+  optimize <server>    优化工具定义（减少 Token）
+
+📈  监控
+  monitor <server>     查看健康/Uptime
+  monitor --all        查看全部
+  reliability          可靠性排行榜
+
 ⚙️  管理
   start <server>       启动
   stop <server>        停止
@@ -184,6 +204,9 @@ http://localhost:3987
   rollback <server>    回滚版本
   version-history <s>  版本历史
   config               配置管理
+
+🛠️  构建
+  create               交互式创建 MCP Server 项目
 
 🔧  系统
   daemon               管理 Hub 守护进程
@@ -280,6 +303,9 @@ http://localhost:3987
 | **前端** | React 19 + Tailwind | 现代、快速、响应式 |
 | **构建** | Vite | 即时 HMR、优化构建 |
 | **协议** | MCP (JSON-RPC 2.0) | 行业标准 |
+| **安全** | 四维评分引擎 + 安装预扫描 | 命令/包/发布者/代码模式 |
+| **Token** | tiktoken + 优化引擎 | 分析 + 自动压缩工具描述 |
+| **监控** | 三级健康检查 + 可靠性评分 | uptime/响应时间/排行榜 |
 | **认证** | GitHub OAuth + JWT | 零外部依赖 |
 
 ---
@@ -294,8 +320,11 @@ http://localhost:3987
 | ✅ P1 | **完成** | `mcp init`、Docker、PyPI 就绪 |
 | ✅ P2 | **完成** | Dashboard：SSE 日志、实时状态 |
 | ✅ P3 | **完成** | CLI：Rich 表格、旋转动画、颜色 |
-| ✅ P4 | **完成** | 测试、GitHub Actions CI |
+| ✅ P4 | **完成** | 测试（206 个）、GitHub Actions CI、Ruff 检查 |
 | ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
+| ✅ P6 | **完成** | 🛡️ 安全评分引擎 + 📊 Token 分析器 |
+| ✅ P7 | **完成** | 🛠️ MCP Server Builder（CLI + Web 下载） |
+| ✅ P8 | **完成** | 📈 质量监控网络 + 可靠性排行榜 |
 
 ---
 
