@@ -136,3 +136,18 @@ class SubscriptionModel(Base):
     server_id = Column(String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
     topic = Column(String(255), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class UserServerModel(Base):
+    """用户跟踪的 Server 配置 — 用户隔离存储。"""
+    __tablename__ = "user_servers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    server_id = Column(String(255), nullable=False)
+    matched = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "server_id", name="uq_user_server"),
+    )

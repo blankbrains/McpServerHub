@@ -10,17 +10,53 @@ interface ConfigServer {
 }
 
 export default function MyConfig() {
-  const [servers, setServers] = useState<ConfigServer[]>(() => {
-    try { return JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]') }
-    catch { return [] }
-  })
+  const [servers, setServers] = useState<ConfigServer[]>([])
+  const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
   const [message, setMessage] = useState('')
+  const userId = localStorage.getItem('mcp_hub_user')
 
-  // Save to localStorage whenever servers change
+  // 加载：优先从服务端，回退到 localStorage
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/v1/config/user-servers', {
+          headers: { 'x-user-id': userId || 'anonymous' }
+        })
+        const r = await res.json()
+        if (r.success && r.data && r.data.length > 0) {
+          setServers(r.data)
+          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(r.data))
+          return
+        }
+      } catch {}
+      // 回退到 localStorage
+      try {
+        const local = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+        if (local.length > 0) setServers(local)
+      } catch {}
+      finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  // 保存：同时写入 localStorage + 服务端
   useEffect(() => {
     localStorage.setItem('mcp_hub_my_servers', JSON.stringify(servers))
-  }, [servers])
+    if (!loading) {
+      saveToServer(servers)
+    }
+  }, [servers, loading])
+
+  async function saveToServer(srvList: ConfigServer[]) {
+    try {
+      await fetch('/api/v1/config/user-servers/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': userId || 'anonymous' },
+        body: JSON.stringify({ servers: srvList }),
+      })
+    } catch {}
+  }
 
   const removeServer = (name: string) => {
     setServers(prev => prev.filter(s => s.name !== name))
