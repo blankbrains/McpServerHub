@@ -22,6 +22,9 @@ AVAILABLE_TOOL_DESCRIPTIONS = {
     "calculator": "执行数学运算",
     "greet": "生成个性化问候",
     "weather": "获取城市天气信息",
+    "memo": "备忘录管理，支持保存和查询笔记",
+    "search": "搜索本地文档或记录",
+    "translate": "翻译文本到目标语言",
 }
 
 

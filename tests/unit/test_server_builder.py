@@ -53,7 +53,10 @@ class TestServerBuilder:
         assert "hello" in tools
         assert "echo" in tools
         assert "calculator" in tools
-        assert len(tools) >= 4
+        assert "memo" in tools
+        assert "search" in tools
+        assert "translate" in tools
+        assert len(tools) == 8
 
     def test_get_tool(self) -> None:
         t = ServerBuilder.get_tool("hello")
@@ -204,6 +207,44 @@ class TestServerBuilder:
         assert pkg["description"] == "ts desc"
         assert "@modelcontextprotocol/sdk" in pkg["dependencies"]
         assert "typescript" in pkg["devDependencies"]
+
+    # ── 新工具 ───────────────────────────────────────────
+
+    def test_memo_tool(self) -> None:
+        builder = ServerBuilder()
+        project = builder.create_project(name="test-memo", language="python", tools=["memo"])
+        server_py = next(v for k, v in project.files.items() if k.endswith("server.py"))
+        assert "memo" in server_py
+        assert "action" in server_py
+
+    def test_search_tool(self) -> None:
+        builder = ServerBuilder()
+        project = builder.create_project(name="test-search", language="python", tools=["search"])
+        server_py = next(v for k, v in project.files.items() if k.endswith("server.py"))
+        assert "search" in server_py
+        assert "query" in server_py
+
+    def test_translate_tool(self) -> None:
+        builder = ServerBuilder()
+        project = builder.create_project(name="test-translate", language="python", tools=["translate"])  # noqa: E501
+        server_py = next(v for k, v in project.files.items() if k.endswith("server.py"))
+        assert "translate" in server_py
+        assert "target_lang" in server_py
+
+    def test_all_eight_tools(self) -> None:
+        """8 个工具一起生成不应报错，且 Python 语法正确。"""
+        builder = ServerBuilder()
+        project = builder.create_project(
+            name="all-eight", language="python",
+            tools=["hello", "echo", "calculator", "greet", "weather", "memo", "search", "translate"],  # noqa: E501
+        )
+        for fn, c in project.files.items():
+            if fn.endswith(".py"):
+                compile(c, fn, "exec")
+
+    def test_tool_count_eight(self) -> None:
+        """工具模板总数应为 8。"""
+        assert len(ServerBuilder.available_tools()) == 8
 
     # ── 错误处理 ─────────────────────────────────────────
 

@@ -1,14 +1,16 @@
-"""配置绑定 API — 上传/下载 mcp.json。"""
+"""配置绑定 API — 上传/下载/匹配 mcp.json。"""
 
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
 
+from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import ConfigError
 
 router = APIRouter(tags=["config"])
@@ -16,8 +18,7 @@ router = APIRouter(tags=["config"])
 
 @router.get("/config/download")
 async def download_config():
-    """下载当前完整配置 (mcp.json)。"""
-    from mcp_hub.core.registry import Registry
+    """下载当前完整配置 (mcp.json)，用于导入本地 Agent。"""
     registry = Registry()
     installed = await registry.get_installed()
 
@@ -25,9 +26,8 @@ async def download_config():
     for s in installed:
         cmd = s.get("install_command", "")
         name = s["id"].split("/")[-1]
-        config["mcpServers"][name] = {"command": cmd}
-
-    import tempfile
+        if cmd:
+            config["mcpServers"][name] = {"command": cmd}
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
@@ -43,24 +43,123 @@ async def download_config():
 
 @router.post("/config/upload")
 async def upload_config(file: Annotated[UploadFile, File(...)]):
-    """上传本地的 mcp.json 配置文件。"""
+    """上传本地的 claude_desktop_config.json，匹配市场中的 Server。
+
+    返回上传配置中每个 Server 在 Hub 市场中的匹配情况，
+    并推荐可安装的 Server 列表。
+    """
     content = await file.read()
     try:
         config = json.loads(content)
     except json.JSONDecodeError as err:
         raise ConfigError("无效的 JSON 文件") from err
 
-    # 分析上传的配置，返回可安装的 Server 列表
-    servers = config.get("mcpServers", {})
+    servers_map = config.get("mcpServers", {})
+
+    if not servers_map:
+        return {
+            "success": True,
+            "data": {
+                "server_count": 0,
+                "matched": [],
+                "unmatched": [],
+                "not_in_hub": [],
+                "file_name": file.filename or "unknown",
+            },
+            "message": "配置中未找到 mcpServers 定义",
+        }
+
+    # 在市场中匹配每个 Server
+    registry = Registry()
+    matched = []
+    unmatched = []
+    not_in_hub = []
+
+    for name, cfg in servers_map.items():
+        cmd = cfg.get("command", "") + " " + " ".join(cfg.get("args", []))
+        cmd = cmd.strip()
+
+        # 尝试在 Hub 中搜索匹配
+        results, _ = await registry.search(q=name, page=1, page_size=10)
+
+        # 精确匹配：名称或命令包含
+        found = None
+        for s in results:
+            sid = s.get("id", "")
+            scmd = s.get("install_command", "")
+            if name in sid or (scmd and cmd and scmd.split()[0] in cmd):
+                found = s
+                break
+
+        entry = {
+            "local_name": name,
+            "local_command": cmd,
+            "server_count": 1,
+        }
+
+        if found:
+            entry["matched"] = True
+            entry["hub_id"] = found["id"]
+            entry["hub_install_command"] = found.get("install_command", "")
+            entry["hub_security_level"] = found.get("security_level", "unreviewed")
+            entry["hub_rating"] = found.get("rating", 0)
+            matched.append(entry)
+        else:
+            # 检查是否只是命名不同但可能是同一个
+            if cmd:
+                unmatched.append(entry)
+            else:
+                entry["matched"] = False
+                not_in_hub.append(entry)
+
     return {
         "success": True,
         "data": {
-            "server_count": len(servers),
-            "servers": list(servers.keys()),
-            "file_name": file.filename,
+            "server_count": len(servers_map),
+            "matched": matched,
+            "unmatched": unmatched,
+            "not_in_hub": not_in_hub,
+            "file_name": file.filename or "unknown",
         },
-        "message": f"配置包含 {len(servers)} 个 Server 定义",
+        "message": (
+            f"配置包含 {len(servers_map)} 个 Server 定义，"
+            f"其中 {len(matched)} 个可在 Hub 中安装，"
+            f"{len(unmatched)} 个未匹配到市场"
+        ),
     }
+
+
+@router.post("/config/generate")
+async def generate_config():
+    """生成完整的 mcp.json 配置文件，包含所有已安装 Server + Hub 网关。"""
+    registry = Registry()
+    installed = await registry.get_installed()
+
+    config = {"mcpServers": {}}
+
+    # 添加所有已安装的 Server
+    for s in installed:
+        cmd = s.get("install_command", "")
+        name = s["id"].split("/")[-1]
+        if cmd:
+            config["mcpServers"][name] = {"command": cmd}
+
+    # 添加 Hub 网关入口（如果当前是 daemon 模式）
+    config["mcpServers"]["mcp-hub"] = {
+        "command": "mcp",
+        "args": ["serve"],
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp:
+        json.dump(config, tmp, indent=2, ensure_ascii=False)
+
+    return FileResponse(
+        tmp.name,
+        media_type="application/json",
+        filename="mcp-hub-config.json",
+    )
 
 
 @router.get("/config/from-local")

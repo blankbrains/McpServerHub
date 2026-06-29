@@ -22,6 +22,7 @@ export default function Dashboard() {
     try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
   })
   const [uploadResult, setUploadResult] = useState<any>(null)
+  const [gatewayUrl, setGatewayUrl] = useState(window.location.origin + '/api/v1')
   // Monitor states
   const [monitorSummary, setMonitorSummary] = useState<any>(null)
   const [topReliable, setTopReliable] = useState<any[]>([])
@@ -158,6 +159,57 @@ export default function Dashboard() {
         </section>
       )}
 
+      {/* Gateway Connection Guide */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">🔌 接入 Claude Code</h2>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-sm text-gray-600 mb-3">
+            将以下配置添加到你的 <code className="bg-gray-100 px-1 rounded text-xs">claude_desktop_config.json</code>，Hub 管理的所有 MCP Server 都会自动出现在 Claude Code 中。
+          </p>
+          <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-3">
+            <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">{JSON.stringify({
+              mcpServers: {
+                "mcp-hub": {
+                  command: "mcp",
+                  args: ["serve"],
+                },
+              },
+            }, null, 2)}</pre>
+          </div>
+          <p className="text-xs text-gray-400">
+            💡 安装任意 Server 后运行 <code className="bg-gray-100 px-1 rounded">mcp serve</code>，所有工具自动聚合到这一入口。
+            无需手动修改配置文件。
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={async () => {
+              try {
+                const res = await fetch('/api/v1/config/download')
+                const blob = await res.blob()
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url; a.download = 'mcp-hub-config.json'; a.click()
+                URL.revokeObjectURL(url)
+              } catch {}
+            }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+              📥 下载完整配置
+            </button>
+            <button onClick={async () => {
+              try {
+                const text = JSON.stringify({
+                  mcpServers: { "mcp-hub": { command: "mcp", args: ["serve"] } }
+                }, null, 2)
+                await navigator.clipboard.writeText(text)
+                alert('配置已复制到剪贴板')
+              } catch {}
+            }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+              📋 复制网关配置
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Config Section */}
       <section>
         <div className="flex items-center justify-between mb-4">
@@ -175,8 +227,24 @@ export default function Dashboard() {
             </label>
           </div>
           {uploadResult && (
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-              {uploadResult.message || '配置上传成功'}
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
+              <p>{uploadResult.message || '配置上传成功'}</p>
+              {uploadResult.data?.matched?.length > 0 && (
+                <div>
+                  <p className="font-medium mt-2">✅ 可在 Hub 中安装的 Server：</p>
+                  {uploadResult.data.matched.map((m: any) => (
+                    <p key={m.local_name} className="ml-2">• {m.local_name} → 安装命令: {m.hub_install_command || m.local_command}</p>
+                  ))}
+                </div>
+              )}
+              {uploadResult.data?.unmatched?.length > 0 && (
+                <div>
+                  <p className="font-medium mt-2 text-yellow-700">⚠️ 未匹配到市场的 Server：</p>
+                  {uploadResult.data.unmatched.slice(0, 5).map((m: any) => (
+                    <p key={m.local_name} className="ml-2">• {m.local_name} ({m.local_command})</p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
