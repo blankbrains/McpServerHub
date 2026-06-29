@@ -185,6 +185,32 @@ class ServerBuilder:
                 {"name": "unit", "type": "string", "description": "温度单位 (celsius/fahrenheit)", "required": False},  # noqa: E501
             ],
         ),
+        "memo": ToolTemplate(
+            name="memo",
+            description="备忘录管理，支持保存和查询笔记",
+            params=[
+                {"name": "action", "type": "string", "description": "操作: save/get/list/delete", "required": True},  # noqa: E501
+                {"name": "title", "type": "string", "description": "笔记标题", "required": False},
+                {"name": "content", "type": "string", "description": "笔记内容（save 时填写）", "required": False},  # noqa: E501
+            ],
+        ),
+        "search": ToolTemplate(
+            name="search",
+            description="搜索本地文档或记录",
+            params=[
+                {"name": "query", "type": "string", "description": "搜索关键词", "required": True},
+                {"name": "max_results", "type": "number", "description": "最大返回结果数", "required": False},  # noqa: E501
+            ],
+        ),
+        "translate": ToolTemplate(
+            name="translate",
+            description="翻译文本到目标语言",
+            params=[
+                {"name": "text", "type": "string", "description": "要翻译的文本", "required": True},
+                {"name": "target_lang", "type": "string", "description": "目标语言代码 (zh/en/ja/fr/de)", "required": True},  # noqa: E501
+                {"name": "source_lang", "type": "string", "description": "源语言代码（自动检测留空）", "required": False},  # noqa: E501
+            ],
+        ),
     }
 
     @staticmethod
