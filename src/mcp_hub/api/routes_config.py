@@ -9,8 +9,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import delete, select
 
 from mcp_hub.core.registry import Registry
+from mcp_hub.db.database import async_session_factory
+from mcp_hub.db.models import UserServerModel
 from mcp_hub.exceptions import ConfigError
 
 router = APIRouter(tags=["config"])
@@ -39,6 +42,51 @@ async def download_config():
         media_type="application/json",
         filename="mcp-hub-config.json",
     )
+
+
+@router.get("/config/user-servers")
+async def get_user_servers(x_user_id: str = "anonymous"):
+    """获取当前用户的 Server 配置列表（用户隔离）。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(UserServerModel)
+            .where(UserServerModel.user_id == x_user_id)
+            .order_by(UserServerModel.created_at)
+        )
+        servers = []
+        for row in result.scalars().all():
+            servers.append({
+                "name": row.server_id,
+                "hub_id": row.server_id,
+                "matched": row.matched,
+            })
+    return {"success": True, "data": servers}
+
+
+@router.post("/config/user-servers/save")
+async def save_user_servers(data: dict, x_user_id: str = "anonymous"):
+    """保存当前用户的 Server 配置列表（覆盖式）。"""
+    servers = data.get("servers", [])
+    if not isinstance(servers, list):
+        return {"success": False, "error": "servers 必须是列表"}
+
+    async with async_session_factory() as session:
+        # 删除旧记录
+        await session.execute(
+            delete(UserServerModel).where(UserServerModel.user_id == x_user_id)
+        )
+        # 写入新记录
+        for s in servers:
+            sid = s.get("hub_id") or s.get("name", "")
+            if sid:
+                session.add(UserServerModel(
+                    user_id=x_user_id,
+                    server_id=sid,
+                    matched=s.get("matched", True),
+                ))
+        await session.commit()
+
+    return {"success": True, "message": f"已保存 {len(servers)} 个 Server"}
 
 
 @router.post("/config/upload")
