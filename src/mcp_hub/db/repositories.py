@@ -254,6 +254,53 @@ class ReviewRepository:
             for r in result.scalars().all()
         ]
 
+    async def get_review(self, review_id: int) -> ReviewModel | None:
+        result = await self.session.execute(
+            select(ReviewModel).where(ReviewModel.id == review_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def can_delete_review(self, review: ReviewModel, user_id: str, user_role: str) -> tuple[bool, str]:  # noqa: E501
+        """检查用户是否有权限删除评价。"""
+        if user_role in ("admin", "owner"):
+            return True, ""
+        if review.user_id == user_id:
+            return True, ""
+        # 发布者可删除自己 Server 上的评价
+        server = await self.session.execute(
+            select(ServerModel).where(ServerModel.id == review.server_id)
+        )
+        s = server.scalar_one_or_none()
+        if s and s.author == user_id:
+            return True, ""
+        return False, "无权限删除此评价"
+
+    async def delete_review(self, review_id: int, user_id: str, user_role: str = "user") -> dict:
+        review = await self.get_review(review_id)
+        if not review:
+            return {"success": False, "error": "评价不存在"}
+        can, msg = await self.can_delete_review(review, user_id, user_role)
+        if not can:
+            return {"success": False, "error": msg}
+        server_id = review.server_id
+        await self.session.delete(review)
+        await self.session.commit()
+        # 更新平均评分
+        avg_result = await self.session.execute(
+            select(func.avg(ReviewModel.rating), func.count(ReviewModel.id))
+            .where(ReviewModel.server_id == server_id)
+        )
+        row = avg_result.one()
+        avg_rating = round(float(row[0]), 1) if row[0] else 0.0
+        count = row[1] or 0
+        await self.session.execute(
+            update(ServerModel)
+            .where(ServerModel.id == server_id)
+            .values(rating=avg_rating, review_count=count)
+        )
+        await self.session.commit()
+        return {"success": True, "message": "评价已删除"}
+
 
 class UserRepository:
     def __init__(self, session: AsyncSession):
