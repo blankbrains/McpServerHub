@@ -98,6 +98,12 @@ export default function ServerDetail() {
     setMessage(r.message || r.data?.detail || '安装完成')
     if (r.success) {
       setServer({ ...server, status: 'stopped' })
+      // 同时保存到「我的配置」
+      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+      if (!existing.find((x: any) => x.name === server.id)) {
+        existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
+        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+      }
       if (r.data?.configs) {
         const agentCfg = r.data.configs.find((c: any) =>
           c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
