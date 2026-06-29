@@ -7,6 +7,17 @@ interface ServerCardProps {
   showInstall?: boolean
 }
 
+function SecBadge({ level }: { level: string }) {
+  const cfg: Record<string, { icon: string; color: string }> = {
+    verified: { icon: '🟢', color: 'text-green-600' },
+    reviewed: { icon: '🟡', color: 'text-yellow-600' },
+    unreviewed: { icon: '🟠', color: 'text-orange-500' },
+    blocked: { icon: '🔴', color: 'text-red-600' },
+  }
+  const c = cfg[level] || { icon: '❓', color: 'text-gray-400' }
+  return <span className={`text-xs ${c.color}`}>{c.icon}</span>
+}
+
 export default function ServerCard({ server }: ServerCardProps) {
   const stars = '⭐'.repeat(Math.round(server.rating)) + '☆'.repeat(5 - Math.round(server.rating))
   const securityLabels: Record<string, string> = {
@@ -55,7 +66,8 @@ export default function ServerCard({ server }: ServerCardProps) {
             {cat}
           </span>
         ))}
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-gray-400 flex items-center gap-0.5">
+          <SecBadge level={server.security_level} />
           {securityLabels[server.security_level] || server.security_level}
         </span>
       </div>

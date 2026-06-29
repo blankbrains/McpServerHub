@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE, ServerInfo, downloadConfig, uploadConfig } from '../api/client'
+import { Link } from 'react-router-dom'
+import {
+  healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE,
+  ServerInfo, downloadConfig, uploadConfig, getMonitorSummary, getTopReliable,
+} from '../api/client'
 import ServerCard from '../components/ServerCard'
 
 export default function Dashboard() {
@@ -11,7 +14,6 @@ export default function Dashboard() {
   const [runningCount, setRunningCount] = useState<number>(0)
   const [totalAvailable, setTotalAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [logs, setLogs] = useState<string[]>([])
   const [selectedLog, setSelectedLog] = useState<string>('')
   const [favorites, setFavorites] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
@@ -20,6 +22,9 @@ export default function Dashboard() {
     try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
   })
   const [uploadResult, setUploadResult] = useState<any>(null)
+  // Monitor states
+  const [monitorSummary, setMonitorSummary] = useState<any>(null)
+  const [topReliable, setTopReliable] = useState<any[]>([])
 
   useEffect(() => {
     async function load() {
@@ -43,6 +48,10 @@ export default function Dashboard() {
       }
     }
     load()
+
+    // Load monitoring data
+    getMonitorSummary().then(r => setMonitorSummary(r.data)).catch(() => {})
+    getTopReliable(5).then(r => setTopReliable(r.data || [])).catch(() => {})
 
     const es = connectStatusSSE((data) => {
       setRunningCount(Object.keys(data.running || {}).length)
@@ -92,6 +101,62 @@ export default function Dashboard() {
         <StatCard icon="🏪" label="可用 Server" value={String(totalAvailable || trending.length)} color="blue" to="/market" />
         <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" to="/" />
       </div>
+
+      {/* Monitoring Section */}
+      {(monitorSummary || topReliable.length > 0) && (
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">📈 系统监控</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {monitorSummary && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-sm text-gray-500 mb-2">健康检查总览</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{monitorSummary.total_health_checks}</p>
+                    <p className="text-xs text-gray-400">总检查次数</p>
+                  </div>
+                  <div>
+                    <p className={`text-xl font-bold ${monitorSummary.errors_last_24h > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {monitorSummary.errors_last_24h}
+                    </p>
+                    <p className="text-xs text-gray-400">24h 错误</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{monitorSummary.running}</p>
+                    <p className="text-xs text-gray-400">运行中</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{monitorSummary.total_servers}</p>
+                    <p className="text-xs text-gray-400">Server 总数</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {topReliable.length > 0 && (
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-sm text-gray-500 mb-2">🏆 最稳定 Server</p>
+                <div className="space-y-1.5">
+                  {topReliable.slice(0, 5).map((s, i) => (
+                    <Link key={s.server_id} to={`/servers/${encodeURIComponent(s.server_id)}`}
+                      className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <span className="text-sm text-gray-800 truncate">
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} {s.server_id.split('/').pop()}
+                      </span>
+                      <span className={`text-xs font-medium ${
+                        s.reliability_score >= 90 ? 'text-green-600' :
+                        s.reliability_score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {s.reliability_score}/100
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Config Section */}
       <section>

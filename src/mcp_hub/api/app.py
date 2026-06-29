@@ -20,6 +20,8 @@ from mcp_hub.api.routes_manage import router as manage_router
 from mcp_hub.api.routes_market import router as market_router
 from mcp_hub.api.routes_realtime import router as realtime_router
 from mcp_hub.api.routes_search import router as search_router
+from mcp_hub.api.routes_security import router as security_router
+from mcp_hub.api.routes_token import router as token_router
 from mcp_hub.config import get_settings
 from mcp_hub.exceptions import McpHubError
 from mcp_hub.logging_config import get_logger
@@ -87,6 +89,8 @@ def create_app(dev: bool = False) -> FastAPI:
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(search_router, prefix="/api/v1")
     app.include_router(export_router, prefix="/api/v1")
+    app.include_router(security_router, prefix="/api/v1")
+    app.include_router(token_router, prefix="/api/v1")
 
     # === Web Dashboard SPA ===
     # 所有非 API 路径都返回 index.html，让 React Router 处理

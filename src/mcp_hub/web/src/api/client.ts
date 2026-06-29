@@ -183,3 +183,74 @@ export async function searchAdvanced(params: {
   const res = await fetch(`${API_BASE}/search/advanced?${qs}`)
   return res.json()
 }
+
+// === Security Scanning ===
+
+export interface SecurityScanResult {
+  server_id: string
+  score: number
+  level: string
+  network_access: boolean
+  file_access: boolean
+  findings: Array<{ severity: string; title: string; description: string; score_impact: number }>
+}
+
+export async function scanServerSecurity(serverId: string): Promise<{ success: boolean; data: SecurityScanResult }> {
+  return apiGet(`/security/scan/${encodeURIComponent(serverId)}`)
+}
+
+// === Token Analysis ===
+
+export interface TokenAnalysisResult {
+  server_id: string
+  total_tokens: number
+  context_pct: number
+  tool_count: number
+  estimated: boolean
+  suggestions: string[]
+}
+
+export async function analyzeServerTokens(serverId: string): Promise<{ success: boolean; data: TokenAnalysisResult }> {
+  return apiGet(`/tokens/analyze/${encodeURIComponent(serverId)}`)
+}
+
+// === Monitoring ===
+
+export interface UptimeStats {
+  window: string
+  total_checks: number
+  passed_checks: number
+  uptime_pct: number
+  avg_response_time_ms: number
+}
+
+export interface ReliabilityResult {
+  server_id: string
+  reliability_score: number
+  total_checks: number
+  last_check_at: string | null
+  uptime_stats: UptimeStats[]
+}
+
+export interface MonitorSummary {
+  total_servers: number
+  running: number
+  total_health_checks: number
+  errors_last_24h: number
+}
+
+export async function getServerUptime(serverId: string): Promise<{ success: boolean; data: UptimeStats[] }> {
+  return apiGet(`/health/uptime/${encodeURIComponent(serverId)}`)
+}
+
+export async function getServerReliability(serverId: string): Promise<{ success: boolean; data: ReliabilityResult }> {
+  return apiGet(`/health/reliability/${encodeURIComponent(serverId)}`)
+}
+
+export async function getTopReliable(limit?: number): Promise<{ success: boolean; data: ReliabilityResult[] }> {
+  return apiGet(`/health/reliability/top${limit ? `?limit=${limit}` : ''}`)
+}
+
+export async function getMonitorSummary(): Promise<{ success: boolean; data: MonitorSummary }> {
+  return apiGet('/health/summary')
+}

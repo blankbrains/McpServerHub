@@ -137,6 +137,7 @@ class HealthChecker:
             # L1: 每次都跑（最轻量）
             l1 = await self.check_l1(sid, proc.pid)
             results.append(l1)
+            await self._record_to_monitor(sid, "L1_process", l1)
             if not l1.passed:
                 await registry.update_status(sid, "error")
                 continue  # L1 失败，L2/L3 没意义
@@ -146,6 +147,7 @@ class HealthChecker:
             if now - last_l2 >= LEVEL_INTERVALS[2] and proc.process and proc.process.stdin:
                 l2 = await self.check_l2(sid, proc.process.stdin)
                 results.append(l2)
+                await self._record_to_monitor(sid, "L2_connection", l2)
                 self._last_check[sid][2] = now
                 if not l2.passed:
                     await registry.update_status(sid, "error")
@@ -155,6 +157,7 @@ class HealthChecker:
             if now - last_l3 >= LEVEL_INTERVALS[3]:
                 l3 = await self.check_l3(sid, proc)
                 results.append(l3)
+                await self._record_to_monitor(sid, "L3_functional", l3)
                 self._last_check[sid][3] = now
                 if not l3.passed:
                     logger.warning(
@@ -231,3 +234,23 @@ class HealthChecker:
         await process_manager.kill(server_id)
         await asyncio.sleep(2)
         return True  # 通知调用方重新 spawn
+
+    async def _record_to_monitor(
+        self,
+        server_id: str,
+        check_type: str,
+        result: HealthResult,
+    ) -> None:
+        """将健康检查结果记录到 Monitor 数据库。"""
+        try:
+            from mcp_hub.core.monitor import Monitor
+            status = "ok" if result.passed else "error"
+            await Monitor.record_check(
+                server_id=server_id,
+                check_type=check_type,
+                status=status,
+                response_time_ms=result.response_time_ms,
+                message=result.message,
+            )
+        except Exception:
+            pass  # 记录失败不影响主流程

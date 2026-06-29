@@ -115,7 +115,16 @@ def info(server_id: str, json_output: bool):
         info_text.append(f"   📄 {s.get('license', 'MIT')}\n")
         info_text.append(f"   {security}\n")
         info_text.append(f"   📌 {status_icon}\n")
-
+        # Token 消耗估算
+        try:
+            from mcp_hub.core.token_analyzer import TokenAnalyzer, Tokenizer
+            _r = TokenAnalyzer().analyze_server(s)
+            _tk = Tokenizer.format_tokens(_r.total_tokens)
+            _pct = Tokenizer.format_pct(_r.context_usage_pct)
+            _c = "green" if _r.context_usage_pct < 10 else "yellow" if _r.context_usage_pct < 16 else "red"  # noqa: E501
+            info_text.append(f"   [bold {_c}]Token: {_tk} ({_pct} 上下文)[/bold {_c}]\n")
+        except Exception:
+            pass
         console.print(Panel(info_text, title="Server 详情", border_style="cyan"))
 
     asyncio.run(_run())
