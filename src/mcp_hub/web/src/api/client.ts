@@ -20,15 +20,21 @@ export interface ServerInfo {
 }
 
 export async function apiGet<T>(path: string): Promise<{ success: boolean; data: T; meta?: any }> {
-  const res = await fetch(`${API_BASE}${path}`)
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'x-user-id': getUserId() },
+  })
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
+}
+
+function getUserId(): string {
+  try { return localStorage.getItem('mcp_hub_user') || 'anonymous' } catch { return 'anonymous' }
 }
 
 export async function apiPost<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new Error(`API error: ${res.status}`)
