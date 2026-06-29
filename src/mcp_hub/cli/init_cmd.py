@@ -57,7 +57,7 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
             elif os.environ.get("MCP_HUB_DATABASE_URL"):
                 db_line = f'MCP_HUB_DATABASE_URL={os.environ["MCP_HUB_DATABASE_URL"]}'
             else:
-                db_line = "MCP_HUB_DATABASE_URL=postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub"
+                db_line = "MCP_HUB_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/mcp_hub"
 
             env_content = f"""# MCP Server Hub 配置（由 mcp init 生成）
 {db_line}

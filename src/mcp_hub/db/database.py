@@ -14,10 +14,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
-DATABASE_URL = os.environ.get(
-    "MCP_HUB_DATABASE_URL",
-    "postgresql+asyncpg://mcp_hub:mcp_hub_prod_2026@localhost:5432/mcp_hub",
-)
+DATABASE_URL = os.environ.get("MCP_HUB_DATABASE_URL")
 
 # Automatically select driver based on URL
 if DATABASE_URL.startswith("sqlite"):
