@@ -1,4 +1,4 @@
-"""安装命令 — Rich 增强版。"""
+"""安装命令 — Rich 增强版 + 安全预扫描。"""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ import json
 
 import click
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from mcp_hub.core.installer import Installer
 from mcp_hub.core.registry import Registry
+from mcp_hub.core.security_scanner import SecurityScanner
 from mcp_hub.models.server import InstallConfig, ServerMeta
 
 console = Console()
@@ -19,8 +21,9 @@ console = Console()
 @click.command("install")
 @click.argument("server_id", required=True)
 @click.option("--json", "json_output", is_flag=True)
-def install(server_id: str, json_output: bool):
-    """安装 MCP Server。"""
+@click.option("--force", is_flag=True, help="跳过安全检查")
+def install(server_id: str, json_output: bool, force: bool):
+    """安装 MCP Server（安装前自动安全扫描）。"""
     async def _run():
         registry = Registry()
         server_data = await registry.get_by_id(server_id)
@@ -29,6 +32,42 @@ def install(server_id: str, json_output: bool):
             console.print("   提示: 先用 [bold]mcp search[/bold] 搜索可用的 Server")
             return
 
+        # ── 安全预扫描 ────────────────────────────────────
+        if not force:
+            console.print(f"[dim]🔍 正在扫描 {server_id} 安全性...[/dim]")
+            scanner = SecurityScanner()
+            report = await scanner.scan(server_data)
+
+            if report.score < 40:
+                high_issues = [f for f in report.findings if f.severity in ("critical", "high")]
+                blocked_text = (
+                    f"[bold red]🔴 安全评分: {report.score}/100 — {report.level}[/bold red]\n\n"
+                    f"此 Server 被判定为 [bold red]危险[/bold red]，安装将带来严重安全风险！\n\n"
+                    f"关键问题 ({len(high_issues)} 项):\n"
+                    + "\n".join(f"  • {f.title}" for f in high_issues)
+                )
+                console.print(Panel.fit(
+                    blocked_text,
+                    title="⛔ 安装已阻止",
+                    border_style="red",
+                ))
+                console.print("[yellow]提示: 使用 --force 参数强制安装（不推荐）[/yellow]")
+                return
+            elif report.score < 70:
+                console.print(Panel.fit(
+                    f"[bold yellow]🟡 安全评分: {report.score}/100 — {report.level}[/bold]\n\n"
+                    f"此 Server 有一些安全问题，建议先评估风险。\n"
+                    f"运行 [bold]mcp security {server_id}[/bold] 查看详情。",
+                    title="⚡ 安全提醒",
+                    border_style="yellow",
+                ))
+                if not click.confirm("继续安装?", default=False):
+                    console.print("[yellow]安装已取消[/yellow]")
+                    return
+            else:
+                console.print(f"[green]🟢 安全评分: {report.score}/100 — 安全[/green]")
+
+        # ── 执行安装 ──────────────────────────────────────
         meta = ServerMeta(
             name=server_data["id"],
             version=server_data.get("latest_version", server_data.get("version", "1.0.0")),

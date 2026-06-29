@@ -17,6 +17,7 @@ def cli():
 from mcp_hub.cli.auth import login, logout, whoami  # noqa: E402
 from mcp_hub.cli.community import favorite, favorites, rate, review  # noqa: E402
 from mcp_hub.cli.config import config  # noqa: E402
+from mcp_hub.cli.create import create  # noqa: E402
 from mcp_hub.cli.daemon import daemon, serve  # noqa: E402
 from mcp_hub.cli.event import event  # noqa: E402
 from mcp_hub.cli.hub_install import hub_install  # noqa: E402
@@ -24,11 +25,14 @@ from mcp_hub.cli.init_cmd import init_cmd  # noqa: E402
 from mcp_hub.cli.install import install, list_servers, uninstall  # noqa: E402
 from mcp_hub.cli.logs import logs  # noqa: E402
 from mcp_hub.cli.manage import restart, start, status_cmd, stop  # noqa: E402
+from mcp_hub.cli.monitor import monitor, reliability  # noqa: E402
 from mcp_hub.cli.prompt_install import prompt_install  # noqa: E402
 from mcp_hub.cli.publish import my_servers, publish, stats, unpublish  # noqa: E402
 from mcp_hub.cli.quickstart import quickstart  # noqa: E402
 from mcp_hub.cli.registry_sync import registry_sync  # noqa: E402
 from mcp_hub.cli.search import compare, info, search  # noqa: E402
+from mcp_hub.cli.security import security  # noqa: E402
+from mcp_hub.cli.token import analyze, optimize  # noqa: E402
 from mcp_hub.cli.trending import most_downloaded, new_releases, top_rated, trending  # noqa: E402
 from mcp_hub.cli.update import rollback, update, upgrade, version_history  # noqa: E402
 
@@ -43,11 +47,14 @@ cli.add_command(stop)
 cli.add_command(restart)
 cli.add_command(status_cmd)
 cli.add_command(logs)
+cli.add_command(monitor)
+cli.add_command(reliability)
 cli.add_command(update)
 cli.add_command(upgrade)
 cli.add_command(rollback)
 cli.add_command(version_history)
 cli.add_command(config)
+cli.add_command(create)
 cli.add_command(daemon)
 cli.add_command(serve)
 cli.add_command(init_cmd)
@@ -65,6 +72,9 @@ cli.add_command(favorite)
 cli.add_command(favorites)
 cli.add_command(trending)
 cli.add_command(top_rated)
+cli.add_command(security)
+cli.add_command(analyze)
+cli.add_command(optimize)
 cli.add_command(most_downloaded)
 cli.add_command(new_releases)
 cli.add_command(event)
