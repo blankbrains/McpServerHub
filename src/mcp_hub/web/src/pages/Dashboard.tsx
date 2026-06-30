@@ -32,18 +32,24 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [h, t, r, inst] = await Promise.all([
+        const [h, t, r, inst, monitor] = await Promise.all([
           healthCheck(),
           getTrending(),
           getTopRated(),
           apiGet<ServerInfo[]>('/servers/'),
+          apiGet<any>('/monitor/dashboard').catch(() => null),
         ])
         setHealth(h.data || h)
         setTrending(t.slice(0, 6))
         setTopRated(r.slice(0, 6))
         if (inst.data) setInstalled(inst.data)
-        const healthR = await apiGet<any>('/health/servers')
-        if (healthR.data?.total_available) setTotalAvailable(healthR.data.total_available)
+        // 已安装计数用 installed API，总追踪数用 monitor API
+        if (monitor?.data?.summary?.total_servers) {
+          setTotalAvailable(monitor.data.summary.total_servers)
+        } else {
+          const healthR = await apiGet<any>('/health/servers')
+          if (healthR.data?.total_available) setTotalAvailable(healthR.data.total_available)
+        }
       } catch (e) {
         console.error('Failed to load dashboard:', e)
       } finally {
@@ -102,7 +108,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" to="/my-servers" />
         <StatCard icon="📦" label="已安装" value={String(installed.length)} color="purple" to="/my-servers" />
-        <StatCard icon="🏪" label="可用 Server" value={String(totalAvailable || trending.length)} color="blue" to="/market" />
+        <StatCard icon="📋" label="追踪中" value={String(totalAvailable || installed.length)} color="blue" to="/my-servers" />
         <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" to="/" />
       </div>
 
@@ -245,8 +251,8 @@ export default function Dashboard() {
       {/* Installed Servers */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">📦 已安装 Server</h2>
-          <Link to="/my-servers" className="text-sm text-blue-600 hover:text-blue-800">管理 →</Link>
+          <h2 className="text-lg font-semibold text-gray-900">📦 已安装 Server（{installed.length}）</h2>
+          <Link to="/my-servers" className="text-sm text-blue-600 hover:text-blue-800">全部 {totalAvailable} 个 →</Link>
         </div>
         {installed.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">

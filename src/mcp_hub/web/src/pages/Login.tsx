@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getLoginUrl, getAuthState, clearAuth } from '../api/client'
+import { useNavigate, Link } from 'react-router-dom'
+import { getLoginUrl, getAuthState, clearAuth, getMe } from '../api/client'
 
 export default function Login() {
   const navigate = useNavigate()
   const [auth, setAuth] = useState(getAuthState())
   const [loggingIn, setLoggingIn] = useState(false)
+  const [userInfo, setUserInfo] = useState<any>(null)
+  const [userInfoLoading, setUserInfoLoading] = useState(true)
 
   const handleLogin = () => {
     setLoggingIn(true)
@@ -15,7 +17,14 @@ export default function Login() {
   const handleLogout = () => {
     clearAuth()
     setAuth({ token: null, userId: null })
+    setUserInfo(null)
   }
+
+  // 获取用户详细信息
+  useEffect(() => {
+    if (!auth.token || !auth.userId) { setUserInfoLoading(false); return }
+    getMe().then(r => setUserInfo(r.data || r)).catch(() => {}).finally(() => setUserInfoLoading(false))
+  }, [auth.token, auth.userId])
 
   // 自动轮询检测登录状态（OAuth 回调写入 localStorage）
   useEffect(() => {
@@ -26,43 +35,51 @@ export default function Login() {
         setAuth(state)
         setLoggingIn(false)
         clearInterval(timer)
-        // 登录成功后跳转到仪表盘
         navigate('/')
       }
     }, 500)
     return () => clearInterval(timer)
   }, [loggingIn, navigate])
 
-  // 页面打开时也检测一次（从其他页面跳转过来可能已经登录）
+  // 页面打开时也检测一次
   useEffect(() => {
     const state = getAuthState()
-    if (state.token !== auth.token) {
-      setAuth(state)
-    }
+    if (state.token !== auth.token) setAuth(state)
   }, [])
 
   if (auth.token && auth.userId) {
+    const avatarUrl = userInfo?.avatar_url || `https://github.com/${auth.userId}.png`
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold mx-auto">
+        <div className="text-center space-y-5">
+          <img
+            src={avatarUrl}
+            alt={auth.userId}
+            className="w-20 h-20 rounded-full mx-auto border-4 border-gray-100"
+            onError={(e: any) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
+          />
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 items-center justify-center text-white text-3xl font-bold mx-auto hidden">
             {auth.userId[0]?.toUpperCase()}
           </div>
-          <h2 className="text-xl font-semibold text-gray-800">
-            已登录为 <span className="text-blue-600">{auth.userId}</span>
-          </h2>
-          <p className="text-sm text-gray-500">通过 GitHub OAuth 登录</p>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">{userInfo?.display_name || auth.userId}</h2>
+            <p className="text-sm text-gray-500">@{auth.userId}</p>
+            {userInfo?.email && <p className="text-xs text-gray-400">{userInfo.email}</p>}
+          </div>
+          <div className="flex gap-2 text-xs text-gray-400 justify-center">
+            <Link to="/my-servers" className="hover:text-blue-600">📦 我的 Server</Link>
+            <span>·</span>
+            <Link to="/my-config" className="hover:text-blue-600">⚙️ 我的配置</Link>
+            <span>·</span>
+            <Link to="/publish/mine" className="hover:text-blue-600">📤 我的发布</Link>
+          </div>
           <div className="flex gap-3 justify-center pt-2">
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-            >
+            <button onClick={handleLogout}
+              className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors">
               退出登录
             </button>
-            <button
-              onClick={() => navigate('/')}
-              className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
+            <button onClick={() => navigate('/')}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               返回仪表盘
             </button>
           </div>

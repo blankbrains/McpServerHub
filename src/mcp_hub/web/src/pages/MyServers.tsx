@@ -1,24 +1,40 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, apiPost, ServerInfo } from '../api/client'
+import { apiGet, apiPost } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
+interface TrackedServer {
+  server_id: string
+  name: string
+  description: string
+  status: string
+  running: boolean
+  enabled: boolean
+  pid: number | null
+  location: string
+  uptime_seconds: number
+  reliability_score: number
+  call_count_7d: number
+  token_consumption: number
+  security_level: string
+}
+
 export default function MyServers() {
-  const [servers, setServers] = useState<ServerInfo[]>([])
+  const [servers, setServers] = useState<TrackedServer[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
 
   const load = async () => {
     try {
-      const r = await apiGet<ServerInfo[]>('/servers/')
-      if (r.data) setServers(r.data)
+      const r = await apiGet<any>('/monitor/dashboard')
+      if (r.data?.servers) setServers(r.data.servers)
     } catch { setMessage('加载失败') }
     finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [])
 
-  const handleAction = async (sid: string, action: 'start' | 'stop' | 'uninstall') => {
+  const handleAction = async (sid: string, action: 'start' | 'stop') => {
     try {
       const r = await apiPost(`/servers/${encodeURIComponent(sid)}/${action}`)
       setMessage(r.message || `✅ ${action} 成功`)
@@ -27,12 +43,42 @@ export default function MyServers() {
     } catch { setMessage(`❌ ${action} 失败`) }
   }
 
+  const toggleEnabled = async (sid: string, current: boolean) => {
+    try {
+      const uid = localStorage.getItem('mcp_hub_user')
+      if (!uid) { setMessage('请先登录'); return }
+      // 获取当前 user_servers，切换 enabled
+      const res = await fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })
+      const r = await res.json()
+      if (r.data) {
+        const updated = r.data.map((s: any) => {
+          if ((s.name === sid || s.hub_id === sid)) return { ...s, enabled: !current }
+          return s
+        })
+        await fetch('/api/v1/config/user-servers/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+          body: JSON.stringify({ servers: updated.map((s: any) => ({ name: s.name || s.hub_id, hub_id: s.hub_id, matched: s.matched, enabled: s.enabled })) }),
+        })
+        setMessage(current ? `⏹ 已禁用 ${sid}` : `✅ 已启用 ${sid}`)
+        load()
+      }
+    } catch { setMessage('❌ 操作失败') }
+    setTimeout(() => setMessage(''), 3000)
+  }
+
+  const installed = servers.filter(s => s.status !== 'not_installed')
+  const tracked = servers.filter(s => s.status === 'not_installed')
+
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">📦 我的 Server</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">📦 我的 Server</h1>
+          <p className="text-sm text-gray-500">共 {servers.length} 个 Server（{installed.length} 已安装 / {tracked.length} 追踪中）</p>
+        </div>
         <Link to="/market" className="text-sm text-blue-600 hover:text-blue-800">去市场安装 →</Link>
       </div>
 
@@ -45,48 +91,73 @@ export default function MyServers() {
       {servers.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
           <p className="text-5xl mb-4">📭</p>
-          <p className="text-lg mb-2">还没有安装任何 MCP Server</p>
-          <p className="text-sm mb-6">去市场搜索并一键安装你需要的 Server</p>
-          <Link to="/market" className="inline-block px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-            去市场看看
-          </Link>
+          <p className="text-lg mb-2">还没有添加任何 MCP Server</p>
+          <p className="text-sm mb-2">上传你的 mcp.json 配置文件，或去市场搜索安装</p>
+          <div className="flex gap-3 justify-center">
+            <Link to="/config" className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">上传配置</Link>
+            <Link to="/market" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">去市场看看</Link>
+          </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          {servers.map((s) => (
-            <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-gray-300 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <StatusBadge status={s.status} />
-                <div className="min-w-0">
-                  <Link to={`/servers/${encodeURIComponent(s.id)}`} className="font-medium text-gray-900 hover:text-blue-600 truncate block">
-                    {s.id}
-                  </Link>
-                  <p className="text-xs text-gray-400 truncate">{s.description}</p>
+        <div className="space-y-2">
+          {/* 已安装部分 */}
+          {installed.length > 0 && (
+            <>
+              <p className="text-xs text-gray-400 font-medium px-1">✅ 已安装（{installed.length}）</p>
+              {installed.map(s => (
+                <div key={s.server_id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-gray-300 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <StatusBadge status={s.running ? 'running' : s.status} />
+                    <div className="min-w-0">
+                      <Link to={`/servers/${encodeURIComponent(s.server_id)}`} className="font-medium text-gray-900 hover:text-blue-600 truncate block">
+                        {s.name || s.server_id}
+                      </Link>
+                      <p className="text-xs text-gray-400 truncate">{s.description || s.server_id}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    {s.running ? (
+                      <button onClick={() => handleAction(s.server_id, 'stop')}
+                        className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-medium hover:bg-yellow-200">⏹ 停止</button>
+                    ) : (
+                      <button onClick={() => handleAction(s.server_id, 'start')}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200">▶ 启动</button>
+                    )}
+                    <Link to={`/servers/${encodeURIComponent(s.server_id)}`}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">详情</Link>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                {s.status !== 'running' ? (
-                  <button onClick={() => handleAction(s.id, 'start')}
-                    className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200">
-                    ▶ 启动
-                  </button>
-                ) : (
-                  <button onClick={() => handleAction(s.id, 'stop')}
-                    className="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-medium hover:bg-yellow-200">
-                    ⏹ 停止
-                  </button>
-                )}
-                <button onClick={() => handleAction(s.id, 'uninstall')}
-                  className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100">
-                  卸载
-                </button>
-                <Link to={`/servers/${encodeURIComponent(s.id)}`}
-                  className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">
-                  详情
-                </Link>
-              </div>
-            </div>
-          ))}
+              ))}
+            </>
+          )}
+
+          {/* 追踪中部分 */}
+          {tracked.length > 0 && (
+            <>
+              <p className="text-xs text-gray-400 font-medium px-1 pt-3">📋 追踪中（{tracked.length}）— 来自上传配置或市场添加</p>
+              {tracked.map(s => (
+                <div key={s.server_id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-gray-300 transition-colors opacity-70 hover:opacity-100">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs text-gray-400">📥</span>
+                    <div className="min-w-0">
+                      <Link to={`/servers/${encodeURIComponent(s.server_id)}`} className="font-medium text-gray-600 hover:text-blue-600 truncate block">
+                        {s.name || s.server_id}
+                      </Link>
+                      <p className="text-xs text-gray-400 truncate">{s.description || '未安装'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    <button onClick={() => toggleEnabled(s.server_id, s.enabled !== false)}
+                      className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${s.enabled !== false ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-700'}`}>
+                      {s.enabled !== false ? '🟢 启用' : '⭕ 禁用'}
+                    </button>
+                    <Link to={`/servers/${encodeURIComponent(s.server_id)}`}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100">查看</Link>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

@@ -12,7 +12,28 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from datetime import datetime
 from typing import Any
+
+
+def _record_call(server_id: str, tool_name: str) -> None:
+    """异步记录一次 MCP 工具调用。"""
+    try:
+        from mcp_hub.db.database import async_session_factory
+        from mcp_hub.db.models import UsageStatsModel
+
+        async def _do():
+            async with async_session_factory() as session:
+                session.add(UsageStatsModel(
+                    server_id=server_id,
+                    tool_name=tool_name,
+                    status="ok",
+                ))
+                await session.commit()
+
+        asyncio.ensure_future(_do())
+    except Exception:
+        pass  # 调用记录失败不应影响主流程
 
 from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import GatewayError
@@ -228,6 +249,10 @@ class McpGateway:
                 }
 
             server = self._servers[target_sid]
+
+            # 记录本次调用（异步，不阻塞）
+            _record_call(target_sid, tool_name)
+
             result = await server._send_request("tools/call", {
                 "name": tool_name,
                 "arguments": arguments,

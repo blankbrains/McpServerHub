@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, func, select
@@ -146,7 +146,7 @@ class Monitor:
             windows = list(TIME_WINDOWS.keys())
 
         results: list[UptimeStats] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
 
         async with async_session_factory() as session:
             for w in windows:
@@ -370,7 +370,7 @@ class Monitor:
                     select(func.count(HealthLogModel.id)).where(
                         HealthLogModel.status == "error",
                         HealthLogModel.created_at
-                        >= datetime.now(timezone.utc) - timedelta(hours=24),
+                        >= datetime.utcnow() - timedelta(hours=24),
                     )
                 )
             ).scalar() or 0

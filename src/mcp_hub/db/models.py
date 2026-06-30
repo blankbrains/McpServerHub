@@ -138,6 +138,18 @@ class SubscriptionModel(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class UsageStatsModel(Base):
+    """MCP Server 调用统计 — 记录每次 tool call。"""
+    __tablename__ = "usage_stats"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    server_id = Column(String(255), nullable=False, index=True)
+    tool_name = Column(String(255), default="")
+    status = Column(String(50), default="ok")  # ok / error
+    duration_ms = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class UserServerModel(Base):
     """用户跟踪的 Server 配置 — 用户隔离存储。"""
     __tablename__ = "user_servers"
@@ -146,6 +158,8 @@ class UserServerModel(Base):
     user_id = Column(String(255), nullable=False, index=True)
     server_id = Column(String(255), nullable=False)
     matched = Column(Boolean, default=True)
+    enabled = Column(Boolean, default=True)
+    agent = Column(String(50), default="")
     created_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (

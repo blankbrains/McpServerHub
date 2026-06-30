@@ -29,6 +29,28 @@ export default function Market() {
     } catch { return new Set() }
   })
 
+  // 从服务端加载 user_servers（与 localStorage 合并）
+  useEffect(() => {
+    const uid = localStorage.getItem('mcp_hub_user')
+    if (!uid) return
+    fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })
+      .then(r => r.json())
+      .then(r => {
+        if (r.data && r.data.length > 0) {
+          const apiIds: string[] = r.data.map((s: any) => String(s.name || s.hub_id || ''))
+          setAddedServers(prev => {
+            const merged = new Set([...prev, ...apiIds])
+            return merged
+          })
+          // 同步到 localStorage
+          const localIds: string[] = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]').map((x: any) => x.name || x.hub_id || '')
+          const allIds: string[] = [...new Set([...localIds, ...apiIds])]
+          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(allIds.map(id => ({ name: id, hub_id: id, matched: true }))))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const load = useCallback(async () => {
@@ -174,7 +196,7 @@ export default function Market() {
                 <div className="absolute top-2 right-2">
                   {addedServers.has(s.id) ? (
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.preventDefault()
                         if (!window.confirm(`从配置中移除 "${s.id}"？`)) return
                         const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
@@ -183,6 +205,15 @@ export default function Market() {
                         const next = new Set(addedServers)
                         next.delete(s.id)
                         setAddedServers(next)
+                        // 同步到服务端 user_servers
+                        try {
+                          const uid = localStorage.getItem('mcp_hub_user')
+                          if (uid) await fetch('/api/v1/config/user-servers/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+                            body: JSON.stringify({ servers: filtered.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
+                          })
+                        } catch {}
                         setMessage(`已从配置中移除 ${s.id}`)
                         setTimeout(() => setMessage(''), 3000)
                       }}
@@ -193,13 +224,22 @@ export default function Market() {
                     </button>
                   ) : (
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.preventDefault()
                         const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
                         const cmd = 'install_command' in s ? (s as any).install_command : ''
                         existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
                         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
                         setAddedServers(new Set([...addedServers, s.id]))
+                        // 同步到服务端 user_servers
+                        try {
+                          const uid = localStorage.getItem('mcp_hub_user')
+                          if (uid) await fetch('/api/v1/config/user-servers/save', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+                            body: JSON.stringify({ servers: existing.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
+                          })
+                        } catch {}
                         setMessage(`✅ 已添加 ${s.id} 到我的配置`)
                         setTimeout(() => setMessage(''), 3000)
                       }}

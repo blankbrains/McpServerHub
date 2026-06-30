@@ -60,12 +60,93 @@ async def get_db():
         yield session
 
 
+async def _run_migrations():
+    """运行数据库迁移：添加缺失的列到已有表。"""
+    from sqlalchemy import text
+    from mcp_hub.db.models import ReviewModel
+
+    # 检查并添加 reviews.parent_id 列
+    async with engine.connect() as conn:
+        try:
+            # PostgreSQL
+            result = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns "
+                     "WHERE table_name='reviews' AND column_name='parent_id'")
+            )
+            if not result.fetchone():
+                await conn.execute(
+                    text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER "
+                         "REFERENCES reviews(id) ON DELETE CASCADE")
+                )
+                await conn.commit()
+                import structlog
+                structlog.get_logger().info("migration.added_parent_id")
+        except Exception:
+            # SQLite fallback
+            try:
+                result = await conn.execute(
+                    text("PRAGMA table_info(reviews)")
+                )
+                cols = [row[1] for row in await result.fetchall()]
+                if "parent_id" not in cols:
+                    await conn.execute(
+                        text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER")
+                    )
+                    await conn.commit()
+            except Exception:
+                pass  # 表可能已存在该列
+
+    # 添加 user_servers.enabled 列
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns "
+                     "WHERE table_name='user_servers' AND column_name='enabled'")
+            )
+            if not result.fetchone():
+                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
+                await conn.commit()
+    except Exception:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("PRAGMA table_info(user_servers)"))
+                cols = [row[1] for row in await result.fetchall()]
+                if "enabled" not in cols:
+                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
+                    await conn.commit()
+        except Exception:
+            pass
+
+    # 添加 user_servers.agent 列
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns "
+                     "WHERE table_name='user_servers' AND column_name='agent'")
+            )
+            if not result.fetchone():
+                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''"))
+                await conn.commit()
+    except Exception:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("PRAGMA table_info(user_servers)"))
+                cols = [row[1] for row in await result.fetchall()]
+                if "agent" not in cols:
+                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''"))
+                    await conn.commit()
+        except Exception:
+            pass
+
+
 async def init_db():
     """初始化数据库：创建所有表 + 种子数据。"""
     from mcp_hub.db.models import Base  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    await _run_migrations()
 
     from mcp_hub.db.seed import seed_database
     await seed_database()
