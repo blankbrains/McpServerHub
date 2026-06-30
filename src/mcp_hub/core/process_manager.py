@@ -24,6 +24,8 @@ class ManagedProcess:
     log_file: Path | None = None
     log_fd: int | None = None  # log file descriptor (closed on kill)
     last_keepalive_ok: float | None = None  # timestamp of last successful keepalive ping
+    spawn_command: str = ""  # 记录启动命令，用于自动重启
+    spawn_args: list[str] | None = None  # 记录启动参数，用于自动重启
 
 
 # 全局进程管理器单例
@@ -82,6 +84,8 @@ class ProcessManager:
                 started_at=asyncio.get_event_loop().time(),
                 log_file=log_file,
                 log_fd=log_fd.fileno(),
+                spawn_command=command,
+                spawn_args=args,
             )
             self._processes[server_id] = managed
             logger.info(

@@ -190,17 +190,43 @@ class HealthChecker:
         while True:
             try:
                 results = await self.check_all(process_manager, registry)
+                # 按 server_id 去重：同一 Server 的多个失败只触发一次重启
+                failed_ids: set[str] = set()
                 for r in results:
                     if not r.passed:
+                        failed_ids.add(r.server_id)
                         logger.warning(
                             "health_check.failed",
                             server_id=r.server_id,
                             level=r.level,
                             message=r.message,
                         )
-                        await self._auto_restart(
-                            r.server_id, process_manager, registry
-                        )
+                # 对每个失败的 Server 触发自动恢复
+                for sid in failed_ids:
+                    should_restart = await self._auto_restart(
+                        sid, process_manager, registry
+                    )
+                    if should_restart:
+                        # 重新 spawn 进程
+                        proc = process_manager.get(sid)
+                        if proc and proc.spawn_command:
+                            try:
+                                await process_manager.spawn(
+                                    sid,
+                                    proc.spawn_command,
+                                    proc.spawn_args,
+                                )
+                                await registry.update_status(sid, "running")
+                                logger.info(
+                                    "health_check.restarted",
+                                    server_id=sid,
+                                )
+                            except Exception as spawn_err:
+                                logger.error(
+                                    "health_check.restart_spawn_failed",
+                                    server_id=sid,
+                                    error=str(spawn_err),
+                                )
             except Exception as e:
                 logger.error(
                     "health_check.monitor_error",
@@ -216,20 +242,33 @@ class HealthChecker:
         process_manager: ProcessManager,
         _registry: Registry,
     ) -> bool:
-        """自动重启失败的 Server（最多 3 次）。"""
+        """自动重启失败的 Server（最多 3 次）。
+
+        1. 递增 restart_count
+        2. 超过 3 次则放弃，返回 False
+        3. 杀死旧进程，等待 2 秒
+        4. 返回 True，通知调用方重新 spawn
+        """
         proc = process_manager.get(server_id)
-        if proc and proc.restart_count >= 3:
+        current_count = proc.restart_count if proc else 0
+
+        if current_count >= 3:
             logger.error(
                 "health_check.max_restarts_exceeded",
                 server_id=server_id,
-                restart_count=proc.restart_count,
+                restart_count=current_count,
             )
             return False
+
+        # 递增重启计数
+        if proc:
+            proc.restart_count += 1
+            current_count = proc.restart_count
 
         logger.info(
             "health_check.auto_restart",
             server_id=server_id,
-            restart_count=proc.restart_count if proc else 0,
+            restart_count=current_count,
         )
         await process_manager.kill(server_id)
         await asyncio.sleep(2)

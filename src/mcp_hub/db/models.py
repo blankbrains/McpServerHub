@@ -160,6 +160,7 @@ class UserServerModel(Base):
     matched = Column(Boolean, default=True)
     enabled = Column(Boolean, default=True)
     agent = Column(String(50), default="")
+    group_name = Column(String(100), default="")
     created_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (

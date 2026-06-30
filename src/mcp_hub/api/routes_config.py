@@ -411,27 +411,348 @@ async def generate_config():
 
 @router.get("/config/from-local")
 async def config_from_local():
-    """尝试读取本地的 mcp.json 配置文件。"""
-    paths = [
-        Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
-        Path.home() / ".cursor" / "mcp.json",
-        Path.home() / ".config" / "mcp-hub" / "mcp.json",
+    """尝试读取本地的 mcp.json 配置文件。
+
+    扫描所有已知 Agent 的标准路径：
+    Claude Code, Claude Desktop, Cursor, Codex, Trae,
+    以及项目目录下的 mcp.json / .mcp.json。
+    """
+    from mcp_hub.core.config_manager import AGENT_CONFIGS
+
+    # 从 AGENT_CONFIGS 收集所有已知路径，去重
+    seen = set()
+    paths: list[tuple[str, Path]] = []  # (agent_label, path)
+    for agent_key, cfg in AGENT_CONFIGS.items():
+        for p in cfg["paths"]:
+            p_str = str(p)
+            if p_str not in seen:
+                seen.add(p_str)
+                paths.append((cfg["name"], p))
+
+    # 额外扫描项目本地目录
+    extra_paths = [
+        ("项目本地", Path.cwd() / "mcp.json"),
+        ("项目本地", Path.cwd() / ".mcp.json"),
     ]
+    for label, ep in extra_paths:
+        ep_str = str(ep)
+        if ep_str not in seen:
+            seen.add(ep_str)
+            paths.append((label, ep))
+
     results = []
-    for p in paths:
+    for agent_label, p in paths:
         if p.exists():
             try:
                 content = json.loads(p.read_text())
                 servers = list(content.get("mcpServers", {}).keys())
                 results.append({
                     "path": str(p),
+                    "agent": agent_label,
                     "exists": True,
                     "server_count": len(servers),
                     "servers": servers,
                 })
             except Exception:
-                results.append({"path": str(p), "exists": True, "error": "无法解析"})
+                results.append({
+                    "path": str(p),
+                    "agent": agent_label,
+                    "exists": True,
+                    "error": "无法解析",
+                })
         else:
-            results.append({"path": str(p), "exists": False})
+            results.append({
+                "path": str(p),
+                "agent": agent_label,
+                "exists": False,
+            })
 
     return {"success": True, "data": results}
+
+
+# ── 本地 Agent 发现 ─────────────────────────────────────────
+
+
+@router.get("/local/discover")
+async def local_discover():
+    """扫描本机所有 AI Agent 的 MCP 配置文件。
+
+    自动发现 Claude Code、Claude Desktop、Cursor、Codex、Trae、
+    Windsurf、VS Code Copilot 及项目本地目录下的 MCP 配置。
+    """
+    from mcp_hub.core.local_discovery import LocalAgentDiscovery
+
+    discovery = LocalAgentDiscovery()
+    result = await discovery.get_agent_summary()
+    return {"success": True, "data": result}
+
+
+@router.get("/local/compare")
+async def local_compare():
+    """跨 Agent 对比 MCP 配置。
+
+    返回每个 MCP Server 在各 Agent 中的分布情况：
+    - 哪些 Agent 已安装，哪些缺失
+    - 同一 Server 在不同 Agent 中的命令是否一致
+    """
+    from mcp_hub.core.local_discovery import LocalAgentDiscovery
+
+    discovery = LocalAgentDiscovery()
+    compare_results = await discovery.compare_agents()
+    return {
+        "success": True,
+        "data": [
+            {
+                "server_name": c.server_name,
+                "present_in": c.present_in,
+                "absent_in": c.absent_in,
+                "commands": c.commands,
+                "has_conflict": c.has_conflict,
+            }
+            for c in compare_results
+        ],
+    }
+
+
+@router.get("/local/conflicts")
+async def local_conflicts():
+    """检测本地 MCP 配置冲突。
+
+    发现同名 Server 在不同 Agent 中配置了不同的命令或参数，
+    这可能导致行为不一致。
+    """
+    from mcp_hub.core.local_discovery import LocalAgentDiscovery
+
+    discovery = LocalAgentDiscovery()
+    conflicts = await discovery.detect_conflicts()
+    return {
+        "success": True,
+        "data": [
+            {
+                "server_name": c.server_name,
+                "agent_a": c.agent_a,
+                "command_a": c.command_a,
+                "agent_b": c.agent_b,
+                "command_b": c.command_b,
+                "severity": c.severity,
+            }
+            for c in conflicts
+        ],
+    }
+
+
+# ── 配置差异、备份、预检 ──────────────────────────────────
+
+
+@router.get("/config/diff")
+async def config_diff():
+    """对比本地 mcp.json 与 Hub 上的配置差异。
+
+    返回：
+    - only_local: 本地有但 Hub 没有的 Server
+    - only_hub: Hub 有但本地没有的 Server
+    - different: 两边都有但命令不同的 Server
+    - in_sync: 是否完全同步
+    """
+    from mcp_hub.core.config_manager import ConfigManager
+
+    cm = ConfigManager()
+    result = await cm.diff_local_vs_hub()
+    return {"success": True, "data": result}
+
+
+@router.post("/config/backup")
+async def config_backup(data: dict):
+    """备份当前配置。可附带 label 标签。"""
+    from mcp_hub.core.config_manager import ConfigManager
+
+    label = data.get("label", "")
+    cm = ConfigManager()
+    result = await cm.backup_config(label)
+    return result
+
+
+@router.get("/config/backups")
+async def config_backups_list():
+    """列出所有配置备份。"""
+    from mcp_hub.core.config_manager import ConfigManager
+
+    cm = ConfigManager()
+    backups = await cm.list_backups()
+    return {"success": True, "data": backups}
+
+
+@router.post("/config/restore/{filename:path}")
+async def config_restore(filename: str):
+    """从指定备份恢复配置。"""
+    from mcp_hub.core.config_manager import ConfigManager
+
+    cm = ConfigManager()
+    result = await cm.restore_backup(filename)
+    return result
+
+
+@router.post("/servers/pre-check")
+async def server_pre_check(data: dict):
+    """安装前环境预检。
+
+    请求体: {"command": "uvx mcp-server-web-search"}
+    返回: overall + 逐项检查结果 + can_install 标志
+    """
+    from mcp_hub.core.config_manager import ConfigManager
+
+    command = data.get("command", "")
+    if not command:
+        return {"success": False, "error": "需要提供 command"}
+
+    cm = ConfigManager()
+    result = await cm.pre_install_check(command)
+    return result
+
+
+@router.post("/servers/dependency-analyze")
+async def server_dependency_analyze(data: dict):
+    """分析 MCP Server 的完整依赖链。
+
+    请求体: {"server_id": "@anthropic/web-search", "command": "uvx mcp-server-web-search"}
+    返回: 运行时需求 + 环境变量需求 + 缺失清单 + 安装建议
+    """
+    from mcp_hub.core.dependency_analyzer import DependencyAnalyzer
+
+    server_id = data.get("server_id", "")
+    command = data.get("command", "")
+
+    if not command:
+        return {"success": False, "error": "需要提供 command"}
+
+    analyzer = DependencyAnalyzer(server_id=server_id, command=command)
+    report = await analyzer.analyze()
+
+    return {
+        "success": True,
+        "data": {
+            "server_id": report.server_id,
+            "command": report.command,
+            "install_tool": report.install_tool,
+            "runtime_requirements": [
+                {
+                    "name": r.name,
+                    "min_version": r.min_version,
+                    "installed": r.installed,
+                    "installed_version": r.installed_version,
+                    "message": r.message,
+                }
+                for r in report.runtime_requirements
+            ],
+            "env_var_requirements": [
+                {
+                    "name": e.name,
+                    "description": e.description,
+                    "required": e.required,
+                    "category": e.category,
+                    "is_set": e.is_set,
+                    "help_url": e.help_url,
+                }
+                for e in report.env_var_requirements
+            ],
+            "system_tools": report.system_tools,
+            "missing_count": report.missing_count,
+            "warning_count": report.warning_count,
+            "ready_to_install": report.ready_to_install,
+            "suggestions": report.suggestions,
+            "notes": report.notes,
+        },
+    }
+
+
+# ── Server 分组管理 ────────────────────────────────────────
+
+
+@router.get("/config/groups")
+async def list_groups(request: Request):
+    """列出当前用户的所有分组及其包含的 Server。"""
+    from sqlalchemy import text
+    from mcp_hub.db.database import async_session_factory
+
+    user_id = request.headers.get("x-user-id", "anonymous")
+    async with async_session_factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT group_name, server_id FROM user_servers "
+                "WHERE user_id = :uid AND group_name != '' "
+                "ORDER BY group_name, server_id"
+            ),
+            {"uid": user_id},
+        )
+        rows = result.fetchall()
+
+    groups: dict[str, list[str]] = {}
+    for row in rows:
+        gname = row[0]
+        sid = row[1]
+        if gname not in groups:
+            groups[gname] = []
+        groups[gname].append(sid)
+
+    return {
+        "success": True,
+        "data": [
+            {"name": name, "servers": servers, "count": len(servers)}
+            for name, servers in groups.items()
+        ],
+    }
+
+
+@router.post("/config/groups/set")
+async def set_server_group(request: Request, data: dict):
+    """为指定 Server 设置分组。"""
+    from sqlalchemy import text
+    from mcp_hub.db.database import async_session_factory
+
+    user_id = request.headers.get("x-user-id", "anonymous")
+    server_id = data.get("server_id", "")
+    group_name = data.get("group_name", "")
+
+    if not server_id:
+        return {"success": False, "error": "需要 server_id"}
+
+    async with async_session_factory() as session:
+        await session.execute(
+            text(
+                "UPDATE user_servers SET group_name = :gname "
+                "WHERE user_id = :uid AND server_id = :sid"
+            ),
+            {"gname": group_name, "uid": user_id, "sid": server_id},
+        )
+        await session.commit()
+
+    return {"success": True, "message": f"已将 {server_id} 设置为分组 '{group_name}'"}
+
+
+@router.post("/config/groups/batch")
+async def batch_set_group(request: Request, data: dict):
+    """批量设置多个 Server 的分组（启用/禁用整个分组时用）。"""
+    from sqlalchemy import text
+    from mcp_hub.db.database import async_session_factory
+
+    user_id = request.headers.get("x-user-id", "anonymous")
+    group_name = data.get("group_name", "")
+    action = data.get("action", "")  # "enable" or "disable"
+    enabled = True if action == "enable" else (False if action == "disable" else None)
+
+    if not group_name:
+        return {"success": False, "error": "需要 group_name"}
+
+    async with async_session_factory() as session:
+        if enabled is not None:
+            await session.execute(
+                text(
+                    "UPDATE user_servers SET enabled = :en "
+                    "WHERE user_id = :uid AND group_name = :gname"
+                ),
+                {"en": enabled, "uid": user_id, "gname": group_name},
+            )
+        await session.commit()
+
+    msg = f"已{'启用' if enabled else '禁用'}分组 '{group_name}' 中的所有 Server"
+    return {"success": True, "message": msg}

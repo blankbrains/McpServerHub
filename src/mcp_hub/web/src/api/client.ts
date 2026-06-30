@@ -126,7 +126,9 @@ export function getLoginUrl(): string {
 export async function getMe(): Promise<any> {
   const { token } = getAuthState()
   if (!token) throw new Error('Not logged in')
-  const res = await fetch(`${API_BASE}/auth/me?token=${encodeURIComponent(token)}`)
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
   if (!res.ok) throw new Error('Auth failed')
   return res.json()
 }
@@ -134,7 +136,9 @@ export async function getMe(): Promise<any> {
 // === SSE / Realtime ===
 
 export function connectLogSSE(serverId: string, onLine: (line: string) => void): EventSource {
-  const es = new EventSource(`${API_BASE}/realtime/logs/${encodeURIComponent(serverId)}`)
+  const { token } = getAuthState()
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+  const es = new EventSource(`${API_BASE}/realtime/logs/${encodeURIComponent(serverId)}${tokenParam}`)
   es.onmessage = (e) => {
     try {
       const d = JSON.parse(e.data)
@@ -145,7 +149,9 @@ export function connectLogSSE(serverId: string, onLine: (line: string) => void):
 }
 
 export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
-  const es = new EventSource(`${API_BASE}/realtime/status`)
+  const { token } = getAuthState()
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+  const es = new EventSource(`${API_BASE}/realtime/status${tokenParam}`)
   es.onmessage = (e) => {
     try {
       const d = JSON.parse(e.data)
@@ -165,6 +171,7 @@ export async function uploadConfig(file: File, agentId: string = ''): Promise<an
     body: form,
     headers,
   })
+  if (!res.ok) throw new Error(`Upload config failed: ${res.status}`)
   return res.json()
 }
 
@@ -172,6 +179,7 @@ export async function downloadConfig(): Promise<Blob> {
   const res = await fetch(`${API_BASE}/config/download`, {
     headers: { 'x-user-id': getUserId() },
   })
+  if (!res.ok) throw new Error(`Download config failed: ${res.status}`)
   return res.blob()
 }
 
@@ -179,6 +187,7 @@ export async function exportConfig(share: boolean): Promise<Blob> {
   const res = await fetch(`${API_BASE}/export/config?share=${share}`, {
     headers: { 'x-user-id': getUserId() },
   })
+  if (!res.ok) throw new Error(`Export config failed: ${res.status}`)
   return res.blob()
 }
 
@@ -199,6 +208,7 @@ export async function searchAdvanced(params: {
   const res = await fetch(`${API_BASE}/search/advanced?${qs}`, {
     headers: { 'x-user-id': getUserId() },
   })
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`)
   return res.json()
 }
 

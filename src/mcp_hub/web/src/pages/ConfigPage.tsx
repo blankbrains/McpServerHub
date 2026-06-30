@@ -165,10 +165,14 @@ export default function ConfigPage() {
 
       {/* 命令行同步（高级选项） */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowCliHint(!showCliHint)}>
+        <button
+          className="flex items-center justify-between w-full text-left cursor-pointer"
+          onClick={() => setShowCliHint(!showCliHint)}
+          aria-expanded={showCliHint}
+        >
           <h2 className="font-semibold text-gray-900">🖥️ 命令行同步（高级）</h2>
           <span className="text-gray-400 text-sm">{showCliHint ? '收起' : '展开'}</span>
-        </div>
+        </button>
         {showCliHint && (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-gray-500">如果你安装了 <code className="px-1 bg-gray-100 rounded text-xs">mcp-hub-cli</code>，可以使用以下命令一键同步配置到本地：</p>

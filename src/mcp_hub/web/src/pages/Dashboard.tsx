@@ -5,6 +5,7 @@ import {
   ServerInfo, downloadConfig, uploadConfig, getMonitorSummary, getTopReliable,
 } from '../api/client'
 import ServerCard from '../components/ServerCard'
+import LogViewer from '../components/LogViewer'
 
 export default function Dashboard() {
   const [health, setHealth] = useState<any>(null)
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [runningCount, setRunningCount] = useState<number>(0)
   const [totalAvailable, setTotalAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedLog, setSelectedLog] = useState<string>('')
   const [favorites, setFavorites] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
@@ -52,6 +54,7 @@ export default function Dashboard() {
         }
       } catch (e) {
         console.error('Failed to load dashboard:', e)
+        setError('加载仪表盘数据失败，请检查网络连接或刷新页面重试')
       } finally {
         setLoading(false)
       }
@@ -100,6 +103,20 @@ export default function Dashboard() {
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载中...</div></div>
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="text-red-500 text-lg">😵 {error}</div>
+          <button onClick={() => { setError(null); setLoading(true); window.location.reload() }}
+            className="px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50">
+            重试
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -332,33 +349,4 @@ function StatCard({ icon, label, value, color, to }: { icon: string; label: stri
   )
 }
 
-function LogViewer({ serverId }: { serverId: string }) {
-  const [lines, setLines] = useState<string[]>([])
-
-  useEffect(() => {
-    if (!serverId) return
-    setLines([])
-    const es = new EventSource(`/api/v1/realtime/logs/${encodeURIComponent(serverId)}`)
-    es.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data)
-        if (d.line) {
-          setLines((prev) => [...prev.slice(-199), d.line])
-        }
-      } catch { /* ignore */ }
-    }
-    es.onerror = () => es.close()
-    return () => es.close()
-  }, [serverId])
-
-  if (!serverId) return <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-sm">选择已安装的 Server 查看实时日志</div>
-
-  return (
-    <div className="bg-gray-900 rounded-xl p-4 font-mono text-sm text-green-400 h-64 overflow-y-auto">
-      {lines.length === 0 && <div className="text-gray-500">等待日志...</div>}
-      {lines.map((line, i) => (
-        <div key={i} className="whitespace-pre-wrap break-all">{line}</div>
-      ))}
-    </div>
-  )
-}
+// LogViewer 已移至 components/LogViewer.tsx，共享使用

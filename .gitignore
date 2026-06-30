@@ -43,5 +43,7 @@ src/mcp_hub/db/migrations.py
 PROJECT_SNAPSHOT.md
 *开发文档.md
 *项目文档.md
+CLAUDE.md
+project.toml
 
 

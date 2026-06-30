@@ -161,8 +161,10 @@ export default function Builder() {
           <label className="block text-sm font-medium text-gray-700 mb-2">工具模板 <span className="text-gray-400 font-normal">（至少要选一个）</span></label>
           {loading ? (
             <div className="text-sm text-gray-400">加载中...</div>
+          ) : error ? (
+            <div className="text-sm text-red-400">⚠️ {error}</div>
           ) : availableTools.length === 0 ? (
-            <div className="text-sm text-red-400">⚠️ 无法加载工具模板列表，请检查 API 是否正常运行</div>
+            <div className="text-sm text-gray-400">暂无可用的工具模板</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableTools.map(tool => (

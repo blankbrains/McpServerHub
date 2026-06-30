@@ -10,6 +10,7 @@ import MyConfig from './pages/MyConfig'
 import Login from './pages/Login'
 import Publish from './pages/Publish'
 import MonitorDashboard from './pages/MonitorDashboard'
+import LocalDiscovery from './pages/LocalDiscovery'
 
 export default function App() {
   return (
@@ -24,7 +25,9 @@ export default function App() {
         <Route path="/builder" element={<Builder />} />
         <Route path="/login" element={<Login />} />
         <Route path="/publish" element={<Publish />} />
+        <Route path="/publish/mine" element={<Publish />} />
         <Route path="/monitor" element={<MonitorDashboard />} />
+        <Route path="/local" element={<LocalDiscovery />} />
       </Routes>
     </Layout>
   )

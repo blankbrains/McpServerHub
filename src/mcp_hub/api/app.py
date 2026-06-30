@@ -6,9 +6,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mcp_hub import __version__
 from mcp_hub.api.routes_auth import router as auth_router
@@ -67,20 +69,82 @@ def create_app(dev: bool = False) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # === Exception Handler ===
-    @app.exception_handler(McpHubError)
-    async def mcp_hub_error_handler(_request: Request, exc: McpHubError):
+    # === Exception Handlers (统一响应格式) ===
+
+    def _error_response(code: str, message: str, status: int = 500, details: dict | None = None) -> JSONResponse:
         return JSONResponse(
-            status_code=exc.http_status,
+            status_code=status,
             content={
                 "success": False,
-                "error": {
-                    "code": exc.code,
-                    "message": str(exc),
-                    "details": exc.details,
-                },
+                "error": {"code": code, "message": message, "details": details},
             },
         )
+
+    @app.exception_handler(McpHubError)
+    async def mcp_hub_error_handler(_request: Request, exc: McpHubError):
+        return _error_response(
+            code=exc.code,
+            message=str(exc),
+            status=exc.http_status,
+            details=exc.details,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_request: Request, exc: RequestValidationError):
+        errors = exc.errors()
+        return _error_response(
+            code="VALIDATION_ERROR",
+            message=f"请求参数验证失败: {len(errors)} 个错误",
+            status=422,
+            details={"errors": errors},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(_request: Request, exc: StarletteHTTPException):
+        return _error_response(
+            code="HTTP_ERROR",
+            message=str(exc.detail),
+            status=exc.status_code,
+        )
+
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(_request: Request, exc: Exception):
+        logger.error("api.unhandled_error", error=str(exc), type=type(exc).__name__)
+        return _error_response(
+            code="INTERNAL_ERROR",
+            message="服务器内部错误",
+            status=500,
+        )
+
+    # === Rate Limiting Middleware ===
+    _rate_limit_store: dict[str, list[float]] = {}
+
+    @app.middleware("http")
+    async def rate_limit_middleware(request: Request, call_next):
+        import time
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.monotonic()
+
+        # 每个 IP 每分钟最多 120 次请求
+        window_seconds = 60
+        max_requests = 120
+
+        if client_ip not in _rate_limit_store:
+            _rate_limit_store[client_ip] = []
+        timestamps = _rate_limit_store[client_ip]
+        # 清理过期时间戳
+        timestamps[:] = [ts for ts in timestamps if now - ts < window_seconds]
+
+        if len(timestamps) >= max_requests:
+            return _error_response(
+                code="RATE_LIMIT_EXCEEDED",
+                message="请求过于频繁，请稍后再试",
+                status=429,
+            )
+
+        timestamps.append(now)
+        response = await call_next(request)
+        return response
 
     # === API Routes (优先级最高) ===
     app.include_router(market_router, prefix="/api/v1")
@@ -99,47 +163,13 @@ def create_app(dev: bool = False) -> FastAPI:
     app.include_router(monitor_router, prefix="/api/v1")
 
     # === Web Dashboard SPA ===
-    # 所有非 API 路径都返回 index.html，让 React Router 处理
+    # 使用统一的 SPA 挂载逻辑
     static_dir = Path(__file__).parent.parent / "web" / "static"
-    index_html = static_dir / "index.html" if static_dir.exists() else None
+    from mcp_hub.web.app import mount_web_dashboard
+    mount_web_dashboard(app, static_dir)
 
-    if index_html and index_html.exists():
-        # 挂载 assets 静态资源
-        app.mount(
-            "/assets",
-            StaticFiles(directory=str(static_dir / "assets")),
-            name="web_assets",
-        )
-
-        # 根目录静态文件
-        _static_root_files = {}
-        for _f in ["favicon.svg", "favicon.ico", "logo.svg"]:
-            _p = static_dir / _f
-            if _p.exists():
-                _static_root_files[_f] = _p
-
-        @app.get("/favicon.svg")
-        async def favicon_svg():
-            if "favicon.svg" in _static_root_files:
-                return FileResponse(str(_static_root_files["favicon.svg"]))
-            return FileResponse(str(index_html))
-
-        @app.get("/logo.svg")
-        async def logo_svg():
-            if "logo.svg" in _static_root_files:
-                return FileResponse(str(_static_root_files["logo.svg"]))
-            return FileResponse(str(index_html))
-
-        @app.api_route("/{path:path}", methods=["GET"])
-        async def serve_spa(path: str):
-            # 根静态文件
-            if path in _static_root_files:
-                return FileResponse(str(_static_root_files[path]))
-            # SPA 回退
-            return FileResponse(str(index_html))
-
-    else:
-        # 没有前端时返回 JSON
+    # 没有前端构建时，提供 JSON 根路径
+    if not (static_dir / "index.html").exists():
         @app.get("/")
         async def root():
             return {
