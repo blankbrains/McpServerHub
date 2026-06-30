@@ -46,14 +46,8 @@ export default function ConfigPage() {
     setDownloading(true)
     setMessage('')
     try {
-      // 使用 API 生成对应 Agent 格式的配置
-      const blob = await apiGet<any>(`/export/config?agent=${aid}&share=false`)
-        .then(r => {
-          // 如果 API 返回 JSON, 转成 Blob
-          if (r.data) return new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' })
-          throw new Error('生成失败')
-        })
-        .catch(() => downloadConfig()) // 回退到通用下载
+      // 直接下载配置文件（后端返回 FileResponse）
+      const blob = await downloadConfig()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

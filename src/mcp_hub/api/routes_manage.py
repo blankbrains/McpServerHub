@@ -15,6 +15,9 @@ from mcp_hub.exceptions import (
     ServerNotFoundError,
 )
 from mcp_hub.models.server import InstallConfig, ServerMeta
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["manage"])
 
@@ -101,8 +104,8 @@ async def start_server(server_id: str):
                 raise CfgErr(f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动")
     except CfgErr:
         raise
-    except Exception:
-        pass  # 查询失败不阻塞启动
+    except Exception as e:
+        logger.warning("manage.start.enabled_check_failed", server_id=server_id, error=str(e))
 
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -164,8 +167,8 @@ async def uninstall_server(server_id: str):
                     stderr=asyncio.subprocess.PIPE,
                 )
                 await proc.wait()
-    except Exception:
-        pass  # 清理失败不影响卸载
+    except Exception as e:
+        logger.warning("manage.uninstall.pip_cleanup_failed", server_id=server_id, error=str(e))
 
     return {"success": True, "message": f"{server_id} 已卸载"}
 
