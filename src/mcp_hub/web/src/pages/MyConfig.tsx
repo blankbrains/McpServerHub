@@ -27,6 +27,7 @@ export default function MyConfig() {
         if (r.success && r.data && r.data.length > 0) {
           setServers(r.data)
           localStorage.setItem('mcp_hub_my_servers', JSON.stringify(r.data))
+          setLoading(false)
           return
         }
       } catch {}

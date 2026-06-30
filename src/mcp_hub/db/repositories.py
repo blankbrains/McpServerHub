@@ -188,6 +188,13 @@ class ServerRepository:
         await self.session.commit()
         return server_id
 
+    async def get_all(self) -> list[dict]:
+        """获取所有 Server 记录（包含未安装的）。"""
+        result = await self.session.execute(
+            select(ServerModel).order_by(ServerModel.name)
+        )
+        return [self._server_to_dict(s) for s in result.scalars().all()]
+
     async def get_by_author(self, author: str) -> list[dict]:
         """按作者查询发布的 Server。"""
         result = await self.session.execute(

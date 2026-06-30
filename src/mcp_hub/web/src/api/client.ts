@@ -155,13 +155,15 @@ export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
   return es
 }
 
-export async function uploadConfig(file: File): Promise<any> {
+export async function uploadConfig(file: File, agentId: string = ''): Promise<any> {
   const form = new FormData()
   form.append('file', file)
+  const headers: Record<string, string> = { 'x-user-id': getUserId() }
+  if (agentId) headers['x-agent-id'] = agentId
   const res = await fetch(`${API_BASE}/config/upload`, {
     method: 'POST',
     body: form,
-    headers: { 'x-user-id': getUserId() },
+    headers,
   })
   return res.json()
 }

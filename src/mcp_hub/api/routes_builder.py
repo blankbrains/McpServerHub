@@ -6,7 +6,7 @@ import io
 import zipfile
 
 from fastapi import APIRouter, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from mcp_hub.core.server_builder import ServerBuilder
 
@@ -59,12 +59,10 @@ async def generate_project(
             zf.writestr(rel_path, content.encode("utf-8"))
     buf.seek(0)
 
-    return FileResponse(
-        buf,
+    return Response(
+        content=buf.getvalue(),
         media_type="application/zip",
-        filename=f"{name}.zip",
         headers={
             "Content-Disposition": f'attachment; filename="{name}.zip"',
-            "Content-Type": "application/zip",
         },
     )

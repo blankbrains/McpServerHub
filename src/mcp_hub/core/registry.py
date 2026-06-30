@@ -28,6 +28,11 @@ class Registry:
             repo = ServerRepository(session)
             return await repo.get_by_id(server_id)
 
+    async def get_all(self) -> list[dict]:
+        async with async_session_factory() as session:
+            repo = ServerRepository(session)
+            return await repo.get_all()
+
     async def get_installed(self) -> list[dict]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
