@@ -183,7 +183,7 @@ export async function exportConfig(share: boolean): Promise<Blob> {
 }
 
 export async function searchAdvanced(params: {
-  q?: string; category?: string; tag?: string; author?: string; language?: string; install_type?: string; security_level?: string; sort?: string; page?: number; page_size?: number
+  q?: string; category?: string; tag?: string; author?: string; language?: string; install_type?: string; security_level?: string; tracked_filter?: string; sort?: string; page?: number; page_size?: number
 }): Promise<{ success: boolean; data: ServerInfo[]; meta: { total: number; page: number; page_size: number } }> {
   const qs = new URLSearchParams()
   if (params.q) qs.set('q', params.q)

@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 
-def _record_call(server_id: str, tool_name: str) -> None:
+def _record_call(server_id: str, tool_name: str, duration_ms: int = 0, status: str = "ok") -> None:
     """异步记录一次 MCP 工具调用。"""
     try:
         from mcp_hub.db.database import async_session_factory
@@ -27,7 +27,8 @@ def _record_call(server_id: str, tool_name: str) -> None:
                 session.add(UsageStatsModel(
                     server_id=server_id,
                     tool_name=tool_name,
-                    status="ok",
+                    status=status,
+                    duration_ms=duration_ms,
                 ))
                 await session.commit()
 
@@ -250,13 +251,15 @@ class McpGateway:
 
             server = self._servers[target_sid]
 
-            # 记录本次调用（异步，不阻塞）
-            _record_call(target_sid, tool_name)
-
+            # 记录本次调用（计时 + 异步写入）
+            import time as _time
+            _t0 = _time.time()
             result = await server._send_request("tools/call", {
                 "name": tool_name,
                 "arguments": arguments,
             })
+            _duration_ms = int((_time.time() - _t0) * 1000)
+            _record_call(target_sid, tool_name, _duration_ms, "ok" if result is not None else "error")
             if result is None:
                 return {
                     "jsonrpc": "2.0",
