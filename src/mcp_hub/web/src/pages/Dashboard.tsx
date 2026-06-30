@@ -18,6 +18,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedLog, setSelectedLog] = useState<string>('')
+  const [logSearchQuery, setLogSearchQuery] = useState('')
+  const [logSearching, setLogSearching] = useState(false)
+  const [logResults, setLogResults] = useState<any[]>([])
   const [favorites, setFavorites] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
   })
@@ -320,22 +323,63 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Log Viewer */}
+      {/* Log Viewer + Search */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">📋 日志</h2>
-          <select
-            value={selectedLog}
-            onChange={(e) => setSelectedLog(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white"
-          >
-            <option value="">选择 Server 查看日志...</option>
-            {installed.map((s) => (
-              <option key={s.id} value={s.id}>{s.id}</option>
-            ))}
-          </select>
+        <div className="flex items-center justify-between mb-4 gap-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex-shrink-0">📋 日志</h2>
+          <div className="flex items-center gap-2 flex-1">
+            <select
+              value={selectedLog}
+              onChange={(e) => setSelectedLog(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="">选择 Server...</option>
+              {installed.map((s) => (
+                <option key={s.id} value={s.id}>{s.id}</option>
+              ))}
+            </select>
+            <form className="flex gap-1.5" onSubmit={async (e) => {
+              e.preventDefault()
+              if (!logSearchQuery.trim()) return
+              setLogSearching(true); setLogResults([])
+              try {
+                const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`)
+                const d = await r.json()
+                setLogResults(d.data || [])
+              } catch { setLogResults([]) }
+              finally { setLogSearching(false) }
+            }}>
+              <input
+                type="text" value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)}
+                placeholder="搜索 error、timeout..."
+                className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs w-36 focus:ring-1 focus:ring-blue-400 outline-none"
+              />
+              <button type="submit" disabled={logSearching}
+                className="px-2 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200 disabled:opacity-50">
+                {logSearching ? '搜索中...' : '搜索'}
+              </button>
+            </form>
+          </div>
         </div>
-        <LogViewer serverId={selectedLog} />
+        {logResults.length > 0 && (
+          <div className="mb-3 bg-yellow-50 rounded-lg border border-yellow-200 p-3 max-h-48 overflow-y-auto space-y-1.5">
+            <p className="text-xs text-yellow-700 font-medium mb-1">搜索结果: {logResults.length} 条匹配</p>
+            {logResults.map((r: any, i: number) => (
+              <div key={i} className="text-xs font-mono">
+                <span className="text-gray-500">[{r.server}]</span>{' '}
+                {r.context_before?.map((l: string, j: number) => <div key={`b${j}`} className="text-gray-300 pl-4">{l}</div>)}
+                <span className="text-red-600 font-semibold">L{r.line_number}: {r.match}</span>
+                {r.context_after?.map((l: string, j: number) => <div key={`a${j}`} className="text-gray-300 pl-4">{l}</div>)}
+              </div>
+            ))}
+            <button onClick={() => setLogResults([])} className="text-xs text-gray-400 hover:text-gray-600">清除结果</button>
+          </div>
+        )}
+        {selectedLog ? <LogViewer serverId={selectedLog} /> : (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-sm">
+            选择一个 Server 查看实时日志，或输入关键词跨 Server 搜索
+          </div>
+        )}
       </section>
 
       {/* Trending */}

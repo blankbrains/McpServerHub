@@ -250,6 +250,25 @@ export default function MyConfig() {
                     ) : (
                       <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">未匹配</span>
                     )}
+                    <input
+                      type="text"
+                      defaultValue={(s as any).group_name || ''}
+                      placeholder="分组..."
+                      onBlur={async (e) => {
+                        const gname = e.target.value.trim()
+                        if (!gname && !(s as any).group_name) return
+                        const uid = localStorage.getItem('mcp_hub_user')
+                        if (!uid) return
+                        try {
+                          await fetch('/api/v1/config/groups/set', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+                            body: JSON.stringify({ server_id: s.hub_id || s.name, group_name: gname }),
+                          })
+                        } catch {}
+                      }}
+                      className="px-1.5 py-0.5 text-xs border border-gray-200 rounded w-20 bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
                   </div>
                   <p className="text-xs text-gray-400 truncate mt-0.5 font-mono">{s.command || '—'}</p>
                 </div>

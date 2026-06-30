@@ -150,6 +150,36 @@ export default function ConfigPage() {
           className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 mb-2">
           {downloading ? '⏳ 生成中...' : `📥 下载 ${agent?.name || ''} 配置文件`}
         </button>
+        <div className="flex gap-2 mb-2">
+          <button onClick={async () => {
+            try {
+              const r = await fetch('/api/v1/config/backup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-user-id': localStorage.getItem('mcp_hub_user') || 'anonymous' },
+                body: JSON.stringify({ label: '' }),
+              }).then(r => r.json())
+              setMessage(r.success ? '✅ 配置已备份' : `❌ ${r.message}`)
+            } catch { setMessage('❌ 备份失败') }
+          }}
+          className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+          💾 备份配置
+          </button>
+          <button onClick={async () => {
+            try {
+              const r = await fetch('/api/v1/config/diff', {
+                headers: { 'x-user-id': localStorage.getItem('mcp_hub_user') || 'anonymous' },
+              }).then(r => r.json())
+              if (r.data) {
+                const d = r.data
+                if (d.in_sync) setMessage('✅ 配置与 Hub 完全同步')
+                else setMessage(`⚠️ 差异: 本地${d.only_local.length}个独有, Hub${d.only_hub.length}个独有, ${d.different.length}个不一致`)
+              }
+            } catch { setMessage('❌ 差异检查失败') }
+          }}
+          className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+          🔍 检查差异
+          </button>
+        </div>
         {message && (
           <div className={`p-3 rounded-lg text-sm ${message.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             {message}
