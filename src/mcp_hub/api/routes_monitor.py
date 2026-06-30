@@ -8,6 +8,9 @@ from sqlalchemy import func, select
 
 from mcp_hub.core.monitor import Monitor
 from mcp_hub.core.process_manager import get_process_manager
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.token_analyzer import TokenAnalyzer
 from mcp_hub.db.database import async_session_factory
@@ -79,13 +82,13 @@ async def monitor_dashboard():
         reliability = await monitor.calculate_reliability(sid)
         score = reliability.reliability_score
 
-        # Token 消耗分析
+        # Token 消耗分析（analyze_server 是同步方法，需要 server dict）
         tokens = 0
         try:
-            report = await analyzer.analyze_server(sid, [])
+            report = analyzer.analyze_server(s)
             tokens = report.total_tokens if report else 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("monitor.token_analysis_failed", server_id=sid, error=str(e))
         total_tokens_all += tokens
 
         # 调用次数（基于 usage_stats 真实调用计数）

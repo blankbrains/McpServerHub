@@ -279,7 +279,7 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
                             "security_level": "reviewed",
                         })
                     except Exception:
-                        pass
+                        logger.warning("config.register_discovered_failed", name=name, source=resolved.get("source"))
                 else:
                     # 线上也查不到，才标为自定义
                     unmatched.append(entry)
@@ -298,7 +298,7 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
                         })
                         entry["registered_id"] = sid
                     except Exception:
-                        pass
+                        logger.warning("config.register_custom_failed", name=name)
             else:
                 entry["matched"] = False
                 not_in_hub.append(entry)
