@@ -120,6 +120,21 @@ export default function ServerDetail() {
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
   const handleInstall = async () => {
+    // 安装前预检
+    const cmd = (server as any).install_command || ''
+    if (cmd) {
+      try {
+        const preCheckRes = await fetch('/api/v1/servers/pre-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd }),
+        }).then(r => r.json())
+        if (!preCheckRes.can_install) {
+          const fails = preCheckRes.checks?.filter((c: any) => c.status === 'fail').map((c: any) => c.detail).join(', ')
+          if (!window.confirm(`预检发现问题:\n${fails || '环境不满足'}\n\n仍要尝试安装吗？`)) return
+        }
+      } catch {}
+    }
     try {
       const r = await installServer(server.id)
       setMessage(r.message || r.data?.detail || '安装完成')
