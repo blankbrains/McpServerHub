@@ -21,6 +21,13 @@ export default function Market() {
   const [tags, setTags] = useState<any[]>([])
   const [authors, setAuthors] = useState<any[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [message, setMessage] = useState('')
+  const [addedServers, setAddedServers] = useState<Set<string>>(() => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+      return new Set(existing.map((x: any) => x.name || x.hub_id))
+    } catch { return new Set() }
+  })
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -147,6 +154,11 @@ export default function Market() {
         </div>
       )}
 
+      {message && (
+        <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: message.startsWith('✅') ? '#F0FDF4' : '#FEF2F2', color: message.startsWith('✅') ? '#166534' : '#991B1B' }}>
+          {message}
+        </div>
+      )}
       <p className="text-sm text-gray-500">
         共 {total} 个结果 {totalPages > 1 && <span>· 第 {page}/{totalPages} 页</span>}
       </p>
@@ -159,23 +171,44 @@ export default function Market() {
             {servers.map((s) => (
               <div key={s.id} className="relative group">
                 <ServerCard server={s} />
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-                    if (!existing.find((x: any) => x.name === s.id)) {
-                      const cmd = 'install_command' in s ? (s as any).install_command : ''
-                      existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
-                      localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
-                      alert(`已添加 ${s.id} 到我的配置`)
-                    } else {
-                      alert('该 Server 已在你的配置中')
-                    }
-                  }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
-                >
-                  + 添加
-                </button>
+                <div className="absolute top-2 right-2">
+                  {addedServers.has(s.id) ? (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (!window.confirm(`从配置中移除 "${s.id}"？`)) return
+                        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+                        const filtered = existing.filter((x: any) => x.name !== s.id && x.hub_id !== s.id)
+                        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(filtered))
+                        const next = new Set(addedServers)
+                        next.delete(s.id)
+                        setAddedServers(next)
+                        setMessage(`已从配置中移除 ${s.id}`)
+                        setTimeout(() => setMessage(''), 3000)
+                      }}
+                      className="px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700 transition-colors opacity-100"
+                      title="点击移除"
+                    >
+                      ✓ 已添加
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault()
+                        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+                        const cmd = 'install_command' in s ? (s as any).install_command : ''
+                        existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
+                        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+                        setAddedServers(new Set([...addedServers, s.id]))
+                        setMessage(`✅ 已添加 ${s.id} 到我的配置`)
+                        setTimeout(() => setMessage(''), 3000)
+                      }}
+                      className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      + 添加
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             {servers.length === 0 && <div className="col-span-3 text-center py-16 text-gray-400">😕 没有找到匹配的 Server</div>}

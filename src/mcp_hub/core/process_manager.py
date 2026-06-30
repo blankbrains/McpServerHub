@@ -22,6 +22,7 @@ class ManagedProcess:
     started_at: float | None = None
     restart_count: int = 0
     log_file: Path | None = None
+    log_fd: int | None = None  # log file descriptor (closed on kill)
     last_keepalive_ok: float | None = None  # timestamp of last successful keepalive ping
 
 
@@ -80,6 +81,7 @@ class ProcessManager:
                 process=process,
                 started_at=asyncio.get_event_loop().time(),
                 log_file=log_file,
+                log_fd=log_fd.fileno(),
             )
             self._processes[server_id] = managed
             logger.info(
@@ -134,31 +136,42 @@ class ProcessManager:
 
     async def kill(self, server_id: str, timeout: float = 5.0) -> bool:
         """优雅关闭进程。"""
-        proc = self._processes.get(server_id)
-        if not proc or not proc.process:
-            return False
+        async with self._lock:
+            proc = self._processes.get(server_id)
+            if not proc or not proc.process:
+                return False
 
-        pid = proc.process.pid
-        if pid is None:
-            return False
+            pid = proc.process.pid
+            if pid is None:
+                return False
 
-        try:
-            proc.process.terminate()
             try:
-                await asyncio.wait_for(proc.process.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
-                proc.process.kill()
-                await proc.process.wait()
-        except ProcessLookupError:
-            pass
-        finally:
-            self._processes.pop(server_id, None)
-            logger.info("process.killed", server_id=server_id, pid=pid)
+                proc.process.terminate()
+                try:
+                    await asyncio.wait_for(proc.process.wait(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    proc.process.kill()
+                    await proc.process.wait()
+            except ProcessLookupError:
+                pass
+            finally:
+                self._processes.pop(server_id, None)
+                logger.info("process.killed", server_id=server_id, pid=pid)
 
-        if proc.log_file:
-            with open(proc.log_file, "a", encoding="utf-8") as f:
-                f.write(f"--- {datetime.now().isoformat()} Stopped ---\n")
-        return True
+            if proc.log_file:
+                try:
+                    with open(proc.log_file, "a", encoding="utf-8") as f:
+                        f.write(f"--- {datetime.now().isoformat()} Stopped ---\n")
+                except OSError:
+                    pass
+            # Close the log file descriptor if still open
+            if proc.log_fd is not None:
+                try:
+                    os.close(proc.log_fd)
+                except OSError:
+                    pass
+                proc.log_fd = None
+            return True
 
     def get(self, server_id: str) -> ManagedProcess | None:
         return self._processes.get(server_id)
@@ -172,3 +185,20 @@ class ProcessManager:
     def is_running(self, server_id: str) -> bool:
         proc = self._processes.get(server_id)
         return bool(proc and proc.process and proc.process.returncode is None)
+
+    async def cleanup_all(self) -> None:
+        """关闭所有日志文件描述符并清理进程（测试用）。"""
+        async with self._lock:
+            for proc in list(self._processes.values()):
+                if proc.log_fd is not None:
+                    try:
+                        os.close(proc.log_fd)
+                    except OSError:
+                        pass
+                    proc.log_fd = None
+                if proc.process and proc.process.returncode is None:
+                    try:
+                        proc.process.terminate()
+                    except ProcessLookupError:
+                        pass
+            self._processes.clear()

@@ -13,30 +13,51 @@ from mcp_hub.core.registry import Registry
 @click.command("start")
 @click.argument("server_name", required=False)
 def start(server_name: str | None):
-    """启动 Server。"""
+    """启动 Server (支持 all: 启动所有已安装但未运行的)。"""
     async def _run():
         registry = Registry()
         pm = ProcessManager()
 
-        if server_name:
-            server_id = f"@community/{server_name}" if "/" not in server_name else server_name
-            server = await registry.get_by_id(server_id)
-            if not server:
-                click.echo(f"❌ Server '{server_id}' 未找到")
-                return
+        if not server_name:
+            click.echo("⚠️ 请指定要启动的 Server 名称, 或使用 mcp start all")
+            return
 
-            command = server.get("install_command", "")
-            if not command:
-                click.echo(f"❌ {server_id} 没有安装命令")
-                return
+        if server_name == "all":
+            servers = await registry.get_installed()
+            started = 0
+            for s in servers:
+                sid = s["id"]
+                if pm.is_running(sid):
+                    continue
+                command = s.get("install_command", "")
+                if not command:
+                    continue
+                parts = command.split()
+                try:
+                    await pm.spawn(sid, parts[0], parts[1:])
+                    await registry.update_status(sid, "running")
+                    started += 1
+                    click.echo(f"  ✅ {sid} 已启动")
+                except Exception as e:
+                    click.echo(f"  ❌ {sid} 启动失败: {e}")
+            click.echo(f"✅ 已启动 {started} 个 Server")
+            return
 
-            parts = command.split()
-            await pm.spawn(server_id, parts[0], parts[1:])
-            await registry.update_status(server_id, "running")
-            click.echo(f"✅ {server_id} 已启动")
-        else:
-            click.echo("⚠️ 请指定要启动的 Server 名称")
-            click.echo("   用法: mcp start <server_name>")
+        server_id = f"@community/{server_name}" if "/" not in server_name else server_name
+        server = await registry.get_by_id(server_id)
+        if not server:
+            click.echo(f"❌ Server '{server_id}' 未找到")
+            return
+
+        command = server.get("install_command", "")
+        if not command:
+            click.echo(f"❌ {server_id} 没有安装命令")
+            return
+
+        parts = command.split()
+        await pm.spawn(server_id, parts[0], parts[1:])
+        await registry.update_status(server_id, "running")
+        click.echo(f"✅ {server_id} 已启动")
 
     asyncio.run(_run())
 
@@ -44,18 +65,31 @@ def start(server_name: str | None):
 @click.command("stop")
 @click.argument("server_name", required=False)
 def stop(server_name: str | None):
-    """停止 Server。"""
+    """停止 Server (支持 all: 停止所有运行中的)。"""
     async def _run():
         registry = Registry()
         pm = ProcessManager()
 
-        if server_name:
-            server_id = f"@community/{server_name}" if "/" not in server_name else server_name
-            await pm.kill(server_id)
-            await registry.update_status(server_id, "stopped")
-            click.echo(f"⏹ {server_id} 已停止")
-        else:
-            click.echo("⚠️ 请指定要停止的 Server 名称")
+        if not server_name:
+            click.echo("⚠️ 请指定要停止的 Server 名称, 或使用 mcp stop all")
+            return
+
+        if server_name == "all":
+            running = pm.list_running()
+            if not running:
+                click.echo("📭 没有运行中的 Server")
+                return
+            for proc in running:
+                await pm.kill(proc.server_id)
+                await registry.update_status(proc.server_id, "stopped")
+                click.echo(f"  ⏹ {proc.server_id} 已停止")
+            click.echo(f"✅ 已停止 {len(running)} 个 Server")
+            return
+
+        server_id = f"@community/{server_name}" if "/" not in server_name else server_name
+        await pm.kill(server_id)
+        await registry.update_status(server_id, "stopped")
+        click.echo(f"⏹ {server_id} 已停止")
 
     asyncio.run(_run())
 
@@ -135,5 +169,16 @@ def status_cmd(server_name: str | None):
                 table.add_row(status_icon, sid, f"v{ver}", "mcp start/stop")
 
             _console.print(table)
+
+            # 检查可用更新（不阻塞主流程）
+            try:
+                from mcp_hub.core.version_manager import VersionManager
+                vm = VersionManager()
+                updates = await vm.check_updates()
+                if updates:
+                    _console.print(f"\n[yellow]⚠️  {len(updates)} 个 Server 有可用更新。"
+                                   f"运行 [bold]mcp update[/bold] 查看详情[/yellow]")
+            except Exception:
+                pass  # 网络错误不阻塞 status
 
     asyncio.run(_run())

@@ -8,6 +8,8 @@ const navItems = [
   { path: '/my-servers', label: '我的 Server', icon: '📦' },
   { path: '/my-config', label: '配置', icon: '⚙️' },
   { path: '/builder', label: '构建', icon: '🛠️' },
+  { path: '/publish', label: '发布', icon: '📤' },
+  { path: '/login', label: '登录', icon: '👤' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

@@ -158,17 +158,25 @@ export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
 export async function uploadConfig(file: File): Promise<any> {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch(`${API_BASE}/config/upload`, { method: 'POST', body: form })
+  const res = await fetch(`${API_BASE}/config/upload`, {
+    method: 'POST',
+    body: form,
+    headers: { 'x-user-id': getUserId() },
+  })
   return res.json()
 }
 
 export async function downloadConfig(): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/config/download`)
+  const res = await fetch(`${API_BASE}/config/download`, {
+    headers: { 'x-user-id': getUserId() },
+  })
   return res.blob()
 }
 
 export async function exportConfig(share: boolean): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/export/config?share=${share}`)
+  const res = await fetch(`${API_BASE}/export/config?share=${share}`, {
+    headers: { 'x-user-id': getUserId() },
+  })
   return res.blob()
 }
 
@@ -186,7 +194,9 @@ export async function searchAdvanced(params: {
   if (params.sort) qs.set('sort', params.sort)
   if (params.page) qs.set('page', String(params.page))
   qs.set('page_size', '9')
-  const res = await fetch(`${API_BASE}/search/advanced?${qs}`)
+  const res = await fetch(`${API_BASE}/search/advanced?${qs}`, {
+    headers: { 'x-user-id': getUserId() },
+  })
   return res.json()
 }
 

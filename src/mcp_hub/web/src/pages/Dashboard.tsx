@@ -21,7 +21,9 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<ServerInfo[]>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
   })
-  const [uploadResult, setUploadResult] = useState<any>(null)
+  const [uploadResult, setUploadResult] = useState<any>(() => {
+    try { return JSON.parse(localStorage.getItem('mcp_hub_upload_result') || 'null') } catch { return null }
+  })
   const [gatewayUrl, setGatewayUrl] = useState(window.location.origin + '/api/v1')
   // Monitor states
   const [monitorSummary, setMonitorSummary] = useState<any>(null)
@@ -87,6 +89,7 @@ export default function Dashboard() {
     if (!file) return
     const r = await uploadConfig(file)
     setUploadResult(r)
+    localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
   }
 
   if (loading) {
@@ -177,7 +180,11 @@ export default function Dashboard() {
           </div>
           {uploadResult && (
             <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
-              <p>{uploadResult.message || '配置上传成功'}</p>
+              <div className="flex justify-between items-start">
+                <p>{uploadResult.message || '配置上传成功'}</p>
+                <button onClick={() => { setUploadResult(null); localStorage.removeItem('mcp_hub_upload_result') }}
+                  className="text-blue-400 hover:text-blue-600 text-xs ml-2">✕ 清除</button>
+              </div>
               {uploadResult.data?.matched?.length > 0 && (
                 <div>
                   <p className="font-medium mt-2">✅ 可在 Hub 中安装的 Server：</p>

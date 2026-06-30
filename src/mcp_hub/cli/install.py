@@ -19,55 +19,54 @@ console = Console()
 
 
 @click.command("install")
-@click.argument("server_id", required=True)
+@click.argument("server_ids", required=True, nargs=-1)
 @click.option("--json", "json_output", is_flag=True)
 @click.option("--force", is_flag=True, help="跳过安全检查")
-def install(server_id: str, json_output: bool, force: bool):
-    """安装 MCP Server（安装前自动安全扫描）。"""
-    async def _run():
+@click.option("--dry-run", "dry_run", is_flag=True, help="预览模式（只检查不安装）")
+def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: bool):
+    """安装 MCP Server（安装前自动安全扫描，支持多参数）。"""
+    async def _install_one(sid: str) -> dict:
         registry = Registry()
-        server_data = await registry.get_by_id(server_id)
+        server_data = await registry.get_by_id(sid)
         if not server_data:
-            console.print(f"[red]❌ Server '{server_id}' 未找到[/red]")
-            console.print("   提示: 先用 [bold]mcp search[/bold] 搜索可用的 Server")
-            return
+            return {"server_id": sid, "success": False, "error": "未找到"}
 
-        # ── 安全预扫描 ────────────────────────────────────
+        # ── 安全预扫描 ──
         if not force:
-            console.print(f"[dim]🔍 正在扫描 {server_id} 安全性...[/dim]")
+            console.print(f"[dim]🔍 正在扫描 {sid} 安全性...[/dim]")
             scanner = SecurityScanner()
             report = await scanner.scan(server_data)
 
             if report.score < 40:
                 high_issues = [f for f in report.findings if f.severity in ("critical", "high")]
-                blocked_text = (
-                    f"[bold red]🔴 安全评分: {report.score}/100 — {report.level}[/bold red]\n\n"
-                    f"此 Server 被判定为 [bold red]危险[/bold red]，安装将带来严重安全风险！\n\n"
-                    f"关键问题 ({len(high_issues)} 项):\n"
-                    + "\n".join(f"  • {f.title}" for f in high_issues)
-                )
                 console.print(Panel.fit(
-                    blocked_text,
-                    title="⛔ 安装已阻止",
+                    f"[bold red]🔴 安全评分: {report.score}/100[/bold red]\n"
+                    + "\n".join(f"  • {f.title}" for f in high_issues),
+                    title=f"⛔ {sid} 安装已阻止",
                     border_style="red",
                 ))
-                console.print("[yellow]提示: 使用 --force 参数强制安装（不推荐）[/yellow]")
-                return
+                return {"server_id": sid, "success": False, "error": f"安全评分 {report.score}/100"}
             elif report.score < 70:
                 console.print(Panel.fit(
-                    f"[bold yellow]🟡 安全评分: {report.score}/100 — {report.level}[/bold]\n\n"
-                    f"此 Server 有一些安全问题，建议先评估风险。\n"
-                    f"运行 [bold]mcp security {server_id}[/bold] 查看详情。",
-                    title="⚡ 安全提醒",
+                    f"[bold yellow]🟡 安全评分: {report.score}/100 — {report.level}[/bold]",
+                    title=f"⚡ {sid} 安全提醒",
                     border_style="yellow",
                 ))
                 if not click.confirm("继续安装?", default=False):
-                    console.print("[yellow]安装已取消[/yellow]")
-                    return
+                    return {"server_id": sid, "success": False, "error": "用户取消"}
             else:
-                console.print(f"[green]🟢 安全评分: {report.score}/100 — 安全[/green]")
+                console.print(f"[green]🟢 {sid} 安全评分: {report.score}/100 — 安全[/green]")
 
-        # ── 执行安装 ──────────────────────────────────────
+        # ── 预览模式 ──
+        if dry_run:
+            console.print(f"\n[cyan]🔍 预览安装 {sid}[/cyan]")
+            console.print(f"   安装命令: {server_data.get('install_command', 'N/A')}")
+            console.print(f"   版本: {server_data.get('latest_version', server_data.get('version', '?'))}")
+            console.print(f"   类型: {server_data.get('install_type', '?')}")
+            console.print(f"[dim]   运行 mcp install {sid} 来安装[/dim]")
+            return {"server_id": sid, "success": True, "dry_run": True}
+
+        # ── 执行安装 ──
         meta = ServerMeta(
             name=server_data["id"],
             version=server_data.get("latest_version", server_data.get("version", "1.0.0")),
@@ -84,23 +83,46 @@ def install(server_id: str, json_output: bool, force: bool):
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            progress.add_task(f"📦 正在安装 {server_id}...", total=None)
+            progress.add_task(f"📦 正在安装 {sid}...", total=None)
             installer = Installer()
             result = await installer.install(meta)
 
         if result["success"]:
-            await registry.update_status(server_id, "stopped")
-            await registry.increment_download(server_id)
-            if json_output:
-                console.print_json(json.dumps(result))
-            else:
-                console.print(f"[green]✅ 安装成功！{result.get('detail', '')}[/green]")
-                if result.get("config_written"):
-                    console.print("   📝 已自动配置到 [bold]mcp.json[/bold]")
-                display_name = server_id.split("/")[-1]
-                console.print(f"   ▶️  运行 [bold]mcp start {display_name}[/bold] 启动")
-        else:
-            console.print(f"[red]❌ 安装失败: {result.get('error', '未知错误')}[/red]")
+            registry2 = Registry()
+            await registry2.update_status(sid, "stopped")
+            await registry2.increment_download(sid)
+            return {"server_id": sid, "success": True, "detail": result.get("detail", "")}
+        return {"server_id": sid, "success": False, "error": result.get("error", "安装失败")}
+
+    async def _run():
+        results = []
+        for sid in server_ids:
+            server_id = f"@community/{sid}" if "/" not in sid else sid
+            r = await _install_one(server_id)
+            results.append(r)
+
+        if json_output:
+            from rich import print_json
+            print_json(json.dumps(results))
+            return
+
+        ok = [r for r in results if r.get("success")]
+        failed = [r for r in results if not r.get("success")]
+        dry_run_results = [r for r in results if r.get("dry_run")]
+
+        if dry_run_results:
+            console.print(f"\n[cyan]✅ 预览完成: {len(dry_run_results)} 个 Server[/cyan]")
+            return
+
+        if ok:
+            for r in ok:
+                console.print(f"[green]✅ {r['server_id']} 安装成功！[/green]")
+            console.print(f"[green]✅ 成功安装 {len(ok)}/{len(results)} 个 Server[/green]")
+        if failed:
+            for r in failed:
+                console.print(f"[red]❌ {r['server_id']} 失败: {r.get('error', '')}[/red]")
+            if len(failed) == len(results):
+                console.print("[red]全部安装失败，请检查 Server 名称是否正确[/red]")
 
     asyncio.run(_run())
 

@@ -59,6 +59,7 @@ export default function MyConfig() {
   }
 
   const removeServer = (name: string) => {
+    if (!window.confirm(`确定要移除 "${name}" 吗？`)) return
     setServers(prev => prev.filter(s => s.name !== name))
     setMessage(`已移除 ${name}`)
     setTimeout(() => setMessage(''), 3000)
@@ -148,8 +149,12 @@ export default function MyConfig() {
         a.href = url; a.download = 'mcp-hub-config.json'; a.click()
         URL.revokeObjectURL(url)
       }
-    } catch { setMessage('下载失败') }
+    } catch (e) { setMessage('❌ 下载失败: ' + (e instanceof Error ? e.message : '')) }
     finally { setDownloading(false) }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载配置中...</div></div>
   }
 
   return (
@@ -212,7 +217,7 @@ export default function MyConfig() {
           </h2>
           <div className="flex gap-2">
             <button
-              onClick={() => { setServers([]); localStorage.removeItem('mcp_hub_my_servers'); setMessage('已清空') }}
+              onClick={() => { if (window.confirm('确定要清空所有配置吗？此操作不可撤销。')) { setServers([]); localStorage.removeItem('mcp_hub_my_servers'); setMessage('已清空') } }}
               className="text-xs text-red-500 hover:text-red-700"
             >
               清空

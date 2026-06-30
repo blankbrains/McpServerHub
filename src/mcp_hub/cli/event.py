@@ -59,6 +59,32 @@ def list_events():
 
 @event.command("history")
 @click.argument("topic", required=False)
-def event_history(_topic: str | None):
+@click.option("--limit", default=50, type=int, help="显示条数")
+def event_history(topic: str | None, limit: int):
     """查看事件历史。"""
-    click.echo("📋 事件历史 (开发中)")
+    async def _run():
+        try:
+            from mcp_hub.db.database import async_session_factory
+            from mcp_hub.db.models import EventModel
+            from sqlalchemy import select, exc as sa_exc
+
+            async with async_session_factory() as session:
+                query = select(EventModel).order_by(EventModel.created_at.desc()).limit(limit)
+                if topic:
+                    query = query.where(EventModel.topic == topic)
+                result = await session.execute(query)
+                events = result.scalars().all()
+
+            if not events:
+                click.echo("📭 暂无事件记录")
+                return
+
+            click.echo(f"📋 事件历史 (最近 {len(events)} 条):")
+            for e in events:
+                ts = e.created_at.strftime('%m-%d %H:%M:%S') if e.created_at else '未知时间'
+                click.echo(f"  [{ts}] {e.topic} ← {e.publisher}")
+        except sa_exc.OperationalError:
+            click.echo("📭 暂无事件记录")
+        except Exception as e:
+            click.echo(f"⚠️ 查询失败: {e}")
+    asyncio.run(_run())
