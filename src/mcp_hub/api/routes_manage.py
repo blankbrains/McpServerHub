@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from pydantic import BaseModel
 
 from mcp_hub.core.installer import Installer
@@ -85,9 +85,9 @@ async def get_status(server_id: str):
 
 
 @router.post("/servers/{server_id:path}/start")
-async def start_server(server_id: str):
+async def start_server(server_id: str, x_user_id: str = Header("anonymous")):
     """启动 Server。"""
-    # 检查是否已被禁用
+    # 检查是否已被当前用户禁用
     try:
         from mcp_hub.db.database import async_session_factory
         from mcp_hub.db.models import UserServerModel
@@ -95,7 +95,10 @@ async def start_server(server_id: str):
         async with async_session_factory() as session:
             result = await session.execute(
                 select(UserServerModel.enabled)
-                .where(UserServerModel.server_id == server_id)
+                .where(
+                    UserServerModel.server_id == server_id,
+                    UserServerModel.user_id == x_user_id,
+                )
                 .limit(1)
             )
             row = result.fetchone()

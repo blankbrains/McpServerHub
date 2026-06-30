@@ -145,6 +145,9 @@ async def get_user_servers(x_user_id: str = Header("anonymous")):
                 "name": row.server_id,
                 "hub_id": row.server_id,
                 "matched": row.matched,
+                "enabled": row.enabled if row.enabled is not None else True,
+                "agent": row.agent or "",
+                "group_name": row.group_name or "",
             })
     return {"success": True, "data": servers}
 
