@@ -109,6 +109,10 @@ src/mcp_hub/
 | **📊 Token 分析** | tiktoken 精确计数 + 优化建议 + 同类对比 |
 | **🛠️ Server Builder** | 8 个工具模板 → 交互式 CLI 向导 + Web Builder |
 | **📈 质量监控** | 可靠性评分 (uptime×40%+7d×30%+响应×20%+1h×10%) |
+| **🔘 启用/禁用** | 我的 Server 中每个追踪的 Server 可独立启用或禁用 |
+| **📞 调用计数** | MCP 网关自动记录每次 tool call（含响应时长 duration_ms）|
+| **🎯 Agent 绑定** | 上传配置时选择 Claude Code/Cursor/Codex/Trae |
+| **📊 监控大屏** | 聚合所有 Server 状态/PID/调用/Token/可靠性的可视化看板 |
 
 ## 部署方式
 

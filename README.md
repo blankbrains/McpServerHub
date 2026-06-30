@@ -16,7 +16,7 @@
 ---
 
 <p align="center">
-  <b>980+ 个 MCP Server</b> · <b>46 个 CLI 命令</b> · <b>16 个分类</b> · <b>206 个测试</b><br>
+  <b>983+ 个 MCP Server</b> · <b>46 个 CLI 命令</b> · <b>16 个分类</b> · <b>286 个测试</b><br>
   搜索 → 安装 → 自动配置 → 管理。一个平台搞定。
 </p>
 
@@ -60,6 +60,9 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server、100k+ Sta
   📊 Token 分析 — 分析工具定义占上下文比，自动生成优化描述
   🛠️ Server Builder — 交互式/网页端创建 MCP Server 项目，下载 ZIP
   📈 质量监控  — Uptime 追踪、可靠性评分、最稳定 Server 排行榜
+  🔘 启用/禁用 — 我的 Server 中每个追踪的 Server 可独立启用或禁用
+  📞 调用计数  — MCP 网关自动记录每次 tool call，监控大屏展示真实使用量
+  🎯 Agent 绑定 — 上传配置时选择 Claude Code/Cursor 等 Agent，配置按需导出
 ```
 
 ---
@@ -327,6 +330,8 @@ http://localhost:3987
 | ✅ P6 | **完成** | 🛡️ 安全评分引擎 + 📊 Token 分析器 |
 | ✅ P7 | **完成** | 🛠️ MCP Server Builder（CLI + Web 下载） |
 | ✅ P8 | **完成** | 📈 质量监控网络 + 可靠性排行榜 |
+| ✅ P9 | **完成** | 🔘 启用/禁用开关 + 📞 真实调用计数 + 🎯 Agent 绑定 |
+| ✅ P10 | **完成** | 📊 监控大屏（Dashboard 聚合所有 Server 状态） |
 
 ---
 
