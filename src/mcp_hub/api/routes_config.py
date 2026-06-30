@@ -131,7 +131,7 @@ async def download_config():
 
 
 @router.get("/config/user-servers")
-async def get_user_servers(x_user_id: str = "anonymous"):
+async def get_user_servers(x_user_id: str = Header("anonymous")):
     """获取当前用户的 Server 配置列表（用户隔离）。"""
     async with async_session_factory() as session:
         result = await session.execute(
@@ -150,7 +150,7 @@ async def get_user_servers(x_user_id: str = "anonymous"):
 
 
 @router.post("/config/user-servers/save")
-async def save_user_servers(data: dict, x_user_id: str = "anonymous"):
+async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
     """保存当前用户的 Server 配置列表（覆盖式）。"""
     servers = data.get("servers", [])
     if not isinstance(servers, list):
