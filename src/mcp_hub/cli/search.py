@@ -20,16 +20,20 @@ console = Console()
 @click.argument("query", required=False, default="")
 @click.option("-c", "--category", help="按分类筛选")
 @click.option("--tag", help="按标签筛选")
+@click.option("--security-level", type=click.Choice(["verified", "reviewed", "unreviewed", "blocked"]),
+              help="按安全等级筛选")
 @click.option("--sort", type=click.Choice(["hot", "rating", "downloads", "new"]), default="hot")
 @click.option("--page", default=1, type=int)
 @click.option("--json-output", "json", is_flag=True, help="JSON 格式输出")
-def search(query: str, category: str | None, tag: str | None, sort: str, page: int, json: bool):
+def search(query: str, category: str | None, tag: str | None,
+           security_level: str | None, sort: str, page: int, json: bool):
     """搜索 MCP Server。"""
     async def _run():
         registry = Registry()
         results, total = await registry.search(
             q=query, category=category, tag=tag, sort=sort,
             page=page, page_size=20,
+            security_level=security_level,
         )
 
         if json:

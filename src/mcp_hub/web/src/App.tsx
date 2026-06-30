@@ -7,6 +7,8 @@ import MyServers from './pages/MyServers'
 import ConfigPage from './pages/ConfigPage'
 import Builder from './pages/Builder'
 import MyConfig from './pages/MyConfig'
+import Login from './pages/Login'
+import Publish from './pages/Publish'
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/my-config" element={<MyConfig />} />
         <Route path="/builder" element={<Builder />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/publish" element={<Publish />} />
       </Routes>
     </Layout>
   )

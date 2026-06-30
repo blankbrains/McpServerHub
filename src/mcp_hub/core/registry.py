@@ -17,10 +17,11 @@ class Registry:
         sort: str = "hot",
         page: int = 1,
         page_size: int = 20,
+        security_level: str | None = None,
     ) -> tuple[list[dict], int]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
-            return await repo.search(q, category, tag, sort, page, page_size)
+            return await repo.search(q, category, tag, sort, page, page_size, security_level)
 
     async def get_by_id(self, server_id: str) -> dict | None:
         async with async_session_factory() as session:
@@ -61,3 +62,13 @@ class Registry:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.register_server(server_data)
+
+    async def get_by_author(self, author: str) -> list[dict]:
+        async with async_session_factory() as session:
+            repo = ServerRepository(session)
+            return await repo.get_by_author(author)
+
+    async def unpublish_server(self, server_id: str) -> bool:
+        async with async_session_factory() as session:
+            repo = ServerRepository(session)
+            return await repo.delete_server(server_id)

@@ -60,6 +60,7 @@ class ServerRepository:
         sort: str = "hot",
         page: int = 1,
         page_size: int = 20,
+        security_level: str | None = None,
     ) -> tuple[list[dict], int]:
         """搜索 Server。"""
         query = select(ServerModel)
@@ -77,6 +78,8 @@ class ServerRepository:
             conditions.append(ServerModel.categories.ilike(f"%{category}%"))
         if tag:
             conditions.append(ServerModel.tags.ilike(f"%{tag}%"))
+        if security_level:
+            conditions.append(ServerModel.security_level == security_level)
 
         for cond in conditions:
             query = query.where(cond)
@@ -173,23 +176,38 @@ class ServerRepository:
                         setattr(server, key, value)
             server.updated_at = func.now()
         else:
-            new_server = ServerModel(
-                id=server_id,
-                name=data.get("name", server_id.split("/")[-1] if "/" in server_id else server_id),
-                description=data.get("description", ""),
-                author=data.get("author", ""),
-                categories=json.dumps(data.get("categories", [])),
-                tags=json.dumps(data.get("tags", [])),
-                install_type=data.get("install_type", "pip"),
-                install_package=data.get("install_package", ""),
-                install_command=data.get("install_command", ""),
-                homepage=data.get("homepage", ""),
-                license=data.get("license", "MIT"),
-            )
+            new_server = ServerModel(id=server_id)
+            for key, value in data.items():
+                if hasattr(new_server, key) and key not in ("id", "created_at"):
+                    if isinstance(value, (list, dict)):
+                        setattr(new_server, key, json.dumps(value))
+                    elif value is not None:
+                        setattr(new_server, key, value)
             self.session.add(new_server)
 
         await self.session.commit()
         return server_id
+
+    async def get_by_author(self, author: str) -> list[dict]:
+        """按作者查询发布的 Server。"""
+        result = await self.session.execute(
+            select(ServerModel)
+            .where(ServerModel.author == author)
+            .order_by(ServerModel.created_at.desc())
+        )
+        return [self._server_to_dict(s) for s in result.scalars().all()]
+
+    async def delete_server(self, server_id: str) -> bool:
+        """删除 Server 记录。"""
+        result = await self.session.execute(
+            select(ServerModel).where(ServerModel.id == server_id)
+        )
+        server = result.scalar_one_or_none()
+        if not server:
+            return False
+        await self.session.delete(server)
+        await self.session.commit()
+        return True
 
 
 class ReviewRepository:

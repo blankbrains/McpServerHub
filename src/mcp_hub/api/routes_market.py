@@ -19,12 +19,14 @@ async def search_servers(
     sort: str = Query("hot", description="排序: hot/rating/downloads/new"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    security_level: str | None = Query(None, description="安全等级: verified/reviewed/unreviewed/blocked"),
 ):
     """搜索 MCP Server。"""
     registry = Registry()
     results, total = await registry.search(
         q=q, category=category, tag=tag, sort=sort,
         page=page, page_size=page_size,
+        security_level=security_level,
     )
     return SearchResponse(
         data=results,

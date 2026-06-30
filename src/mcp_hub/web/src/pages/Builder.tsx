@@ -6,21 +6,46 @@ interface Tool {
   params: Array<{ name: string; type: string; description: string }>
 }
 
+const STORAGE_KEY = 'mcp_hub_builder_form'
+
+function loadForm() {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (saved) return JSON.parse(saved)
+  } catch {}
+  return null
+}
+
+function saveForm(data: any) {
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch {}
+}
+
 export default function Builder() {
-  const [name, setName] = useState('my-mcp-server')
-  const [language, setLanguage] = useState<'python' | 'typescript'>('python')
-  const [description, setDescription] = useState('')
-  const [author, setAuthor] = useState('')
-  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(['hello', 'echo']))
+  const saved = loadForm()
+  const [name, setName] = useState(saved?.name || 'my-mcp-server')
+  const [language, setLanguage] = useState<'python' | 'typescript'>(saved?.language || 'python')
+  const [description, setDescription] = useState(saved?.description || '')
+  const [author, setAuthor] = useState(saved?.author || '')
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set(saved?.tools || ['hello', 'echo']))
   const [availableTools, setAvailableTools] = useState<Tool[]>([])
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  // 自动保存表单状态到 sessionStorage
+  useEffect(() => {
+    saveForm({
+      name, language, description, author,
+      tools: Array.from(selectedTools),
+    })
+  }, [name, language, description, author, selectedTools])
 
   useEffect(() => {
     fetch('/api/v1/builder/tools')
       .then(r => r.json())
       .then(r => { if (r.data) setAvailableTools(r.data) })
-      .catch(() => {})
+      .catch(() => setError('无法加载工具模板列表'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -34,7 +59,9 @@ export default function Builder() {
   }
 
   const handleDownload = async () => {
-    if (!name.trim()) return
+    if (!name.trim()) { setError('请输入项目名称'); return }
+    setError('')
+    setSuccess('')
     setDownloading(true)
     try {
       const tools = Array.from(selectedTools).join(',')
@@ -46,16 +73,22 @@ export default function Builder() {
         tools,
       })
       const res = await fetch(`/api/v1/builder/generate?${params}`)
-      if (!res.ok) throw new Error('生成失败')
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(errText ? `服务器错误: ${errText}` : `生成失败 (${res.status})`)
+      }
       const blob = await res.blob()
+      if (blob.size === 0) throw new Error('生成的文件为空')
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${name.trim()}.zip`
       a.click()
       URL.revokeObjectURL(url)
+      setSuccess(`✅ 项目 "${name}" 已生成并下载`)
+      setTimeout(() => setSuccess(''), 5000)
     } catch (e: any) {
-      alert(e.message || '下载失败')
+      setError('❌ ' + (e.message || '下载失败'))
     } finally {
       setDownloading(false)
     }
@@ -70,6 +103,18 @@ export default function Builder() {
           <p className="text-sm text-gray-500">在线生成 MCP Server 项目，下载 ZIP 直接使用</p>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+          <button onClick={() => setError('')} className="float-right text-red-400 hover:text-red-600">✕</button>
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+          {success}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         {/* 项目名称 */}
@@ -113,11 +158,11 @@ export default function Builder() {
 
         {/* 工具选择 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">工具模板</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">工具模板 <span className="text-gray-400 font-normal">（至少要选一个）</span></label>
           {loading ? (
             <div className="text-sm text-gray-400">加载中...</div>
           ) : availableTools.length === 0 ? (
-            <div className="text-sm text-gray-400">暂无可用工具模板</div>
+            <div className="text-sm text-red-400">⚠️ 无法加载工具模板列表，请检查 API 是否正常运行</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableTools.map(tool => (
@@ -139,9 +184,9 @@ export default function Builder() {
         </div>
 
         {/* 下载按钮 */}
-        <button onClick={handleDownload} disabled={!name.trim() || downloading}
+        <button onClick={handleDownload} disabled={!name.trim() || downloading || selectedTools.size === 0}
           className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          {downloading ? '生成中...' : '📥 下载项目 ZIP'}
+          {downloading ? '⏳ 生成中...' : '📥 下载项目 ZIP'}
         </button>
 
         <p className="text-xs text-gray-400 text-center">

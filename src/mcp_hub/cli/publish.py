@@ -61,10 +61,24 @@ def publish(path: str, visibility: str, draft: bool):
 
 
 @click.command("my-servers")
-def my_servers():
+@click.argument("author", required=False, default="")
+def my_servers(author: str):
     """查看我发布的 Server。"""
-    click.echo("📦 我发布的 Server:")
-    click.echo("   (需要先登录: mcp login)")
+    async def _run():
+        if not author:
+            click.echo("📦 请指定发布者名称, 例如: mcp my-servers anthropic")
+            click.echo("   或先登录 (mcp login) 后使用")
+            return
+        registry = Registry()
+        servers = await registry.get_by_author(author)
+        if not servers:
+            click.echo(f"📭 '{author}' 还没有发布 Server")
+            return
+        click.echo(f"📦 '{author}' 发布的 Server ({len(servers)}):")
+        for s in servers:
+            click.echo(f"  • {s['id']}  v{s.get('version', '?')}  "
+                       f"⭐{s.get('rating', 0)}  \U0001f4e5{s.get('download_count', 0)}")
+    asyncio.run(_run())
 
 
 @click.command("unpublish")
@@ -72,13 +86,21 @@ def my_servers():
 @click.confirmation_option(prompt="确定要下架吗？")
 def unpublish(server_id: str):
     """下架 Server。"""
-    click.echo(f"✅ {server_id} 已下架")
+    async def _run():
+        registry = Registry()
+        success = await registry.unpublish_server(server_id)
+        if success:
+            click.echo(f"✅ {server_id} 已下架")
+        else:
+            click.echo(f"❌ {server_id} 未找到")
+    asyncio.run(_run())
 
 
 @click.command("stats")
 @click.argument("server_id", required=True)
 @click.option("--period", default="30d", help="统计周期 (7d/30d/90d)")
-def stats(server_id: str, period: str):
+@click.option("--history", is_flag=True, help="显示操作历史")
+def stats(server_id: str, period: str, history: bool):
     """查看 Server 统计数据。"""
     async def _run():
         registry = Registry()
@@ -86,9 +108,28 @@ def stats(server_id: str, period: str):
         if not s:
             click.echo(f"❌ {server_id} 未找到")
             return
-        click.echo(f"📊 {server_id} 统计 ({period})")
+        click.echo(f"\U0001f4ca {server_id} 统计 ({period})")
         click.echo(f"   ⭐ 评分: {s.get('rating', 0)} ({s.get('review_count', 0)} 评价)")
-        click.echo(f"   📥 下载: {s.get('download_count', 0)} 次")
+        click.echo(f"   \U0001f4e5 下载: {s.get('download_count', 0)} 次")
         click.echo(f"   ⭐ 收藏: {s.get('favorite_count', 0)}")
 
+        if history:
+            from mcp_hub.db.database import async_session_factory
+            from mcp_hub.db.models import InstallHistoryModel
+            from sqlalchemy import select
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(InstallHistoryModel)
+                    .where(InstallHistoryModel.server_id == server_id)
+                    .order_by(InstallHistoryModel.created_at.desc())
+                    .limit(10)
+                )
+                records = result.scalars().all()
+            if records:
+                click.echo(f"\n\U0001f4cb 最近操作 ({len(records)} 条):")
+                for r in records:
+                    click.echo(f"   [{r.created_at.strftime('%m-%d %H:%M')}] "
+                               f"{r.action} v{r.version}")
+            else:
+                click.echo("   \U0001f4ed 暂无操作记录")
     asyncio.run(_run())

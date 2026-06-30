@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getServer, installServer, startServer, stopServer, rateServer, favoriteServer,
-  apiGet, ServerInfo, SecurityScanResult, TokenAnalysisResult,
+  apiGet, apiPost, ServerInfo, SecurityScanResult, TokenAnalysisResult,
   scanServerSecurity, analyzeServerTokens, getServerReliability,
 } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
@@ -72,6 +72,10 @@ export default function ServerDetail() {
       analyzeServerTokens(sid).then(r => setTokenAnalysis(r.data)).catch(() => {}),
       getServerReliability(sid).then(r => setReliability(r.data)).catch(() => {}),
       apiGet<any[]>(`/community/reviews/${encodeURIComponent(sid)}`).then(r => setReviews(r.data || [])).catch(() => {}),
+      // Auto-fetch config for first agent
+      apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=claude-code`)
+        .then(r => { if (r.data) { setConfigData(r.data); setShowConfig(true) }})
+        .catch(() => {}),
     ]).finally(() => setExtraLoading(false))
   }, [id])
 
@@ -128,19 +132,25 @@ export default function ServerDetail() {
 
   const handleUninstall = async () => {
     if (!window.confirm('确定要卸载吗？')) return
-    const res = await fetch(`/api/v1/servers/${encodeURIComponent(server.id)}/uninstall`, { method: 'POST' })
-    const r = await res.json()
-    setMessage(r.message || '已卸载')
-    if (r.success) {
-      setServer({ ...server, status: 'not_installed' })
-      setShowConfig(false)
-    }
+    try {
+      const r = await apiPost<any>(`/servers/${encodeURIComponent(server.id)}/uninstall`)
+      setMessage(r.message || '已卸载')
+      if (r.success) {
+        setServer({ ...server, status: 'not_installed' })
+        setShowConfig(false)
+      }
+    } catch { setMessage('卸载失败') }
   }
 
   const handleRate = async (rating: number) => {
     await rateServer(server.id, rating)
     setMyRating(rating)
     setMessage(`评分 ${rating}⭐ 成功`)
+    // 刷新评论列表
+    try {
+      const r = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
+      if (r.data) setReviews(r.data)
+    } catch {}
   }
 
   const handleFavorite = async () => {
@@ -154,41 +164,33 @@ export default function ServerDetail() {
     try {
       const body: any = { server_id: server.id, rating: reviewRating, content: reviewText.trim() }
       if (replyTo) body.parent_id = replyTo.id
-      const res = await fetch('/api/v1/community/rate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser },
-        body: JSON.stringify(body),
-      })
-      const r = await res.json()
+      const r = await apiPost<any>('/community/rate', body)
       if (r.success) {
-        setMessage('评价已提交')
+        setMessage('✅ 评价已提交')
         setReviewText('')
+        setReviewRating(5)
         setReplyTo(null)
         // Reload reviews
         const r2 = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
         if (r2.data) setReviews(r2.data)
       } else {
-        setMessage(r.error || '提交失败')
+        setMessage('❌ ' + (r.message || '提交失败'))
       }
-    } catch { setMessage('网络错误') }
+    } catch (e: any) { setMessage('❌ ' + (e?.message || '网络错误，请检查是否已登录')) }
     finally { setSubmittingReview(false) }
   }
 
   const handleDeleteReview = async (reviewId: number) => {
     if (!window.confirm('确定要删除此评价吗？')) return
     try {
-      const res = await fetch(`/api/v1/community/review/delete/${reviewId}`, {
-        method: 'POST',
-        headers: { 'x-user-id': currentUser },
-      })
-      const r = await res.json()
+      const r: any = await apiPost<any>(`/community/review/delete/${reviewId}`)
       if (r.success) {
         setReviews(reviews.filter(r => r.id !== reviewId))
-        setMessage('评价已删除')
+        setMessage('✅ 评价已删除')
       } else {
-        setMessage(r.error || '删除失败')
+        setMessage('❌ ' + (r.error || '删除失败'))
       }
-    } catch { setMessage('网络错误') }
+    } catch { setMessage('❌ 网络错误') }
   }
 
   function fmtNum(n: number): string { return n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')}K` : String(n) }
