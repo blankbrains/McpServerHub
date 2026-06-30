@@ -126,7 +126,11 @@ export default function ServerDetail() {
   const handleInstall = async () => {
     try {
       const r = await installServer(server.id)
-      setMessage(r.message || r.data?.detail || '安装完成')
+      if (!r.success) {
+        setMessage(`❌ 安装失败: ${r.data?.error || r.message || '未知错误'}`)
+        return
+      }
+      setMessage('✅ 安装成功')
       if (r.success) {
         setServer({ ...server, status: 'stopped' })
         const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')

@@ -10,6 +10,7 @@ from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import (
     ConfigError,
+    InstallError,
     ProcessStartupError,
     ServerAlreadyRunningError,
     ServerNotFoundError,
@@ -50,8 +51,9 @@ async def install_server(req: InstallRequest):
     if result["success"]:
         await registry.update_status(req.server_id, "stopped")
         await registry.increment_download(req.server_id)
-
-    return {"success": result["success"], "data": result}
+        return {"success": True, "data": result}
+    else:
+        raise InstallError(req.server_id, result.get("error", "安装失败"))
 
 
 @router.get("/servers/")
