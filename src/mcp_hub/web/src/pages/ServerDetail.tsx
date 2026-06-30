@@ -43,6 +43,7 @@ export default function ServerDetail() {
   const [configData, setConfigData] = useState<any>(null)
   const [selectedAgent, setSelectedAgent] = useState('claude-code')
   const [copied, setCopied] = useState(false)
+  const [isFavorited, setIsFavorited] = useState(false)
 
   // New feature states
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
@@ -67,6 +68,9 @@ export default function ServerDetail() {
       const myServers = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
       const found = myServers.some((x: any) => x.name === sid || x.hub_id === sid)
       setIsTracked(found)
+      // 检查是否已收藏
+      const favs = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
+      setIsFavorited(favs.includes(sid))
     } catch { setIsTracked(false) }
   }, [id])
 
@@ -120,21 +124,6 @@ export default function ServerDetail() {
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
   const handleInstall = async () => {
-    // 安装前预检
-    const cmd = (server as any).install_command || ''
-    if (cmd) {
-      try {
-        const preCheckRes = await fetch('/api/v1/servers/pre-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cmd }),
-        }).then(r => r.json())
-        if (!preCheckRes.can_install) {
-          const fails = preCheckRes.checks?.filter((c: any) => c.status === 'fail').map((c: any) => c.detail).join(', ')
-          if (!window.confirm(`预检发现问题:\n${fails || '环境不满足'}\n\n仍要尝试安装吗？`)) return
-        }
-      } catch {}
-    }
     try {
       const r = await installServer(server.id)
       setMessage(r.message || r.data?.detail || '安装完成')
@@ -207,7 +196,16 @@ export default function ServerDetail() {
   const handleFavorite = async () => {
     try {
       const r = await favoriteServer(server.id)
-      setMessage(r.favorited ? '已收藏' : '已取消收藏')
+      const favd = r.favorited
+      setIsFavorited(favd)
+      // 同步 localStorage
+      const favs = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
+      if (favd) { if (!favs.includes(server.id)) favs.push(server.id) }
+      else { const idx = favs.indexOf(server.id); if (idx >= 0) favs.splice(idx, 1) }
+      localStorage.setItem('mcp_hub_favorites', JSON.stringify(favs))
+      // 触发其他 tab 更新
+      window.dispatchEvent(new Event('storage'))
+      setMessage(favd ? '⭐ 已收藏' : '已取消收藏')
     } catch (e: any) {
       setMessage(`收藏操作失败: ${e.message || '未知错误'}`)
     }
@@ -314,9 +312,9 @@ export default function ServerDetail() {
             </button>
           )}
           {server.status === 'not_installed' && isTracked && (
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium">
-              ✅ 已在配置中
-            </span>
+            <button onClick={handleInstall} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
+              📥 安装到本地
+            </button>
           )}
           {server.status === 'stopped' && (
             <button onClick={handleStart} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
@@ -333,8 +331,8 @@ export default function ServerDetail() {
               🗑 卸载
             </button>
           )}
-          <button onClick={handleFavorite} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            ⭐ 收藏
+          <button onClick={handleFavorite} className={`px-4 py-2 border rounded-lg transition-colors ${isFavorited ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'border-gray-300 hover:bg-gray-50'}`}>
+            {isFavorited ? '⭐ 已收藏' : '☆ 收藏'}
           </button>
           {server.homepage && (
             <a href={server.homepage} target="_blank" rel="noopener noreferrer" className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">

@@ -133,7 +133,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" to="/my-servers" />
         <StatCard icon="📦" label="已安装" value={String(installed.length)} color="purple" to="/my-servers" />
-        <StatCard icon="📋" label="追踪中" value={String(totalAvailable || installed.length)} color="blue" to="/my-servers" />
+        <StatCard icon="📋" label="已添加配置" value={String(totalAvailable || installed.length)} color="blue" to="/my-servers" />
         <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" to="/" />
       </div>
 
