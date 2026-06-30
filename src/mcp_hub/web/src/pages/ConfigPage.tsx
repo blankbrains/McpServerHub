@@ -21,24 +21,52 @@ export default function ConfigPage() {
   const [downloading, setDownloading] = useState(false)
   const [message, setMessage] = useState('')
   const [showCliHint, setShowCliHint] = useState(false)
+  const [previewData, setPreviewData] = useState<any>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, agentOverride?: string) => {
+  // Step 1: 选择文件 → 本地解析预览
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const agent = agentOverride || selectedAgent
-    setUploading(true)
+    setPendingFile(file)
     setMessage('')
     try {
-      const r = await uploadConfig(file, agent)
+      const text = await file.text()
+      const json = JSON.parse(text)
+      const servers = json.mcpServers || {}
+      const names = Object.keys(servers)
+      setPreviewData({ fileName: file.name, serverCount: names.length, servers: names })
+    } catch {
+      setMessage('❌ 文件格式无效，请上传 JSON 文件')
+      setPreviewData(null)
+      setPendingFile(null)
+    }
+  }
+
+  // Step 2: 确认上传
+  const handleConfirmUpload = async () => {
+    if (!pendingFile) return
+    setUploading(true)
+    setMessage('')
+    const agent = selectedAgent
+    try {
+      const r = await uploadConfig(pendingFile, agent)
       setUploadResult(r)
+      setPreviewData(null)
+      setPendingFile(null)
       localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
       if (r.success) {
-        setMessage(`✅ ${r.data?.server_count || 0} 个 Server 已同步到配置（${AGENTS.find(a => a.id === agent)?.name || agent}）`)
-        setTimeout(() => navigate('/my-servers'), 1500)
+        setMessage(`✅ ${r.data?.server_count || 0} 个 Server 已同步到配置`)
       }
     } catch (err: any) {
       setUploadResult({ success: false, message: err.message || '上传失败' })
     } finally { setUploading(false) }
+  }
+
+  const handleCancelUpload = () => {
+    setPreviewData(null)
+    setPendingFile(null)
+    setMessage('')
   }
 
   const handleDownloadForAgent = async (agentId?: string) => {
@@ -91,12 +119,27 @@ export default function ConfigPage() {
           className={`block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${dragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) { const dt = new DataTransfer(); dt.items.add(f); const input = document.createElement('input'); input.type = 'file'; input.files = dt.files; const ev = new Event('change', { bubbles: true }); input.dispatchEvent(ev); handleUpload(ev as any) } }}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) { const dt = new DataTransfer(); dt.items.add(f); const input = document.createElement('input'); input.type = 'file'; input.files = dt.files; const ev = new Event('change', { bubbles: true }); input.dispatchEvent(ev); handleFileSelect(ev as any) } }}
         >
-          <input type="file" accept=".json" onChange={handleUpload} className="hidden" />
+          <input type="file" accept=".json" onChange={handleFileSelect} className="hidden" />
           <div className="text-3xl mb-1">{uploading ? '⏳' : '📂'}</div>
-          <p className="text-gray-600 text-sm">{uploading ? '正在上传...' : '拖拽 JSON 文件到此处，或点击选择'}</p>
+          <p className="text-gray-600 text-sm">{uploading ? '正在上传...' : previewData ? `已选择: ${previewData.fileName}` : '拖拽 JSON 文件到此处，或点击选择'}</p>
         </label>
+        {/* 预览确认 */}
+        {previewData && !uploading && (
+          <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm font-medium text-blue-800 mb-2">📋 检测到 {previewData.serverCount} 个 Server</p>
+            <div className="flex flex-wrap gap-1 mb-3 max-h-32 overflow-y-auto">
+              {previewData.servers.map((s: string) => (
+                <span key={s} className="px-2 py-0.5 bg-white text-blue-600 rounded text-xs border border-blue-200">{s}</span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleConfirmUpload} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">确认上传</button>
+              <button onClick={handleCancelUpload} className="px-4 py-1.5 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">取消</button>
+            </div>
+          </div>
+        )}
         {uploadResult && (
           <div className="mt-3 p-3 rounded-lg text-sm" style={{ backgroundColor: uploadResult.success !== false ? '#EFF6FF' : '#FEF2F2', color: uploadResult.success !== false ? '#1D4ED8' : '#991B1B' }}>
             <p>{uploadResult.message || (uploadResult.success !== false ? '配置上传成功' : '上传失败')}</p>
@@ -204,15 +247,14 @@ export default function ConfigPage() {
               <div className="flex-1 bg-gray-900 rounded-lg p-3 overflow-x-auto">
                 <pre className="text-green-400 text-xs font-mono">mcp config sync --server {window.location.origin}</pre>
               </div>
-              <button onClick={() => { navigator.clipboard.writeText(`mcp config sync --server ${window.location.origin}`); setMessage('✅ 命令已复制，在终端中粘贴运行') }}
-                className="px-4 py-3 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors flex-shrink-0">
-                📋 复制命令
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => { navigator.clipboard.writeText(`mcp config sync --server ${window.location.origin}`); setMessage('✅ 命令已复制，在终端中粘贴运行') }}
+                  className="px-3 py-2 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors flex-shrink-0">
+                  📋 复制
+                </button>
+              </div>
             </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
-              <p className="font-medium">💡 提示</p>
-              <p>命令行方式支持自动写入本地文件（无需手动拖放），适合经常更新配置的用户。需要先在本地安装：<code className="px-1 bg-yellow-100 rounded">pip install mcp-hub-cli</code></p>
-            </div>
+            <p className="text-xs text-gray-400 mt-1">需要先安装 CLI：<code className="px-1 bg-gray-100 rounded">pip install mcp-hub-cli</code></p>
           </div>
         )}
       </div>
