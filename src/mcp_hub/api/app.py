@@ -116,36 +116,6 @@ def create_app(dev: bool = False) -> FastAPI:
             status=500,
         )
 
-    # === Rate Limiting Middleware ===
-    _rate_limit_store: dict[str, list[float]] = {}
-
-    @app.middleware("http")
-    async def rate_limit_middleware(request: Request, call_next):
-        import time
-        client_ip = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-
-        # 每个 IP 每分钟最多 120 次请求
-        window_seconds = 60
-        max_requests = 120
-
-        if client_ip not in _rate_limit_store:
-            _rate_limit_store[client_ip] = []
-        timestamps = _rate_limit_store[client_ip]
-        # 清理过期时间戳
-        timestamps[:] = [ts for ts in timestamps if now - ts < window_seconds]
-
-        if len(timestamps) >= max_requests:
-            return _error_response(
-                code="RATE_LIMIT_EXCEEDED",
-                message="请求过于频繁，请稍后再试",
-                status=429,
-            )
-
-        timestamps.append(now)
-        response = await call_next(request)
-        return response
-
     # === API Routes (优先级最高) ===
     app.include_router(market_router, prefix="/api/v1")
     app.include_router(manage_router, prefix="/api/v1")
