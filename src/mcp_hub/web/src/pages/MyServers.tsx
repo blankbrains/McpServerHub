@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, apiPost } from '../api/client'
+import { apiGet, apiPost, getAuthState } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 interface TrackedServer {
@@ -45,7 +45,7 @@ export default function MyServers() {
 
   const toggleEnabled = async (sid: string, current: boolean) => {
     try {
-      const uid = localStorage.getItem('mcp_hub_user')
+      const { userId: uid } = getAuthState()
       if (!uid) { setMessage('请先登录'); return }
       // 获取当前 user_servers，切换 enabled
       const res = await fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })

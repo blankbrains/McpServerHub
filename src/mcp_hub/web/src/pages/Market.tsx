@@ -219,7 +219,6 @@ export default function Market() {
                         const next = new Set(addedServers)
                         next.delete(s.id)
                         setAddedServers(next)
-                        // 同步到服务端 user_servers
                         try {
                           const uid = localStorage.getItem('mcp_hub_user')
                           if (uid) await fetch('/api/v1/config/user-servers/save', {
@@ -231,8 +230,8 @@ export default function Market() {
                         setMessage(`已从配置中移除 ${s.id}`)
                         setTimeout(() => setMessage(''), 3000)
                       }}
-                      className="px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700 transition-colors opacity-100"
-                      title="点击移除"
+                      className="px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700 transition-colors"
+                      aria-label={`从我的配置中移除 ${s.id}`}
                     >
                       ✓ 已添加
                     </button>
@@ -245,7 +244,6 @@ export default function Market() {
                         existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
                         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
                         setAddedServers(new Set([...addedServers, s.id]))
-                        // 同步到服务端 user_servers
                         try {
                           const uid = localStorage.getItem('mcp_hub_user')
                           if (uid) await fetch('/api/v1/config/user-servers/save', {
@@ -257,7 +255,8 @@ export default function Market() {
                         setMessage(`✅ 已添加 ${s.id} 到我的配置`)
                         setTimeout(() => setMessage(''), 3000)
                       }}
-                      className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors opacity-0 group-hover:opacity-100"
+                      className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      aria-label={`添加 ${s.id} 到我的配置`}
                     >
                       + 添加
                     </button>
@@ -277,7 +276,9 @@ export default function Market() {
                 .map((p, idx, arr) => (
                   <span key={p} className="flex items-center gap-1">
                     {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400">...</span>}
-                    <button onClick={() => setPage(p)}
+                    <button
+                      onClick={() => setPage(p)}
+                      aria-current={page === p ? 'page' : undefined}
                       className={`w-9 h-9 rounded-lg text-sm font-medium ${page === p ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}>{p}</button>
                   </span>
                 ))}

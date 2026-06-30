@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getServer, installServer, startServer, stopServer, rateServer, favoriteServer,
@@ -79,12 +79,22 @@ export default function ServerDetail() {
     ]).finally(() => setExtraLoading(false))
   }, [id])
 
+  const latestAgentRef = useRef<string>('')
+
   const fetchConfig = async (agentId: string) => {
     if (!id) return
     const sid = decodeURIComponent(id)
-    const res = await apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=${agentId}`)
-    if (res.data) setConfigData(res.data)
-    setShowConfig(true)
+    latestAgentRef.current = agentId
+    try {
+      const res = await apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=${agentId}`)
+      // 防止竞态：只应用最后请求的 agent 的结果
+      if (latestAgentRef.current === agentId && res.data) {
+        setConfigData(res.data)
+      }
+      setShowConfig(true)
+    } catch (e) {
+      console.error('Config fetch failed:', e)
+    }
   }
 
   const handleCopy = () => {
@@ -98,36 +108,47 @@ export default function ServerDetail() {
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
   const handleInstall = async () => {
-    const r = await installServer(server.id)
-    setMessage(r.message || r.data?.detail || '安装完成')
-    if (r.success) {
-      setServer({ ...server, status: 'stopped' })
-      // 同时保存到「我的配置」
-      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-      if (!existing.find((x: any) => x.name === server.id)) {
-        existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
-        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+    try {
+      const r = await installServer(server.id)
+      setMessage(r.message || r.data?.detail || '安装完成')
+      if (r.success) {
+        setServer({ ...server, status: 'stopped' })
+        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+        if (!existing.find((x: any) => x.name === server.id)) {
+          existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
+          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+        }
+        if (r.data?.configs) {
+          const agentCfg = r.data.configs.find((c: any) =>
+            c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
+          )
+          setConfigData(agentCfg || r.data.configs[0])
+          setShowConfig(true)
+        }
       }
-      if (r.data?.configs) {
-        const agentCfg = r.data.configs.find((c: any) =>
-          c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
-        )
-        setConfigData(agentCfg || r.data.configs[0])
-        setShowConfig(true)
-      }
+    } catch (e: any) {
+      setMessage(`安装失败: ${e.message || '未知错误'}`)
     }
   }
 
   const handleStart = async () => {
-    const r = await startServer(server.id)
-    setMessage(r.message || '已启动')
-    if (r.success) setServer({ ...server, status: 'running' })
+    try {
+      const r = await startServer(server.id)
+      setMessage(r.message || '已启动')
+      if (r.success) setServer({ ...server, status: 'running' })
+    } catch (e: any) {
+      setMessage(`启动失败: ${e.message || '未知错误'}`)
+    }
   }
 
   const handleStop = async () => {
-    const r = await stopServer(server.id)
-    setMessage(r.message || '已停止')
-    if (r.success) setServer({ ...server, status: 'stopped' })
+    try {
+      const r = await stopServer(server.id)
+      setMessage(r.message || '已停止')
+      if (r.success) setServer({ ...server, status: 'stopped' })
+    } catch (e: any) {
+      setMessage(`停止失败: ${e.message || '未知错误'}`)
+    }
   }
 
   const handleUninstall = async () => {
@@ -143,19 +164,26 @@ export default function ServerDetail() {
   }
 
   const handleRate = async (rating: number) => {
-    await rateServer(server.id, rating)
-    setMyRating(rating)
-    setMessage(`评分 ${rating}⭐ 成功`)
-    // 刷新评论列表
     try {
-      const r = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
-      if (r.data) setReviews(r.data)
-    } catch {}
+      await rateServer(server.id, rating)
+      setMyRating(rating)
+      setMessage(`评分 ${rating}⭐ 成功`)
+      try {
+        const r = await apiGet<any[]>(`/community/reviews/${encodeURIComponent(server.id)}`)
+        if (r.data) setReviews(r.data)
+      } catch {}
+    } catch (e: any) {
+      setMessage(`评分失败: ${e.message || '未知错误'}`)
+    }
   }
 
   const handleFavorite = async () => {
-    const r = await favoriteServer(server.id)
-    setMessage(r.favorited ? '已收藏' : '已取消收藏')
+    try {
+      const r = await favoriteServer(server.id)
+      setMessage(r.favorited ? '已收藏' : '已取消收藏')
+    } catch (e: any) {
+      setMessage(`收藏操作失败: ${e.message || '未知错误'}`)
+    }
   }
 
   const handleSubmitReview = async () => {

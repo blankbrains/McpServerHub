@@ -32,7 +32,14 @@ export default function StarRating({
   }
 
   return (
-    <span className={`inline-flex items-center gap-0.5 ${SIZE_CLASSES[size]}`}>
+    <span
+      className={`inline-flex items-center gap-0.5 ${SIZE_CLASSES[size]}`}
+      role={interactive ? 'radiogroup' : undefined}
+      aria-label={interactive ? '评分' : undefined}
+      aria-valuenow={interactive ? Math.round(rating) : undefined}
+      aria-valuemin={interactive ? 1 : undefined}
+      aria-valuemax={interactive ? maxRating : undefined}
+    >
       {stars.map(star => {
         const filled = star <= Math.round(rating)
         return (
@@ -40,6 +47,8 @@ export default function StarRating({
             key={star}
             type="button"
             disabled={!interactive}
+            role={interactive ? 'radio' : undefined}
+            aria-checked={interactive ? star === Math.round(rating) : undefined}
             onClick={() => handleClick(star)}
             className={`${interactive ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'} disabled:cursor-default`}
             aria-label={`${star} 星`}

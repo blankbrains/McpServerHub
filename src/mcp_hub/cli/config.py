@@ -147,6 +147,7 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
             "claude-code": Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
             "cursor": Path.home() / ".cursor" / "mcp.json",
             "codex": Path.home() / ".codex" / "mcp.json",
+            "trae": Path.home() / ".trae" / "mcp.json",
             "generic": Path.home() / ".config" / "mcp-hub" / "mcp.json",
         }
         target = agent_paths.get(agent, agent_paths["claude-code"])

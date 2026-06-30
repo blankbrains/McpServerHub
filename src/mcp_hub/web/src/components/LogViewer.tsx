@@ -66,7 +66,7 @@ export default function LogViewer({
       {/* 工具栏 */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-900 rounded-t-lg border-b border-gray-700">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} />
+          <span role="img" aria-label={connected ? '已连接' : '已断开'} className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} />
           <span className="text-xs text-gray-400 font-mono">{serverId}</span>
         </div>
         <span className="text-xs text-gray-500">
@@ -77,6 +77,8 @@ export default function LogViewer({
       {/* 日志内容 */}
       <div
         ref={containerRef}
+        role="log"
+        aria-live="polite"
         className="bg-gray-950 text-gray-200 font-mono text-xs leading-relaxed p-3 rounded-b-lg overflow-auto max-h-80"
       >
         {lines.length === 0 ? (

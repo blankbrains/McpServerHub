@@ -242,3 +242,89 @@ async def get_logs(
     with open(log_file, encoding="utf-8") as f:
         all_lines = f.readlines()
     return {"success": True, "data": all_lines[-lines:]}
+
+
+@router.get("/logs/search")
+async def search_logs(
+    q: str = "",
+    server_id: str | None = None,
+    lines: int = 100,
+):
+    """跨 Server 日志关键词搜索。
+
+    支持:
+    - 搜索所有 Server 日志或指定某个 Server
+    - 返回匹配行及其上下文
+    - 默认返回最近 100 条匹配
+    """
+    import re
+    from pathlib import Path
+
+    if not q:
+        return {"success": False, "error": "请提供搜索关键词"}
+
+    log_dir = Path.home() / ".config" / "mcp-hub" / "logs"
+    if not log_dir.exists():
+        return {"success": True, "data": [], "servers_scanned": 0}
+
+    # 确定要搜索的日志文件
+    if server_id:
+        safe_name = server_id.replace("/", "_").replace("@", "")
+        log_files = [log_dir / f"{safe_name}.log"]
+    else:
+        log_files = sorted(log_dir.glob("*.log"), reverse=True)
+
+    results: list[dict] = []
+    servers_scanned = 0
+
+    for log_file in log_files:
+        if not log_file.exists():
+            continue
+        servers_scanned += 1
+        srv_name = log_file.stem
+
+        try:
+            with open(log_file, encoding="utf-8", errors="replace") as f:
+                file_lines = f.readlines()
+        except OSError:
+            continue
+
+        try:
+            pattern = re.compile(re.escape(q), re.IGNORECASE)
+        except re.error:
+            pattern = re.compile(re.escape(q))
+
+        for i, line in enumerate(file_lines):
+            if pattern.search(line):
+                # 返回匹配行及前后各 2 行上下文
+                ctx_before = [
+                    file_lines[j].rstrip("\n")
+                    for j in range(max(0, i - 2), i)
+                    if j < len(file_lines)
+                ]
+                ctx_after = [
+                    file_lines[j].rstrip("\n")
+                    for j in range(i + 1, min(len(file_lines), i + 3))
+                    if j < len(file_lines)
+                ]
+                results.append({
+                    "server": srv_name,
+                    "line_number": i + 1,
+                    "match": line.rstrip("\n"),
+                    "context_before": ctx_before,
+                    "context_after": ctx_after,
+                })
+
+        if len(results) >= lines:
+            break
+
+    # 限制返回数量
+    results = results[:lines]
+
+    return {
+        "success": True,
+        "data": results,
+        "query": q,
+        "servers_scanned": servers_scanned,
+        "total_matches": len(results),
+    }

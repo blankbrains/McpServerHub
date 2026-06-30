@@ -9,6 +9,7 @@ const navItems = [
   { path: '/my-config', label: '配置', icon: '⚙️' },
   { path: '/builder', label: '构建', icon: '🛠️' },
   { path: '/monitor', label: '监控', icon: '📈' },
+  { path: '/local', label: '发现', icon: '🔍' },
   { path: '/publish', label: '发布', icon: '📤' },
   { path: '/login', label: '登录', icon: '👤' },
 ]
@@ -69,7 +70,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                 </svg>
                 <span className="font-bold text-xl text-gray-900">MCP Hub</span>
               </Link>
-              <nav className="flex items-center gap-1">
+              <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg">
+                跳到主内容
+              </a>
+              <nav className="flex items-center gap-1" aria-label="主导航">
                 {navItems.map((item) => (
                   <Link
                     key={item.path}
@@ -79,6 +83,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                         ? 'bg-blue-50 text-blue-700'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }`}
+                    aria-current={location.pathname === item.path ? 'page' : undefined}
                   >
                     <span className="mr-1.5">{item.icon}</span>
                     {item.label}
@@ -114,7 +119,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
     </div>

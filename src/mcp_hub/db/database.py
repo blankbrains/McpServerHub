@@ -138,6 +138,27 @@ async def _run_migrations():
         except Exception:
             pass
 
+    # 添加 user_servers.group_name 列
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns "
+                     "WHERE table_name='user_servers' AND column_name='group_name'")
+            )
+            if not result.fetchone():
+                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"))
+                await conn.commit()
+    except Exception:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("PRAGMA table_info(user_servers)"))
+                cols = [row[1] for row in await result.fetchall()]
+                if "group_name" not in cols:
+                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"))
+                    await conn.commit()
+        except Exception:
+            pass
+
 
 async def init_db():
     """初始化数据库：创建所有表 + 种子数据。"""

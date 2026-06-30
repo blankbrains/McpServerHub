@@ -47,8 +47,9 @@ class Installer:
         parts = command.split()
         if not parts:
             return {"success": False, "error": "空命令"}
-        if parts[0] == "npx":
-            return {"success": True, "detail": "已通过 npx 注册"}
+        # npx -y 可以跳过交互确认，确保在非交互环境中也能运行
+        if parts[0] == "npx" and "-y" not in parts:
+            parts.insert(1, "-y")
         try:
             proc = await asyncio.create_subprocess_exec(
                 *parts, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,

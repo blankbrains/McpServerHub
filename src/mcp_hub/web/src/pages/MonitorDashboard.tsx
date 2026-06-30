@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet } from '../api/client'
 
@@ -66,16 +66,35 @@ export default function MonitorDashboard() {
   const [sortField, setSortField] = useState<string>('reliability_score')
   const [sortAsc, setSortAsc] = useState(false)
   const [search, setSearch] = useState('')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const errorCountRef = useRef(0)
 
   const load = async (manual = false) => {
     if (manual) setRefreshing(true)
     try {
       const r = await apiGet<DashboardData>('/monitor/dashboard')
-      if (r.data) setData(r.data)
-    } catch {} finally { setLoading(false); if (manual) setTimeout(() => setRefreshing(false), 500) }
+      if (r.data) { setData(r.data); errorCountRef.current = 0 }
+    } catch {
+      errorCountRef.current++
+      if (errorCountRef.current >= 3 && data === null) {
+        setErrorMsg('监控数据加载失败，请检查服务是否正常运行')
+      }
+    } finally { setLoading(false); if (manual) setTimeout(() => setRefreshing(false), 500) }
   }
 
-  useEffect(() => { load(); const t = setInterval(() => load(false), 10000); return () => clearInterval(t) }, [])
+  // 基础间隔 10 秒，错误后退避 (最多 60 秒)
+  const getInterval = () => Math.min(10 * Math.pow(2, errorCountRef.current), 60) * 1000
+
+  useEffect(() => {
+    load()
+    let timer: ReturnType<typeof setTimeout>
+    const scheduleNext = () => {
+      timer = setTimeout(() => { load(false); scheduleNext() }, getInterval())
+    }
+    scheduleNext()
+    return () => clearTimeout(timer)
+  }, [])
 
   const toggleSort = (field: string) => {
     if (sortField === field) setSortAsc(!sortAsc)
@@ -256,7 +275,14 @@ function SummaryCard({ label, value, icon, color }: { label: string; value: stri
 
 function Th({ children, onClick, active, asc }: { children: React.ReactNode; onClick?: () => void; active?: boolean; asc?: boolean }) {
   return (
-    <th onClick={onClick ? onClick : undefined} className={`p-3 text-left text-xs font-medium ${onClick ? 'cursor-pointer select-none' : ''} ${active ? 'text-blue-600' : 'text-gray-500'} ${onClick ? 'hover:text-gray-700' : ''}`}>
+    <th
+      onClick={onClick ? onClick : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      role={onClick ? 'columnheader button' : 'columnheader'}
+      aria-sort={active ? (asc ? 'ascending' : 'descending') : undefined}
+      className={`p-3 text-left text-xs font-medium ${onClick ? 'cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:rounded' : ''} ${active ? 'text-blue-600' : 'text-gray-500'} ${onClick ? 'hover:text-gray-700' : ''}`}
+    >
       {children} {active ? (asc ? '↑' : '↓') : ''}
     </th>
   )
