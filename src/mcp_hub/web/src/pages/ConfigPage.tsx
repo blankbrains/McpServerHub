@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { uploadConfig, downloadConfig, apiGet } from '../api/client'
 
 const AGENTS = [
@@ -13,6 +14,7 @@ export default function ConfigPage() {
   const [uploadResult, setUploadResult] = useState<any>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_upload_result') || 'null') } catch { return null }
   })
+  const navigate = useNavigate()
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState('claude-code')
@@ -30,7 +32,10 @@ export default function ConfigPage() {
       const r = await uploadConfig(file, agent)
       setUploadResult(r)
       localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
-      if (r.success) setMessage(`✅ ${r.data?.server_count || 0} 个 Server 已同步到配置（${AGENTS.find(a => a.id === agent)?.name || agent}）`)
+      if (r.success) {
+        setMessage(`✅ ${r.data?.server_count || 0} 个 Server 已同步到配置（${AGENTS.find(a => a.id === agent)?.name || agent}）`)
+        setTimeout(() => navigate('/my-servers'), 1500)
+      }
     } catch (err: any) {
       setUploadResult({ success: false, message: err.message || '上传失败' })
     } finally { setUploading(false) }

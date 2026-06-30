@@ -21,6 +21,7 @@ export default function Market() {
   const [tags, setTags] = useState<any[]>([])
   const [authors, setAuthors] = useState<any[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [trackedFilter, setTrackedFilter] = useState('')
   const [message, setMessage] = useState('')
   const [addedServers, setAddedServers] = useState<Set<string>>(() => {
     try {
@@ -160,6 +161,13 @@ export default function Market() {
               <option value="pip">🐍 pip</option>
               <option value="go">🔵 go install</option>
             </select>
+            {/* Tracked filter */}
+            <select value={trackedFilter} onChange={(e) => setTrackedFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm">
+              <option value="">📋 全部 Server</option>
+              <option value="tracked">✅ 已追踪</option>
+              <option value="untracked">➕ 未追踪</option>
+            </select>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <span className="font-medium">🏷️ 功能标签:</span>
@@ -190,7 +198,13 @@ export default function Market() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servers.map((s) => (
+            {servers
+              .filter(s => {
+                if (trackedFilter === 'tracked') return addedServers.has(s.id)
+                if (trackedFilter === 'untracked') return !addedServers.has(s.id)
+                return true
+              })
+              .map((s) => (
               <div key={s.id} className="relative group">
                 <ServerCard server={s} />
                 <div className="absolute top-2 right-2">

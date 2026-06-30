@@ -84,6 +84,26 @@ async def get_status(server_id: str):
 @router.post("/servers/{server_id:path}/start")
 async def start_server(server_id: str):
     """启动 Server。"""
+    # 检查是否已被禁用
+    try:
+        from mcp_hub.db.database import async_session_factory
+        from mcp_hub.db.models import UserServerModel
+        from sqlalchemy import select
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(UserServerModel.enabled)
+                .where(UserServerModel.server_id == server_id)
+                .limit(1)
+            )
+            row = result.fetchone()
+            if row is not None and row[0] is False:
+                from mcp_hub.exceptions import ConfigError as CfgErr
+                raise CfgErr(f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动")
+    except CfgErr:
+        raise
+    except Exception:
+        pass  # 查询失败不阻塞启动
+
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:

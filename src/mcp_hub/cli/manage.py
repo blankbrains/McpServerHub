@@ -24,9 +24,26 @@ def start(server_name: str | None):
 
         if server_name == "all":
             servers = await registry.get_installed()
+            # 获取已禁用的 Server ID 列表
+            disabled: set[str] = set()
+            try:
+                from mcp_hub.db.database import async_session_factory
+                from mcp_hub.db.models import UserServerModel
+                from sqlalchemy import select
+                async with async_session_factory() as session:
+                    result = await session.execute(
+                        select(UserServerModel.server_id)
+                        .where(UserServerModel.enabled == False)  # noqa: E712
+                    )
+                    disabled = {row[0] for row in result.fetchall()}
+            except Exception:
+                pass
             started = 0
             for s in servers:
                 sid = s["id"]
+                if sid in disabled:
+                    click.echo(f"  ⏭ {sid} 已禁用，跳过")
+                    continue
                 if pm.is_running(sid):
                     continue
                 command = s.get("install_command", "")
