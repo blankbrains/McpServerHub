@@ -149,7 +149,7 @@ export default function MyServers() {
                   <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                     <button onClick={() => toggleEnabled(s.server_id, s.enabled !== false)}
                       className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${s.enabled !== false ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-700'}`}>
-                      {s.enabled !== false ? '🟢 启用' : '⭕ 禁用'}
+                      {s.enabled !== false ? '🟢 已启用' : '⭕ 已禁用'}
                     </button>
                     <Link to={`/servers/${encodeURIComponent(s.server_id)}`}
                       className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100">查看</Link>

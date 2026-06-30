@@ -58,6 +58,18 @@ export default function ServerDetail() {
   const [replyTo, setReplyTo] = useState<any>(null)
   const currentUser = localStorage.getItem('mcp_hub_user') || 'anonymous'
 
+  // 检查此 Server 是否已被用户追踪（上传配置/市场添加）
+  const [isTracked, setIsTracked] = useState(false)
+  useEffect(() => {
+    if (!id) return
+    const sid = decodeURIComponent(id)
+    try {
+      const myServers = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+      const found = myServers.some((x: any) => x.name === sid || x.hub_id === sid)
+      setIsTracked(found)
+    } catch { setIsTracked(false) }
+  }, [id])
+
   useEffect(() => {
     if (!id) return
     const sid = decodeURIComponent(id)
@@ -281,10 +293,15 @@ export default function ServerDetail() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
-          {server.status === 'not_installed' && (
+          {server.status === 'not_installed' && !isTracked && (
             <button onClick={handleInstall} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
               📥 一键安装
             </button>
+          )}
+          {server.status === 'not_installed' && isTracked && (
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium">
+              ✅ 已在配置中
+            </span>
           )}
           {server.status === 'stopped' && (
             <button onClick={handleStart} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">

@@ -43,12 +43,12 @@ async def monitor_dashboard():
     # 3. 过滤：展示用户相关的 Server
     #    - 已安装/运行中的
     #    - 自定义的（@custom/）
-    #    - 在 user_servers 追踪列表中且已启用的
+    #    - 在 user_servers 追踪列表中的（无论启用与否都展示，方便重新启用）
     relevant = [
         s for s in servers
         if s.get("status") != "not_installed"
         or s["id"].startswith("@custom/")
-        or (s["id"] in tracked_info and tracked_info[s["id"]] is not False)
+        or s["id"] in tracked_info  # 只要追踪了就展示，enabled 字段由前端控制
     ]
     # 如果没有任何相关 Server，展示最近添加的 10 个（新用户引导）
     if not relevant:

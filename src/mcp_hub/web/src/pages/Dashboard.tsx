@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [trending, setTrending] = useState<ServerInfo[]>([])
   const [topRated, setTopRated] = useState<ServerInfo[]>([])
   const [installed, setInstalled] = useState<ServerInfo[]>([])
+  const [trackedServers, setTrackedServers] = useState<any[]>([])  // 来自 monitor API 的所有追踪 Server
   const [runningCount, setRunningCount] = useState<number>(0)
   const [totalAvailable, setTotalAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -45,7 +46,11 @@ export default function Dashboard() {
         setTrending(t.slice(0, 6))
         setTopRated(r.slice(0, 6))
         if (inst.data) setInstalled(inst.data)
-        // 已安装计数用 installed API，总追踪数用 monitor API
+        // 从 monitor API 加载所有追踪 Server（含已安装和未安装但追踪的）
+        if (monitor?.data?.servers) {
+          setTrackedServers(monitor.data.servers)
+        }
+        // 总追踪数用 monitor API
         if (monitor?.data?.summary?.total_servers) {
           setTotalAvailable(monitor.data.summary.total_servers)
         } else {
@@ -265,24 +270,53 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Installed Servers */}
+      {/* Installed + Tracked Servers */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">📦 已安装 Server（{installed.length}）</h2>
+          <h2 className="text-lg font-semibold text-gray-900">📦 已安装 Server（{installed.length}）/ 追踪中（{trackedServers.length}）</h2>
           <Link to="/my-servers" className="text-sm text-blue-600 hover:text-blue-800">全部 {totalAvailable} 个 →</Link>
         </div>
-        {installed.length === 0 ? (
+        {installed.length === 0 && trackedServers.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
             还没有安装任何 Server
             <br />
             <Link to="/market" className="text-blue-600 mt-2 inline-block">去市场安装 →</Link>
+            <br />
+            <span className="text-xs text-gray-400 mt-1">或 <Link to="/config" className="text-blue-600">上传 mcp.json 配置</Link></span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {installed.map((s) => (
-              <ServerCard key={s.id} server={s} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {installed.map((s) => (
+                <ServerCard key={s.id} server={s} />
+              ))}
+              {/* 追踪但未安装的 Server — 简化卡片 */}
+              {trackedServers
+                .filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id))
+                .slice(0, 3)
+                .map((ts) => (
+                  <Link
+                    key={ts.server_id}
+                    to={`/servers/${encodeURIComponent(ts.server_id)}`}
+                    className="block bg-white rounded-xl border border-dashed border-gray-200 p-5 hover:border-blue-200 hover:shadow-sm transition-all opacity-70 hover:opacity-100"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-300 text-xl">📥</span>
+                      <div>
+                        <p className="font-medium text-gray-500 text-sm truncate">{ts.name || ts.server_id}</p>
+                        <p className="text-xs text-gray-400">追踪中 · 未安装</p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+            </div>
+            {trackedServers.filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id)).length > 3 && (
+              <p className="text-xs text-gray-400 text-center mt-2">
+                还有 {trackedServers.filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id)).length - 3} 个追踪中的 Server
+                <Link to="/my-servers" className="text-blue-600 ml-1">查看全部 →</Link>
+              </p>
+            )}
+          </>
         )}
       </section>
 
