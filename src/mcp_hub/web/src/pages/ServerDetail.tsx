@@ -50,7 +50,6 @@ export default function ServerDetail() {
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
   const [tokenAnalysis, setTokenAnalysis] = useState<TokenAnalysisResult | null>(null)
   const [reliability, setReliability] = useState<any>(null)
-  const [extraLoading, setExtraLoading] = useState(true)
 
   // Review states
   const [reviews, setReviews] = useState<any[]>([])
@@ -93,7 +92,7 @@ export default function ServerDetail() {
       apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=claude-code`)
         .then(r => { if (r.data) { setConfigData(r.data); setShowConfig(true) }})
         .catch(() => {}),
-    ]).finally(() => setExtraLoading(false))
+    ])
   }, [id])
 
   const latestAgentRef = useRef<string>('')
@@ -116,7 +115,7 @@ export default function ServerDetail() {
 
   const handleCopy = () => {
     if (!configData) return
-    navigator.clipboard.writeText(JSON.stringify(configData.config_content, null, 2))
+    navigator.clipboard.writeText(JSON.stringify(configData.config_content, null, 2)).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -258,6 +257,7 @@ export default function ServerDetail() {
     verified: '🔒 安全认证',
     reviewed: '⚪ 已审查',
     unreviewed: '⚠️ 未审查',
+    blocked: '🚫 已阻止',
   }
 
   return (
