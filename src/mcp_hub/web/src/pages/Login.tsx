@@ -52,13 +52,12 @@ export default function Login() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center space-y-5">
-          <img
-            src={avatarUrl}
-            alt={auth.userId}
-            className="w-20 h-20 rounded-full mx-auto border-4 border-gray-100"
-            onError={(e: any) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
-          />
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 items-center justify-center text-white text-3xl font-bold mx-auto hidden">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={auth.userId}
+              className="w-20 h-20 rounded-full mx-auto border-4 border-gray-100"
+              onError={(e: any) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          ) : null}
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold mx-auto">
             {auth.userId[0]?.toUpperCase()}
           </div>
           <div>

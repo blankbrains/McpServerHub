@@ -30,7 +30,6 @@ export default function Dashboard() {
   const [uploadResult, setUploadResult] = useState<any>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_upload_result') || 'null') } catch { return null }
   })
-  const [gatewayUrl, setGatewayUrl] = useState(window.location.origin + '/api/v1')
   // Monitor states
   const [monitorSummary, setMonitorSummary] = useState<any>(null)
   const [topReliable, setTopReliable] = useState<any[]>([])

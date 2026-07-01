@@ -44,9 +44,9 @@ export default function LocalDiscovery() {
 
   useEffect(() => {
     Promise.all([
-      apiGet<DiscoverData>('/local/discover').then(r => setDiscover(r.data)).catch(() => {}),
-      apiGet<CompareItem[]>('/local/compare').then(r => setCompare(r.data || [])).catch(() => {}),
-      apiGet<ConflictItem[]>('/local/conflicts').then(r => setConflicts(r.data || [])).catch(() => {}),
+      apiGet<DiscoverData>('/local/discover').then(r => setDiscover(r.data)),
+      apiGet<CompareItem[]>('/local/compare').then(r => setCompare(r.data || [])),
+      apiGet<ConflictItem[]>('/local/conflicts').then(r => setConflicts(r.data || [])),
     ]).catch(() => setError('加载本地 Agent 信息失败'))
       .finally(() => setLoading(false))
   }, [])

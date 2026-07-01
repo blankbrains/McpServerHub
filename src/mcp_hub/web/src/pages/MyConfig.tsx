@@ -144,6 +144,7 @@ export default function MyConfig() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ servers: hubIds }),
         })
+        if (!res.ok) throw new Error(`服务器错误: ${res.status}`)
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -260,12 +261,15 @@ export default function MyConfig() {
                         const uid = localStorage.getItem('mcp_hub_user')
                         if (!uid) return
                         try {
-                          await fetch('/api/v1/config/groups/set', {
+                          const gr = await fetch('/api/v1/config/groups/set', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
                             body: JSON.stringify({ server_id: s.hub_id || s.name, group_name: gname }),
                           })
-                        } catch {}
+                          if (!gr.ok) throw new Error('save failed')
+                          setMessage(`✅ 分组已更新`)
+                          setTimeout(() => setMessage(''), 2000)
+                        } catch { setMessage('⚠️ 分组保存失败') }
                       }}
                       className="px-1.5 py-0.5 text-xs border border-gray-200 rounded w-20 bg-white focus:ring-1 focus:ring-blue-400 outline-none"
                     />
