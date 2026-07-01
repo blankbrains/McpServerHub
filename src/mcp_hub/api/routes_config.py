@@ -174,6 +174,7 @@ async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
                     matched=s.get("matched", True),
                     enabled=s.get("enabled", True),
                     agent=s.get("agent", ""),
+                    group_name=s.get("group_name", ""),
                 ))
         await session.commit()
 

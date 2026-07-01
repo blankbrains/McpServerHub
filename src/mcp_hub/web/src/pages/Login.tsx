@@ -49,7 +49,6 @@ export default function Login() {
   }, [])
 
   if (auth.token && auth.userId) {
-    const [imgFailed, setImgFailed] = useState(false)
     const avatarUrl = userInfo?.avatar_url || `https://github.com/${auth.userId}.png`
     return (
       <div className="min-h-[60vh] flex items-center justify-center">

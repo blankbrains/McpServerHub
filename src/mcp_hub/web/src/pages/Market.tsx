@@ -43,10 +43,13 @@ export default function Market() {
             const merged = new Set([...prev, ...apiIds])
             return merged
           })
-          // 同步到 localStorage
-          const localIds: string[] = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]').map((x: any) => x.name || x.hub_id || '')
-          const allIds: string[] = [...new Set([...localIds, ...apiIds])]
-          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(allIds.map(id => ({ name: id, hub_id: id, matched: true }))))
+          // 合并到 localStorage：保留已有字段（command/enabled等），新增API中的ID
+          const localServers: any[] = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+          const localMap = new Map(localServers.map((x: any) => [x.name || x.hub_id, x]))
+          for (const id of apiIds) {
+            if (!localMap.has(id)) localMap.set(id, { name: id, hub_id: id, matched: true })
+          }
+          localStorage.setItem('mcp_hub_my_servers', JSON.stringify([...localMap.values()]))
         }
       })
       .catch(() => {})

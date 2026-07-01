@@ -43,12 +43,15 @@ export default function LocalDiscovery() {
   const [tab, setTab] = useState<'agents' | 'compare' | 'conflicts'>('agents')
 
   useEffect(() => {
+    let failed = false
     Promise.all([
-      apiGet<DiscoverData>('/local/discover').then(r => setDiscover(r.data)),
-      apiGet<CompareItem[]>('/local/compare').then(r => setCompare(r.data || [])),
-      apiGet<ConflictItem[]>('/local/conflicts').then(r => setConflicts(r.data || [])),
-    ]).catch(() => setError('加载本地 Agent 信息失败'))
-      .finally(() => setLoading(false))
+      apiGet<DiscoverData>('/local/discover').then(r => setDiscover(r.data)).catch(() => { failed = true }),
+      apiGet<CompareItem[]>('/local/compare').then(r => setCompare(r.data || [])).catch(() => { failed = true }),
+      apiGet<ConflictItem[]>('/local/conflicts').then(r => setConflicts(r.data || [])).catch(() => { failed = true }),
+    ]).finally(() => {
+      if (failed) setError('部分数据加载失败')
+      setLoading(false)
+    })
   }, [])
 
   if (loading) {
