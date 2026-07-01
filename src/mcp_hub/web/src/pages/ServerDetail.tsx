@@ -44,6 +44,7 @@ export default function ServerDetail() {
   const [selectedAgent, setSelectedAgent] = useState('claude-code')
   const [copied, setCopied] = useState(false)
   const [isFavorited, setIsFavorited] = useState(false)
+  const [installing, setInstalling] = useState(false)
 
   // New feature states
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
@@ -124,6 +125,8 @@ export default function ServerDetail() {
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
   const handleInstall = async () => {
+    setInstalling(true)
+    setMessage('')
     try {
       const r = await installServer(server.id)
       if (!r.success) {
@@ -148,6 +151,8 @@ export default function ServerDetail() {
       }
     } catch (e: any) {
       setMessage(`安装失败: ${e.message || '未知错误'}`)
+    } finally {
+      setInstalling(false)
     }
   }
 
@@ -311,13 +316,15 @@ export default function ServerDetail() {
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
           {server.status === 'not_installed' && !isTracked && (
-            <button onClick={handleInstall} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
-              📥 一键安装
+            <button onClick={handleInstall} disabled={installing}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+              {installing ? '⏳ 安装中...' : '📥 一键安装'}
             </button>
           )}
           {server.status === 'not_installed' && isTracked && (
-            <button onClick={handleInstall} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
-              📥 安装到本地
+            <button onClick={handleInstall} disabled={installing}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+              {installing ? '⏳ 安装中...' : '📥 安装到本地'}
             </button>
           )}
           {server.status === 'stopped' && (
