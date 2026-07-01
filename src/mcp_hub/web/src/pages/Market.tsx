@@ -220,8 +220,8 @@ export default function Market() {
                         next.delete(s.id)
                         setAddedServers(next)
                         try {
-                          const uid = localStorage.getItem('mcp_hub_user')
-                          if (uid) await fetch('/api/v1/config/user-servers/save', {
+                          const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
+                          await fetch('/api/v1/config/user-servers/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
                             body: JSON.stringify({ servers: filtered.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
@@ -245,8 +245,8 @@ export default function Market() {
                         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
                         setAddedServers(new Set([...addedServers, s.id]))
                         try {
-                          const uid = localStorage.getItem('mcp_hub_user')
-                          if (uid) await fetch('/api/v1/config/user-servers/save', {
+                          const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
+                          await fetch('/api/v1/config/user-servers/save', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
                             body: JSON.stringify({ servers: existing.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
