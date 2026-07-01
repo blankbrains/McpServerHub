@@ -94,19 +94,23 @@ export default function Dashboard() {
   }, [])
 
   const handleDownloadConfig = async () => {
-    const blob = await downloadConfig()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = 'mcp-hub-config.json'; a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = await downloadConfig()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'mcp-hub-config.json'; a.click()
+      URL.revokeObjectURL(url)
+    } catch { setError('下载配置失败，请检查服务是否正常运行') }
   }
 
   const handleUploadConfig = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const r = await uploadConfig(file)
-    setUploadResult(r)
-    localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
+    try {
+      const r = await uploadConfig(file)
+      setUploadResult(r)
+      localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
+    } catch { setUploadResult({ success: false, message: '上传失败' }) }
   }
 
   if (loading) {
