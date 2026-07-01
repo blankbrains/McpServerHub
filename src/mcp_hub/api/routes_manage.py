@@ -154,9 +154,8 @@ async def start_server(server_id: str, x_user_id: str = Header("anonymous")):
             )
             row = result.fetchone()
             if row is not None and row[0] is False:
-                from mcp_hub.exceptions import ConfigError as CfgErr
-                raise CfgErr(f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动")
-    except CfgErr:
+                raise ConfigError(f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动")
+    except ConfigError:
         raise
     except Exception as e:
         logger.warning("manage.start.enabled_check_failed", server_id=server_id, error=str(e))
