@@ -11,7 +11,7 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, File, Header, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from mcp_hub.core.registry import Registry
 from mcp_hub.db.database import async_session_factory
@@ -178,6 +178,32 @@ async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
         await session.commit()
 
     return {"success": True, "message": f"已保存 {len(servers)} 个 Server"}
+
+
+@router.post("/config/user-servers/toggle")
+async def toggle_server_enabled(data: dict, x_user_id: str = Header("anonymous")):
+    """直接切换单个 Server 的启用/禁用状态（无需加载全部再保存）。"""
+    server_id = data.get("server_id", "")
+    enabled = data.get("enabled", True)
+
+    if not server_id:
+        return {"success": False, "error": "需要 server_id"}
+
+    async with async_session_factory() as session:
+        await session.execute(
+            text(
+                "UPDATE user_servers SET enabled = :en "
+                "WHERE user_id = :uid AND server_id = :sid"
+            ),
+            {"en": enabled, "uid": x_user_id, "sid": server_id},
+        )
+        await session.commit()
+
+    return {
+        "success": True,
+        "enabled": enabled,
+        "message": f"{'启用' if enabled else '禁用'} {server_id}",
+    }
 
 
 @router.post("/config/upload")

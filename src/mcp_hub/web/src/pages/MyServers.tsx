@@ -44,27 +44,20 @@ export default function MyServers() {
   }
 
   const toggleEnabled = async (sid: string, current: boolean) => {
+    const { userId: uid } = getAuthState()
+    if (!uid) return
+    // 直接调用 toggle API，不再加载全部再保存
     try {
-      const { userId: uid } = getAuthState()
-      if (!uid) { setMessage('请先登录'); return }
-      // 获取当前 user_servers，切换 enabled
-      const res = await fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })
-      const r = await res.json()
-      if (r.data) {
-        const updated = r.data.map((s: any) => {
-          if ((s.name === sid || s.hub_id === sid)) return { ...s, enabled: !current }
-          return s
-        })
-        await fetch('/api/v1/config/user-servers/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-          body: JSON.stringify({ servers: updated.map((s: any) => ({ name: s.name || s.hub_id, hub_id: s.hub_id, matched: s.matched, enabled: s.enabled })) }),
-        })
-        setMessage(current ? `⏹ 已禁用 ${sid}` : `✅ 已启用 ${sid}`)
-        load()
-      }
-    } catch { setMessage('❌ 操作失败') }
-    setTimeout(() => setMessage(''), 3000)
+      await fetch('/api/v1/config/user-servers/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
+        body: JSON.stringify({ server_id: sid, enabled: !current }),
+      })
+      // 乐观更新本地状态
+      setServers(prev => prev.map(s =>
+        (s.server_id === sid) ? { ...s, enabled: !current } : s
+      ))
+    } catch {}
   }
 
   const installed = servers.filter(s => s.status !== 'not_installed')
