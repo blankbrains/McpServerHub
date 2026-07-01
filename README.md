@@ -60,9 +60,13 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server、100k+ Sta
   📊 Token 分析 — 分析工具定义占上下文比，自动生成优化描述
   🛠️ Server Builder — 交互式/网页端创建 MCP Server 项目，下载 ZIP
   📈 质量监控  — Uptime 追踪、可靠性评分、最稳定 Server 排行榜
-  🔘 启用/禁用 — 我的 Server 中每个追踪的 Server 可独立启用或禁用
-  📞 调用计数  — MCP 网关自动记录每次 tool call，监控大屏展示真实使用量
-  🎯 Agent 绑定 — 上传配置时选择 Claude Code/Cursor 等 Agent，配置按需导出
+  🔘 启用/禁用 — 一键切换，直接写入数据库，即时生效
+  📞 调用计数  — MCP 网关自动记录每次 tool call，
+  🎯 Agent 绑定 — 上传配置时选择 Claude Code/Cursor /Codex/Trae，配置按需导出
+t  🔍 本地发现  — 自动扫描 8 种 AI Agent 的本地 MCP 配置
+t  📦 配置备份  — 备份/恢复/快照 + 差异对比 + 上传预览确认
+t  🗂 分组管理  — Server 分配 group 标签，支持批量启用/禁用
+t  🔎 日志搜索  — 跨 Server 关键词搜索，显示匹配行及上下文
 ```
 
 ---
@@ -161,9 +165,9 @@ http://localhost:3987
 
 实时监控、日志查看、搜索、安装、管理 — 全部在浏览器中完成。
 
-### 📋 本地使用（无需部署 Hub）
+### 📋 本地使用 + 自动发现
 
-不想部署 Hub？每个 Server 详情页都提供配置片段，直接复制到你本地的 Agent 配置文件中即可使用。支持 Claude Code / Cursor / Codex / Trae。
+不想部署 Hub？上传你的 mcp.json 配置，Hub 自动发现匹配市场 Server，一键同步到本地。支持 Claude Code / Cursor / Codex / Trae / Windsurf / VS Code Copilot 等 8 种 Agent。
 
 ---
 
@@ -328,6 +332,10 @@ http://localhost:3987
 | ✅ P4 | **完成** | 测试（206 个）、GitHub Actions CI、Ruff 检查 |
 | ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
 | ✅ P6 | **完成** | 🛡️ 安全评分引擎 + 📊 Token 分析器 |
+  ✅ P11 | **完成** | 🔍 本地 Agent 发现（8 种 AI Agent 自动扫描）
+  ✅ P12 | **完成** | 📦 配置备份/恢复/快照 + 差异对比
+  ✅ P13 | **完成** | 🗂 Server 分组管理 + 🔎 跨 Server 日志搜索
+  ✅ P14 | **完成** | 安装预检 + 依赖分析 + 离线缓存
 | ✅ P7 | **完成** | 🛠️ MCP Server Builder（CLI + Web 下载） |
 | ✅ P8 | **完成** | 📈 质量监控网络 + 可靠性排行榜 |
 | ✅ P9 | **完成** | 🔘 启用/禁用开关 + 📞 真实调用计数 + 🎯 Agent 绑定 |

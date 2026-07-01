@@ -57,19 +57,21 @@ src/mcp_hub/
 │   ├── init_cmd.py / quickstart.py
 │   └── ...
 │
-├── core/                # 12 个核心服务模块
+├── core/                # 14 个核心服务模块
 │   ├── registry.py           # Server 注册与索引
 │   ├── installer.py          # 安装执行器 (pip/npm/uvx)
 │   ├── process_manager.py    # 子进程生命周期管理
-│   ├── health_check.py       # 三级健康检查 (L1/L2/L3)
-│   ├── event_bus.py          # 事件总线 (Pub/Sub)
+│   ├── health_check.py       # 三级健康检查 + 自动恢复
+│   ├── event_bus.py          # 事件总线 (Pub/Sub + DB持久化)
 │   ├── mcp_gateway.py        # MCP 网关 (单 stdio 聚合)
 │   ├── auth.py               # GitHub OAuth + JWT
 │   ├── security_scanner.py   # 四维安全评分引擎
 │   ├── token_analyzer.py     # Token 消耗分析 + 优化
 │   ├── server_builder.py     # MCP Server 构建器 (8 模板)
 │   ├── monitor.py            # 质量监控网络 (可靠性评分)
-│   ├── config_manager.py     # 配置管理
+│   ├── config_manager.py     # 配置管理 (备份/差异/预检)
+│   ├── local_discovery.py    # 本地 Agent MCP 配置发现
+│   ├── dependency_analyzer.py # Server 依赖分析
 │   └── version_manager.py    # 版本管理
 │
 ├── db/                  # 7 个数据库模块
@@ -85,7 +87,8 @@ src/mcp_hub/
 └── web/                 # React 前端
     ├── app.py           # 静态文件服务 + SPA fallback
     └── src/
-        ├── pages/       # Dashboard / Market / ServerDetail / MyServers / ConfigPage / Builder / MyConfig
+        ├── pages/       # Dashboard / Market / ServerDetail / MyServers / ConfigPage
+        │              # Builder / MyConfig / Login / Publish / MonitorDashboard / LocalDiscovery
         └── components/  # StatusBadge / StarRating / LogViewer / ServerCard / Layout
 ```
 
@@ -109,10 +112,14 @@ src/mcp_hub/
 | **📊 Token 分析** | tiktoken 精确计数 + 优化建议 + 同类对比 |
 | **🛠️ Server Builder** | 8 个工具模板 → 交互式 CLI 向导 + Web Builder |
 | **📈 质量监控** | 可靠性评分 (uptime×40%+7d×30%+响应×20%+1h×10%) |
-| **🔘 启用/禁用** | 我的 Server 中每个追踪的 Server 可独立启用或禁用 |
+| **🔘 启用/禁用** | 一键切换，直接写 DB，即时生效 |
 | **📞 调用计数** | MCP 网关自动记录每次 tool call（含响应时长 duration_ms）|
 | **🎯 Agent 绑定** | 上传配置时选择 Claude Code/Cursor/Codex/Trae |
 | **📊 监控大屏** | 聚合所有 Server 状态/PID/调用/Token/可靠性的可视化看板 |
+| **🔍 本地发现** | 自动扫描 8 种 AI Agent 的标准 MCP 配置路径 |
+| **📦 配置管理** | 备份/恢复/差异对比 + 上传预览确认 |
+| **🗂 分组管理** | Server 可分配 group_name，支持批量启用/禁用 |
+| **🔎 日志搜索** | 跨 Server 关键词搜索（含上下文行）|
 
 ## 部署方式
 
