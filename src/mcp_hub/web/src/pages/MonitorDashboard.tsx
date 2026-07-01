@@ -177,6 +177,7 @@ export default function MonitorDashboard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
+                <Th>#</Th>
                 <Th onClick={() => toggleSort('server_id')} active={sortField === 'server_id'} asc={sortAsc}>Server</Th>
                 <Th onClick={() => toggleSort('running')} active={sortField === 'running'} asc={sortAsc}>状态</Th>
                 <Th>位置 / PID</Th>
@@ -189,12 +190,13 @@ export default function MonitorDashboard() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.length === 0 ? (
-                <tr><td colSpan={8} className="p-8 text-center text-gray-400">暂无数据</td></tr>
-              ) : sorted.map(srv => {
+                <tr><td colSpan={9} className="p-8 text-center text-gray-400">暂无数据</td></tr>
+              ) : sorted.map((srv, i) => {
                 const maxCalls = Math.max(...sorted.map(s => s.call_count_7d), 1)
                 const maxTokens = Math.max(...sorted.map(s => s.token_consumption), 1)
                 return (
                   <tr key={srv.server_id} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-3 text-xs text-gray-400">({i + 1})</td>
                     <td className="p-3">
                       <Link to={`/servers/${encodeURIComponent(srv.server_id)}`} className="text-blue-600 hover:text-blue-800 font-medium">
                         {srv.name}

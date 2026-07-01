@@ -145,7 +145,7 @@ export default function ConfigPage() {
             <p>{uploadResult.message || (uploadResult.success !== false ? '配置上传成功' : '上传失败')}</p>
             {uploadResult.data?.matched?.length > 0 && (
               <div className="mt-1 text-xs">
-                <p className="font-medium">✅ 匹配到 {uploadResult.data.matched.length} 个 Hub Server：</p>
+                <p className="font-medium">✅ 上传后自动连接 {uploadResult.data.matched.length} 个 Server：</p>
                 {uploadResult.data.matched.map((m: any) => <p key={m.local_name} className="ml-2">• {m.local_name}</p>)}
               </div>
             )}
@@ -230,33 +230,17 @@ export default function ConfigPage() {
         )}
       </div>
 
-      {/* 命令行同步（高级选项） */}
+      {/* 同步到本地 */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <button
-          className="flex items-center justify-between w-full text-left cursor-pointer"
-          onClick={() => setShowCliHint(!showCliHint)}
-          aria-expanded={showCliHint}
-        >
-          <h2 className="font-semibold text-gray-900">🖥️ 命令行同步（高级）</h2>
-          <span className="text-gray-400 text-sm">{showCliHint ? '收起' : '展开'}</span>
+        <h2 className="font-semibold text-gray-900 mb-3">🔄 同步到本地</h2>
+        <p className="text-sm text-gray-500 mb-4">将配置文件下载到电脑后，放入对应 Agent 的目录即可自动连接以下 Server</p>
+        <button onClick={() => handleDownloadForAgent()} disabled={downloading}
+          className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-colors disabled:opacity-50">
+          {downloading ? '⏳ 生成中...' : '🔄 一键同步到本地'}
         </button>
-        {showCliHint && (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-gray-500">如果你安装了 <code className="px-1 bg-gray-100 rounded text-xs">mcp-hub-cli</code>，可以使用以下命令一键同步配置到本地：</p>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-gray-900 rounded-lg p-3 overflow-x-auto">
-                <pre className="text-green-400 text-xs font-mono">mcp config sync --server {window.location.origin}</pre>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => { navigator.clipboard.writeText(`mcp config sync --server ${window.location.origin}`); setMessage('✅ 命令已复制，在终端中粘贴运行') }}
-                  className="px-3 py-2 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors flex-shrink-0">
-                  📋 复制
-                </button>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">需要先安装 CLI：<code className="px-1 bg-gray-100 rounded">pip install mcp-hub-cli</code></p>
-          </div>
-        )}
+        <p className="text-xs text-gray-400 mt-2 text-center">
+          下载后放入 {agent?.path || '~/.config/Claude/claude_desktop_config.json'}，重启 Agent 即可生效
+        </p>
       </div>
     </div>
   )

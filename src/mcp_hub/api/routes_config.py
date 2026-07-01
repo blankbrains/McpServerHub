@@ -332,13 +332,13 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
                 entry["matched"] = False
                 not_in_hub.append(entry)
 
-    # 同步所有 server 到 user_servers 表（用户追踪列表）
+    # 同步所有 server 到 user_servers 表，同时标记为已安装（stopped）
     async with async_session_factory() as session:
         # 先清理当前用户的旧记录
         await session.execute(
             delete(UserServerModel).where(UserServerModel.user_id == x_user_id)
         )
-        # 写入新的追踪列表
+        # 写入新记录
         for ts in all_tracked:
             session.add(UserServerModel(
                 user_id=x_user_id,
@@ -347,6 +347,13 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
                 agent=x_agent_id if x_agent_id else "",
             ))
         await session.commit()
+
+    # 将所有匹配到的 Server 状态改为 stopped（视为已安装）
+    for ts in all_tracked:
+        try:
+            await registry.update_status(ts["server_id"], "stopped")
+        except Exception:
+            pass
 
     return {
         "success": True,
@@ -358,9 +365,9 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
             "file_name": file.filename or "unknown",
         },
         "message": (
-            f"配置包含 {len(servers_map)} 个 Server 定义，"
-            f"其中 {len(matched)} 个可在 Hub 中安装，"
-            f"{len(unmatched)} 个未匹配到市场"
+            f"配置包含 {len(servers_map)} 个 Server，"
+            f"已安装 {len(matched)} 个（市场匹配），"
+            f"{len(unmatched)} 个已注册为自定义 Server"
         ),
     }
 
