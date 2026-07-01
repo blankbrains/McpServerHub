@@ -87,11 +87,10 @@ export default function MyServers() {
     if (!window.confirm(`确定要移除 "${sid}" 吗？`)) return
     // 直接调用删除 API
     const { userId: uid } = getAuthState()
-    if (!uid) return
     try {
       await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
         method: 'DELETE',
-        headers: { 'x-user-id': uid },
+        headers: { 'x-user-id': uid || 'anonymous' },
       })
       // 同时清理 localStorage
       const local = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')

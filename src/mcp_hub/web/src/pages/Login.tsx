@@ -8,6 +8,7 @@ export default function Login() {
   const [loggingIn, setLoggingIn] = useState(false)
   const [userInfo, setUserInfo] = useState<any>(null)
   const [userInfoLoading, setUserInfoLoading] = useState(true)
+  const [imgFailed, setImgFailed] = useState(false)
 
   const handleLogin = () => {
     setLoggingIn(true)
@@ -48,18 +49,21 @@ export default function Login() {
   }, [])
 
   if (auth.token && auth.userId) {
+    const [imgFailed, setImgFailed] = useState(false)
     const avatarUrl = userInfo?.avatar_url || `https://github.com/${auth.userId}.png`
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center space-y-5">
-          {avatarUrl ? (
+          {!imgFailed ? (
             <img src={avatarUrl} alt={auth.userId}
               className="w-20 h-20 rounded-full mx-auto border-4 border-gray-100"
-              onError={(e: any) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              onError={() => setImgFailed(true)} />
           ) : null}
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold mx-auto">
-            {auth.userId[0]?.toUpperCase()}
-          </div>
+          {imgFailed ? (
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-3xl font-bold mx-auto">
+              {auth.userId[0]?.toUpperCase()}
+            </div>
+          ) : null}
           <div>
             <h2 className="text-xl font-semibold text-gray-800">{userInfo?.display_name || auth.userId}</h2>
             <p className="text-sm text-gray-500">@{auth.userId}</p>
