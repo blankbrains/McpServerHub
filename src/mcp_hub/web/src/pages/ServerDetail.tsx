@@ -130,24 +130,22 @@ export default function ServerDetail() {
     try {
       const r = await installServer(server.id)
       if (!r.success) {
-        setMessage(`❌ 安装失败: ${r.data?.error || r.message || '未知错误'}`)
+        setMessage(`❌ 安装失败: ${r.message || r.data?.detail || '未知错误'}`)
         return
       }
-      setMessage('✅ 安装成功')
-      if (r.success) {
-        setServer({ ...server, status: 'stopped' })
-        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-        if (!existing.find((x: any) => x.name === server.id)) {
-          existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
-          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
-        }
-        if (r.data?.configs) {
-          const agentCfg = r.data.configs.find((c: any) =>
-            c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
-          )
-          setConfigData(agentCfg || r.data.configs[0])
-          setShowConfig(true)
-        }
+      setMessage(`✅ 已添加到配置！本地运行: ${r.data?.install_command || r.message || ''}`)
+      setServer({ ...server, status: 'stopped' } as ServerInfo)
+      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+      if (!existing.find((x: any) => x.name === server.id)) {
+        existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
+        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
+      }
+      if (r.data?.configs) {
+        const agentCfg = r.data.configs.find((c: any) =>
+          c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
+        )
+        setConfigData(agentCfg || r.data.configs[0])
+        setShowConfig(true)
       }
     } catch (e: any) {
       setMessage(`安装失败: ${e.message || '未知错误'}`)
