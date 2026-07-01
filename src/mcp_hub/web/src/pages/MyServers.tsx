@@ -84,22 +84,19 @@ export default function MyServers() {
       }) } catch {}
       return
     }
-    // remove from user_servers
+    // 直接调用删除 API
     const { userId: uid } = getAuthState()
     if (!uid) return
     try {
-      const res = await fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })
-      const r = await res.json()
-      if (r.data) {
-        const updated = r.data.filter((s: any) => (s.name || s.hub_id) !== sid)
-        await fetch('/api/v1/config/user-servers/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-          body: JSON.stringify({ servers: updated.map((s: any) => ({ name: s.name || s.hub_id, hub_id: s.hub_id, matched: s.matched, enabled: s.enabled, agent: s.agent })) }),
-        })
-        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(updated.map((s: any) => ({ name: s.name || s.hub_id, hub_id: s.hub_id, matched: s.matched, enabled: s.enabled }))))
-        load()
-      }
+      await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
+        method: 'DELETE',
+        headers: { 'x-user-id': uid },
+      })
+      // 同时清理 localStorage
+      const local = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+      const updated = local.filter((x: any) => (x.name || x.hub_id) !== sid)
+      localStorage.setItem('mcp_hub_my_servers', JSON.stringify(updated))
+      load()
     } catch {}
   }
 

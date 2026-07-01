@@ -12,7 +12,7 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
   const c = config[status] || { color: 'bg-gray-100 text-gray-600', icon: '❓', label: status }
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${c.color}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 ${c.color}`}
       role="status"
       aria-label={`状态: ${c.label}`}
     >

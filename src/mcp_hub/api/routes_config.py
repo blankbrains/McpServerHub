@@ -206,6 +206,19 @@ async def toggle_server_enabled(data: dict, x_user_id: str = Header("anonymous")
     }
 
 
+@router.delete("/config/user-servers/{server_id:path}")
+async def remove_user_server(server_id: str, x_user_id: str = Header("anonymous")):
+    """从用户配置中移除单个 Server。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            delete(UserServerModel)
+            .where(UserServerModel.user_id == x_user_id, UserServerModel.server_id == server_id)
+        )
+        await session.commit()
+
+    return {"success": True, "message": f"已移除 {server_id}"}
+
+
 @router.post("/config/upload")
 async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str = Header("anonymous"), x_agent_id: str = Header("")):
     """上传本地的 claude_desktop_config.json，匹配市场中的 Server。
