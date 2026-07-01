@@ -103,7 +103,7 @@ class HealthChecker:
         """
         start = time.monotonic()
         last_ok = getattr(managed_process, "last_keepalive_ok", None)
-        now = asyncio.get_event_loop().time()
+        now = time.time()
 
         if last_ok is not None and (now - last_ok) < 30.0:
             passed = True
@@ -127,7 +127,7 @@ class HealthChecker:
     ) -> list[HealthResult]:
         """对所有运行中的 Server 执行完整三级健康检查。"""
         results: list[HealthResult] = []
-        now = asyncio.get_event_loop().time()
+        now = time.time()
 
         for proc in process_manager.list_running():
             sid = proc.server_id

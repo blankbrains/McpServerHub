@@ -84,6 +84,7 @@ export default function MyServers() {
       }) } catch {}
       return
     }
+    if (!window.confirm(`确定要移除 "${sid}" 吗？`)) return
     // 直接调用删除 API
     const { userId: uid } = getAuthState()
     if (!uid) return

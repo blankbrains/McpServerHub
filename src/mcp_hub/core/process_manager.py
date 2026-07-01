@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -81,7 +82,7 @@ class ProcessManager:
                 server_id=server_id,
                 pid=process.pid,
                 process=process,
-                started_at=asyncio.get_event_loop().time(),
+                started_at=time.time(),
                 log_file=log_file,
                 log_fd=log_fd.fileno(),
                 spawn_command=command,
@@ -126,7 +127,7 @@ class ProcessManager:
                         try:
                             proc.process.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
                             await proc.process.stdin.drain()
-                            proc.last_keepalive_ok = asyncio.get_event_loop().time()
+                            proc.last_keepalive_ok = time.time()
                         except (BrokenPipeError, OSError):
                             break
                     await asyncio.sleep(10)
