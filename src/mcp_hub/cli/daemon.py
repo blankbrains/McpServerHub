@@ -66,24 +66,39 @@ def daemon_disable():
 
 @click.command("serve")
 def serve():
-    """启动 MCP 协议网关（stdio 模式），供 Claude Code 等 Agent 连接。"""
+    """启动 MCP 协议网关（stdio 模式），供 Claude Code / Codex / Cursor 等 Agent 连接。
+
+    工作方式:
+      在 Agent 的 mcp.json 中添加:
+        {"mcpServers": {"mcp-hub": {"command": "mcp", "args": ["serve"]}}}
+
+      Agent 启动时会自动通过 stdio 连接 Hub Gateway，
+      Gateway 将所有已安装且已启用的 Server 的工具聚合暴露给 Agent。
+
+      每次 tools/call 自动记录到 usage_stats 表，监控大屏可看到真实调用数据。
+    """
     from mcp_hub.core.mcp_gateway import McpGateway
 
-    click.echo("🔌 MCP Hub Gateway 已启动（stdio 模式）")
-    click.echo("   等待 Agent 连接...")
+    click.echo("🔌 MCP Hub Gateway 启动中...")
 
     async def _run():
         gateway = McpGateway()
         started = await gateway.start_all_managed()
         if started:
-            click.echo(f"   📦 已加载 {len(started)} 个 MCP Server:")
+            click.echo(f"   ✅ 已连接 {len(started)} 个 MCP Server:")
             for s in started:
                 click.echo(f"      - {s}")
         else:
-            click.echo("   ⚠️  没有已安装的 MCP Server")
-            click.echo("   提示: 使用 mcp install <server> 安装后再试")
+            click.echo("   ⚠️  没有可用的 MCP Server（检查是否已安装且已启用）")
 
-        await gateway.handle_stdio()
-        await gateway.shutdown()
+        click.echo("   📊 调用数据将自动记录到监控大屏")
+        click.echo("   ⏳ 等待 Agent 连接...（按 Ctrl+C 退出）")
+
+        try:
+            await gateway.handle_stdio()
+        except KeyboardInterrupt:
+            click.echo("\n   正在关闭...")
+        finally:
+            await gateway.shutdown()
 
     asyncio.run(_run())
