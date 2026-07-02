@@ -155,7 +155,7 @@ mcp stop server-filesystem
 }
 ```
 
-**通过 Hub 安装的任何 Server 都会自动在 Claude Code 中可用，** 无需再手动编辑配置文件。
+**通过 Hub Gateway 安装的任何 Server 都会自动在 Claude Code 中可用。所有调用次数、响应时长、Token 消耗自动记录到监控大屏。** 无需再手动编辑配置文件。
 
 ### 🌐 Web 仪表盘
 
@@ -217,7 +217,7 @@ http://localhost:3987
 
 🔧  系统
   daemon               管理 Hub 守护进程
-  serve                启动 MCP 网关（stdio）
+  serve                启动 MCP 网关（stdio，调用数据自动记录到监控大屏）
   init                 一键初始化（PostgreSQL）
   quickstart           零配置启动（SQLite，30 秒）
 
@@ -332,6 +332,7 @@ http://localhost:3987
 | ✅ P4 | **完成** | 测试（206 个）、GitHub Actions CI、Ruff 检查 |
 | ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
 | ✅ P6 | **完成** | 🛡️ 安全评分引擎 + 📊 Token 分析器 |
+t  ✅ P15 | **完成** | 🔗 MCP 网关完整打通 — Agent 调用自动记录到 usage_stats，监控大屏实时可见
   ✅ P11 | **完成** | 🔍 本地 Agent 发现（8 种 AI Agent 自动扫描）
   ✅ P12 | **完成** | 📦 配置备份/恢复/快照 + 差异对比
   ✅ P13 | **完成** | 🗂 Server 分组管理 + 🔎 跨 Server 日志搜索
