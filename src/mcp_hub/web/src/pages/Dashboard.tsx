@@ -33,6 +33,7 @@ export default function Dashboard() {
   // Monitor states
   const [monitorSummary, setMonitorSummary] = useState<any>(null)
   const [topReliable, setTopReliable] = useState<any[]>([])
+  const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
 
   useEffect(() => {
     async function load() {
@@ -71,6 +72,12 @@ export default function Dashboard() {
     // Load monitoring data
     getMonitorSummary().then(r => setMonitorSummary(r.data)).catch(() => {})
     getTopReliable(5).then(r => setTopReliable(r.data || [])).catch(() => {})
+    // 加载个性化推荐
+    const uid = localStorage.getItem('mcp_hub_user')
+    if (uid) {
+      apiGet<ServerInfo[]>(`/market/recommendations?user_id=${encodeURIComponent(uid)}&limit=6`)
+        .then(r => setRecommendations(r.data || [])).catch(() => setRecommendations([]))
+    }
 
     const es = connectStatusSSE((data) => {
       setRunningCount(Object.keys(data.running || {}).length)
@@ -346,8 +353,11 @@ export default function Dashboard() {
               if (!logSearchQuery.trim()) return
               setLogSearching(true); setLogResults([])
               try {
-                const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`)
-                const d = await r.json()
+                const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
+              const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`, {
+                headers: { 'x-user-id': uid },
+              })
+              const d = await r.json()
                 setLogResults(d.data || [])
               } catch { setLogResults([]) }
               finally { setLogSearching(false) }
@@ -384,6 +394,26 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* 个性化推荐 */}
+      {recommendations.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">💡 猜你喜欢</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recommendations.slice(0, 6).map(s => (
+              <Link key={s.id} to={`/servers/${encodeURIComponent(s.id)}`}
+                className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all">
+                <p className="font-medium text-gray-900 text-sm truncate">{s.id.split('/').pop()}</p>
+                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{s.description?.slice(0, 80) || ''}</p>
+                <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                  <span>⭐ {(s.rating || 0).toFixed(1)}</span>
+                  <span>📥 {s.download_count >= 1000 ? `${(s.download_count/1000).toFixed(1)}K` : s.download_count}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Trending */}
       <section>

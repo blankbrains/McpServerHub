@@ -25,7 +25,7 @@ class FavoriteRequest(BaseModel):
 @router.post("/community/rate")
 async def rate_server(req: RateRequest, x_user_id: str = Header("api-user")):  # noqa: E501
     """评价 Server。
-    已登录用户使用 GitHub ID，未登录使用 api-user。
+    已登录用户使用 GitHub ID，未登录使用 anonymous。
     """
     async with get_session() as session:
         repo = ReviewRepository(session)
@@ -43,11 +43,11 @@ async def get_reviews(server_id: str):
 
 
 @router.post("/community/review/delete/{review_id}")
-async def delete_review(review_id: int, x_user_id: str = Header("api-user"), x_user_role: str = Header("user")):  # noqa: E501
-    """删除评价（仅评价作者、Server 发布者和管理员可删除）。"""
+async def delete_review(review_id: int, x_user_id: str = Header("anonymous")):
+    """删除评价（仅评价作者可删除——服务器端验证）。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
-        result = await repo.delete_review(review_id, x_user_id, x_user_role)
+        result = await repo.delete_review(review_id, x_user_id, "user")
     return result
 
 

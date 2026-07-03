@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
+    <script>
+      if (localStorage.getItem('mcp_hub_dark') === 'true') {
+        document.documentElement.classList.add('dark')
+      }
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

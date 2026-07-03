@@ -9,12 +9,14 @@ Gateway 将请求路由到对应的 MCP Server 子进程，并记录每次调用
   3. Agent 发送 tools/list → Gateway 聚合所有 Server 的 tools
   4. Agent 发送 tools/call → Gateway 路由到对应 Server
   5. 每次 tools/call 自动记录到 usage_stats 表（server_id/tool/duration）
+  6. 支持通过设置 MCP_HUB_REPORT_URL 环境变量，HTTP 上报调用数据到远程 Hub
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time as _time
 from dataclasses import dataclass
@@ -26,11 +28,23 @@ from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# 远程上报 URL（环境变量配置，用于用户本地的 mcp serve 上报到远程 Hub）
+_REPORT_URL = os.environ.get("MCP_HUB_REPORT_URL", "").rstrip("/")
+_REPORT_USER_ID = os.environ.get("MCP_HUB_USER_ID", "anonymous")
+
 # ── 调用记录 ────────────────────────────────────────────────
 
 
-async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0, status: str = "ok") -> None:
-    """异步记录一次 MCP 工具调用（不抛异常）。"""
+async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0, status: str = "ok",
+                           user_id: str = "", token_count: int = 0) -> None:
+    """异步记录一次 MCP 工具调用（不抛异常）。
+
+    双模式：
+    1. 本地 DB 直接写入（始终执行）
+    2. HTTP 远程上报到 Hub（当 MCP_HUB_REPORT_URL 设置时）
+    """
+    caller_user_id = user_id or _REPORT_USER_ID
+    # 模式 1: 直接写本地 DB
     try:
         from sqlalchemy import text
 
@@ -39,14 +53,33 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
         async with async_session_factory() as session:
             await session.execute(
                 text(
-                    "INSERT INTO usage_stats (server_id, tool_name, status, duration_ms) "
-                    "VALUES (:sid, :tool, :status, :dur)"
+                    "INSERT INTO usage_stats (server_id, user_id, tool_name, status, duration_ms, token_count) "
+                    "VALUES (:sid, :uid, :tool, :status, :dur, :tokens)"
                 ),
-                {"sid": server_id, "tool": tool_name, "status": status, "dur": duration_ms},
+                {"sid": server_id, "uid": caller_user_id, "tool": tool_name,
+                 "status": status, "dur": duration_ms, "tokens": token_count},
             )
             await session.commit()
     except Exception as e:
         logger.warning("gateway.record_call_failed", server_id=server_id, error=str(e))
+
+    # 模式 2: HTTP 上报到远程 Hub
+    if _REPORT_URL:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5) as client:
+                await client.post(
+                    f"{_REPORT_URL}/api/v1/usage/record",
+                    json={
+                        "server_id": server_id,
+                        "tool_name": tool_name,
+                        "status": status,
+                        "duration_ms": duration_ms,
+                    },
+                    headers={"x-user-id": _REPORT_USER_ID},
+                )
+        except Exception:
+            pass  # 远程上报失败不影响本地网关运行
 
 
 # ── ManagedMCP: 单个子 Server 连接 ──────────────────────────

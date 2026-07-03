@@ -11,6 +11,11 @@ import Login from './pages/Login'
 import Publish from './pages/Publish'
 import MonitorDashboard from './pages/MonitorDashboard'
 import LocalDiscovery from './pages/LocalDiscovery'
+import Guide from './pages/Guide'
+import ProfilePage from './pages/ProfilePage'
+import ComparePage from './pages/ComparePage'
+import NotificationsPage from './pages/NotificationsPage'
+import PresetMarket from './pages/PresetMarket'
 
 export default function App() {
   return (
@@ -28,6 +33,11 @@ export default function App() {
         <Route path="/publish/mine" element={<Publish />} />
         <Route path="/monitor" element={<MonitorDashboard />} />
         <Route path="/local" element={<LocalDiscovery />} />
+        <Route path="/guide" element={<Guide />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/compare" element={<ComparePage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/presets" element={<PresetMarket />} />
       </Routes>
     </Layout>
   )

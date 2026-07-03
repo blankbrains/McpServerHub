@@ -11,13 +11,12 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-316192?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
-[![GitHub Stars](https://img.shields.io/badge/dynamic/json?style=flat-square&label=stars&query=stargazers_count&url=https%3A%2F%2Fapi.github.com%2Frepos%2Fblankbrains%2FMcpServerHub)](https://github.com/blankbrains/McpServerHub)
 
 ---
 
 <p align="center">
-  <b>983+ 个 MCP Server</b> · <b>46 个 CLI 命令</b> · <b>16 个分类</b> · <b>286 个测试</b><br>
-  搜索 → 安装 → 自动配置 → 管理。一个平台搞定。
+  <b>983+ 个 MCP Server</b> · <b>14 个 Web 页面</b> · <b>16 个分类</b> · <b>286 个测试</b><br>
+  搜索 → 安装 → 配置 → 监控。一个平台搞定。
 </p>
 
 </div>
@@ -26,7 +25,7 @@
 
 ## 🤔 痛点
 
-MCP（Model Context Protocol）正在爆发式增长 — 983+ Server、100k+ Stars，被所有主流 AI 平台采用。但用户体验还停留在 2015 年：
+MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有主流 AI 平台采用。但用户体验还停留在 2015 年：
 
 ```
 👎 找 Server      → GitHub 盲搜，没有评分，没法对比
@@ -42,32 +41,44 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server、100k+ Sta
 
 ## ✨ 功能一览
 
-```
-🏪 市场              ⚡ 安装                ⚙️ 管理                👥 发布
-┌──────────┐         ┌──────────┐           ┌──────────┐          ┌──────────┐
-│ 搜索     │  ──→   │ 一行命令  │   ──→    │ 进程管理  │  ──→   │ 一键发布 │
-│ 浏览     │         │ 自动配置  │           │ 健康检查  │          │ 注册中心 │
-│ 对比     │         │ 版本管理  │           │ 日志查询  │          │ 评分评价 │
-│ 评分     │         │ 回滚     │           │ 自动恢复  │          │ 统计     │
-└──────────┘         └──────────┘           └──────────┘          └──────────┘
-                          │                       │
-                          └─────── 🔗 MCP 网关 ────────┘
-                        Claude Code/Cursor 的单一 stdio 入口
-                        一个配置文件，所有 Server 自动发现。
+### 🏪 市场发现
+- **搜索 & 浏览**：983+ Server，16 分类，9 维筛选（名称/分类/标签/作者/语言/安装方式/安全等级/追踪状态/排序）
+- **Server 对比**：选择 2-4 个 Server 并排对比（评分/安全/下载/可靠性/许可证）
+- **智能推荐**：同类推荐（看了还看了）+ 个性化推荐（基于你的偏好）
+- **收藏 & 评价**：收藏 Server、评分评价、回复讨论
 
-新增功能:
-  🛡️ 安全评分  — 四维评分体系，安装前自动扫描，危险 Server 阻止安装
-  📊 Token 分析 — 分析工具定义占上下文比，自动生成优化描述
-  🛠️ Server Builder — 交互式/网页端创建 MCP Server 项目，下载 ZIP
-  📈 质量监控  — Uptime 追踪、可靠性评分、最稳定 Server 排行榜
-  🔘 启用/禁用 — 一键切换，直接写入数据库，即时生效
-  📞 调用计数  — MCP 网关自动记录每次 tool call，
-  🎯 Agent 绑定 — 上传配置时选择 Claude Code/Cursor /Codex/Trae，配置按需导出
-t  🔍 本地发现  — 自动扫描 8 种 AI Agent 的本地 MCP 配置
-t  📦 配置备份  — 备份/恢复/快照 + 差异对比 + 上传预览确认
-t  🗂 分组管理  — Server 分配 group 标签，支持批量启用/禁用
-t  🔎 日志搜索  — 跨 Server 关键词搜索，显示匹配行及上下文
-```
+### ⚡ 配置管理
+- **上传配置**：上传本地 `claude_desktop_config.json`，自动匹配市场 Server
+- **上传/取消**：明确选择是否将配置上传到 Hub 进行监控追踪
+- **Agent 选择**：支持 Claude Code / Cursor / Codex / Trae / Windsurf 等 8 种 Agent
+- **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
+- **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
+- **下载 & 同步**：一键下载配置文件，CLI 同步到本地
+
+### 📦 Server 管理
+- **我的 Server**：已安装 / 追踪中 / 收藏 三 tab 切换
+- **批量操作**：多选 Server，批量启动/停止/启用/禁用/删除
+- **调用数据**：每行显示 7 日调用数、Token 消耗、运行时长、可靠性评分
+- **重启按钮**：一键重启（先停止再启动）
+- **版本更新提醒**：自动检查已安装 Server 是否有新版本，标记 🆕
+
+### 📊 监控 & 分析
+- **监控大屏**：实时运行状态、调用次数、Token 消耗、可靠性排行榜
+- **使用统计**：个人中心展示 30 日调用趋势（柱状图）、成功率、按 Server 分组的详情表
+- **Token 分析**：工具定义 Token 消耗分析 + 优化建议
+- **安全评分**：四维评分引擎（命令/包/发布者/代码模式），危险 Server 阻止安装
+
+### 🔔 通知 & 体验
+- **通知中心**：铃铛角标 + 通知列表（告警/更新/回复/系统），自动告警、全部标为已读
+- **Dark Mode**：深色/亮色主题切换，记住偏好
+- **全局搜索**：侧边栏搜索框，实时搜索所有 Server
+- **面包屑导航**：自动生成页面层级路径
+- **移动端适配**：汉堡菜单 + 响应式侧边栏
+
+### 👤 个人中心
+- 用户信息卡片（头像/GitHub ID/角色/注册时间）
+- 使用统计（Server 数/调用数/Token/成功率）
+- 安装的 Server 列表 + 快捷入口
 
 ---
 
@@ -118,31 +129,23 @@ mcp search
 
 # 按关键词搜索
 mcp search database
-mcp search web --category browser
 
 # 对比两个 Server
 mcp compare @modelcontextprotocol/server-postgres @modelcontextprotocol/server-sqlite
-
-# 查看详情
-mcp info @modelcontextprotocol/server-filesystem
 ```
 
 ### 📦 安装与运行
 
 ```bash
-# 一行命令安装 + 自动配置
 mcp install @modelcontextprotocol/server-filesystem
-
-# 管理进程
 mcp start server-filesystem
 mcp status
 mcp logs server-filesystem -f
-mcp stop server-filesystem
 ```
 
 ### 🔌 接入 Claude Code
 
-在 `claude_desktop_config.json` 中添加以下配置：
+在 `claude_desktop_config.json` 中添加：
 
 ```json
 {
@@ -155,7 +158,7 @@ mcp stop server-filesystem
 }
 ```
 
-**通过 Hub Gateway 安装的任何 Server 都会自动在 Claude Code 中可用。所有调用次数、响应时长、Token 消耗自动记录到监控大屏。** 无需再手动编辑配置文件。
+**通过 Hub Gateway 安装的任何 Server 都会自动在 Claude Code 中可用。调用次数、响应时长、Token 消耗自动记录到监控大屏。**
 
 ### 🌐 Web 仪表盘
 
@@ -165,193 +168,47 @@ http://localhost:3987
 
 实时监控、日志查看、搜索、安装、管理 — 全部在浏览器中完成。
 
-### 📋 本地使用 + 自动发现
-
-不想部署 Hub？上传你的 mcp.json 配置，Hub 自动发现匹配市场 Server，一键同步到本地。支持 Claude Code / Cursor / Codex / Trae / Windsurf / VS Code Copilot 等 8 种 Agent。
-
----
-
-## 📋 命令大全
-
-```
-用法: mcp [OPTIONS] COMMAND [ARGS]...
-
-🛒  市场
-  search [query]       搜索 MCP Server
-  info <server>        查看详情
-  compare <a> <b>      对比两个 Server
-
-📦  安装
-  install <server>     安装 Server（自动配置）
-  uninstall <server>    卸载
-  list                 列出已安装
-
-🔒  安全
-  security <server>    安全评分扫描
-  security --all       批量扫描全部
-
-📊  Token
-  analyze <server>     Token 消耗分析
-  analyze --all        批量分析
-  optimize <server>    优化工具定义（减少 Token）
-
-📈  监控
-  monitor <server>     查看健康/Uptime
-  monitor --all        查看全部
-  reliability          可靠性排行榜
-
-⚙️  管理
-  start <server>       启动
-  stop <server>        停止
-  restart <server>     重启
-  status [server]      查看状态
-  logs <server>        查看日志（-f 实时跟踪）
-  update [server]      检查更新
-  upgrade <server>     升级到最新版
-  rollback <server>    回滚版本
-  version-history <s>  版本历史
-  config               配置管理
-
-🛠️  构建
-  create               交互式创建 MCP Server 项目
-
-🔧  系统
-  daemon               管理 Hub 守护进程
-  serve                启动 MCP 网关（stdio，调用数据自动记录到监控大屏）
-  init                 一键初始化（PostgreSQL）
-  quickstart           零配置启动（SQLite，30 秒）
-
-👤  认证
-  login                GitHub 登录
-  logout               退出
-  whoami               当前用户
-
-📤  发布
-  publish <path>       发布你的 Server
-  my-servers           已发布列表
-  unpublish <server>   下架
-  stats <server>       统计
-
-⭐  社区
-  rate <srv> <n>       评分 (1-5)
-  review <srv>         写/查看评价
-  favorite <srv>       收藏
-  favorites            收藏列表
-  trending             热门趋势
-  top-rated            评分最高
-  most-downloaded      下载最多
-  new-releases         最新发布
-
-🎯  高级
-  prompt-install       生成 AI 安装提示词
-  hub-install          自动检测/安装 Hub
-  registry-sync        从 npm/PyPI/GitHub 同步 Server
-
-📡  事件
-  event publish        发布事件
-  event subscribe      订阅事件
-  event list           列出事件
-  event history        事件历史
-
-⚙️  配置
-  config list          查看配置
-  config apply         写入本地 Agent 配置文件
-  config export        导出 mcp.json
-  config import        导入 mcp.json
-```
-
----
-
-## 🏗 架构
-
-```
-┌──────────────────────────────────────────────────────┐
-│                    用户交互层                           │
-│    ┌──────────┐        ┌──────────┐    ┌──────────┐  │
-│    │   CLI    │        │ Web 仪表盘│    │ MCP stdio│  │
-│    │ (Rich)   │        │ (React)  │    │ (网关)   │  │
-│    └────┬─────┘        └────┬─────┘    └────┬─────┘  │
-├─────────┼───────────────────┼───────────────┼────────┤
-│         │                   │               │        │
-│         ▼                   ▼               ▼        │
-│    ┌────────────────────────────────────────────┐    │
-│    │          FastAPI + 核心服务 (12 模块)         │    │
-│    │  ┌──────────┐ ┌──────────┐ ┌────────────┐ │    │
-│    │  │ 注册中心  │ │ 进程管理  │ │ MCP 网关   │ │    │
-│    │  ├──────────┤ ├──────────┤ ├────────────┤ │    │
-│    │  │ 安装器   │ │ 健康检查  │ │ 事件总线   │ │    │
-│    │  ├──────────┤ ├──────────┤ ├────────────┤ │    │
-│    │  │安全评分   │ │Token分析  │ │Server Build│ │    │
-│    │  ├──────────┤ ├──────────┤ ├────────────┤ │    │
-│    │  │质量监控   │ │ 认证(JWT) │ │ 配置/版本   │ │    │
-│    │  └──────────┘ └──────────┘ └────────────┘ │    │
-│    └────────────────────┬───────────────────────┘    │
-│                         │                           │
-│                         ▼                           │
-│              ┌─────────────────────┐                │
-│              │ PostgreSQL 16+ /    │                │
-│              │ SQLite             │                │
-│              │ (async ORM)        │                │
-│              └─────────────────────┘                │
-└──────────────────────────────────────────────────────┘
-```
-
 ---
 
 ## 🛠 技术栈
 
-| 层 | 技术 | 选型理由 |
-|----|------|---------|
-| **运行时** | Python 3.10+ | 通用、原生异步 |
-| **API** | FastAPI + uvicorn | 高性能异步框架 |
-| **数据库** | PostgreSQL 16+ | 生产级、asyncpg |
-| **ORM** | SQLAlchemy 2.0 | 成熟异步 ORM |
-| **迁移** | Alembic | 版本化数据库迁移 |
-| **日志** | structlog | 结构化 JSON 日志 |
-| **CLI** | Click + Rich | 漂亮的终端输出 |
-| **前端** | React 19 + Tailwind | 现代、快速、响应式 |
-| **构建** | Vite | 即时 HMR、优化构建 |
-| **协议** | MCP (JSON-RPC 2.0) | 行业标准 |
-| **安全** | 四维评分引擎 + 安装预扫描 | 命令/包/发布者/代码模式 |
-| **Token** | tiktoken + 优化引擎 | 分析 + 自动压缩工具描述 |
-| **监控** | 三级健康检查 + 可靠性评分 | uptime/响应时间/排行榜 |
-| **认证** | GitHub OAuth + JWT | 零外部依赖 |
+| 层 | 技术 |
+|----|------|
+| **运行时** | Python 3.10+ |
+| **API** | FastAPI + uvicorn |
+| **数据库** | PostgreSQL 16+（生产）/ SQLite（quickstart） |
+| **ORM** | SQLAlchemy 2.0 async |
+| **前端** | React 19 + Tailwind CSS + Vite |
+| **CLI** | Click + Rich |
+| **认证** | GitHub OAuth + JWT |
+| **安全** | 四维评分引擎 |
+| **监控** | 三级健康检查 + 可靠性评分 |
 
 ---
 
 ## 📊 项目状态
 
-**当前: Beta** — 核心功能稳定，生产环境部署运行中。
+**当前: v2.0** — 客户端功能完整，生产环境部署运行中。
 
-| 阶段 | 状态 | 内容 |
-|------|------|------|
-| ✅ P0 | **完成** | MCP 协议网关（聚合所有 Server） |
-| ✅ P1 | **完成** | `mcp init`、Docker、PyPI 就绪 |
-| ✅ P2 | **完成** | Dashboard：SSE 日志、实时状态 |
-| ✅ P3 | **完成** | CLI：Rich 表格、旋转动画、颜色 |
-| ✅ P4 | **完成** | 测试（206 个）、GitHub Actions CI、Ruff 检查 |
-| ✅ P5 | **完成** | 英文文档、CONTRIBUTING、PyPI 元数据 |
-| ✅ P6 | **完成** | 🛡️ 安全评分引擎 + 📊 Token 分析器 |
-t  ✅ P15 | **完成** | 🔗 MCP 网关完整打通 — Agent 调用自动记录到 usage_stats，监控大屏实时可见
-  ✅ P11 | **完成** | 🔍 本地 Agent 发现（8 种 AI Agent 自动扫描）
-  ✅ P12 | **完成** | 📦 配置备份/恢复/快照 + 差异对比
-  ✅ P13 | **完成** | 🗂 Server 分组管理 + 🔎 跨 Server 日志搜索
-  ✅ P14 | **完成** | 安装预检 + 依赖分析 + 离线缓存
-| ✅ P7 | **完成** | 🛠️ MCP Server Builder（CLI + Web 下载） |
-| ✅ P8 | **完成** | 📈 质量监控网络 + 可靠性排行榜 |
-| ✅ P9 | **完成** | 🔘 启用/禁用开关 + 📞 真实调用计数 + 🎯 Agent 绑定 |
-| ✅ P10 | **完成** | 📊 监控大屏（Dashboard 聚合所有 Server 状态） |
+| 模块 | 核心功能 |
+|------|---------|
+| 🏪 市场 | 搜索/浏览/对比/推荐/收藏/评价 |
+| 📦 我的 Server | 批量操作/重启/调用数据/更新提醒 |
+| ⚙️ 配置中心 | 上传匹配/Agent选择/配置下载/草稿 |
+| 📋 方案市场 | 发布方案/浏览/一键导入 |
+| 📊 监控大屏 | 实时状态/调用/Token/可靠性 |
+| 👤 个人中心 | 资料/统计/趋势图 |
+| 🔔 通知中心 | 告警/更新/回复/系统通知 |
+| 🌙 体验 | Dark Mode/全局搜索/面包屑/移动端 |
 
 ---
 
 ## 🗺 路线图
 
-- [ ] **Hub SDK** — 用于构建 MCP Server 的 Python/JS SDK
+- [ ] **管理后台** — 平台运营者管理用户/Server/调用数据的后台
 - [ ] **VS Code 插件** — 在编辑器内管理 Server
 - [ ] **团队功能** — 多用户、RBAC、审计日志
-- [ ] **远程注册中心** — 云同步你的 Server 集合
 - [ ] **Docker 沙箱** — 在隔离容器中运行 Server
-- [ ] **性能仪表盘** — 延迟、错误率、使用分析
 
 ---
 
@@ -361,7 +218,6 @@ t  ✅ P15 | **完成** | 🔗 MCP 网关完整打通 — Agent 调用自动记�
 
 - 🐛 发现 Bug？[提交 Issue](https://github.com/blankbrains/McpServerHub/issues)
 - 💡 有想法？[发起讨论](https://github.com/blankbrains/McpServerHub/discussions)
-- 🔧 想贡献？看看 [good first issues](https://github.com/blankbrains/McpServerHub/contribute)
 
 ---
 

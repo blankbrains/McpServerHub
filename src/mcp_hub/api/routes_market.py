@@ -111,3 +111,69 @@ async def get_categories():
     categories.sort(key=lambda c: c["count"], reverse=True)
 
     return {"success": True, "data": categories}
+
+
+@router.get("/market/recommendations")
+async def get_recommendations(
+    server_id: str = "",
+    user_id: str = "",
+    limit: int = 6,
+):
+    """智能推荐。
+
+    - 若传 server_id：返回同类/同作者的 Server（"看了还看了"）
+    - 若传 user_id：基于用户已安装 Server 的分类偏好推荐
+    - 都不传：返回全局热门
+    """
+    registry = Registry()
+    all_servers, _ = await registry.search(q="", page=1, page_size=500)
+
+    if server_id:
+        # 基于单个 Server 推荐同类
+        target = await registry.get_by_id(server_id)
+        if not target:
+            return {"success": True, "data": []}
+        target_cats = set(target.get("categories", []))
+        recs = [
+            s for s in all_servers
+            if s["id"] != server_id
+            and any(c in target_cats for c in s.get("categories", []))
+        ]
+        recs.sort(key=lambda s: s.get("rating", 0) or 0, reverse=True)
+        return {"success": True, "data": recs[:limit]}
+
+    if user_id:
+        # 基于用户偏好推荐
+        from mcp_hub.db.database import async_session_factory
+        from mcp_hub.db.models import UserServerModel
+        async with async_session_factory() as session:
+            from sqlalchemy import select as sa_select
+            result = await session.execute(
+                sa_select(UserServerModel.server_id).where(UserServerModel.user_id == user_id)
+            )
+            installed_ids = set(row[0] for row in result.fetchall())
+
+        # 收集已安装 Server 的分类偏好
+        preferred_cats: dict[str, int] = {}
+        for sid in installed_ids:
+            s = await registry.get_by_id(sid)
+            if s:
+                for cat in s.get("categories", []):
+                    preferred_cats[cat] = preferred_cats.get(cat, 0) + 1
+
+        # 推荐与偏好分类匹配的未安装 Server
+        recs = [
+            s for s in all_servers
+            if s["id"] not in installed_ids
+            and any(c in preferred_cats for c in s.get("categories", []))
+        ]
+        # 按分类匹配数 + 评分排序
+        recs.sort(key=lambda s: (
+            sum(preferred_cats.get(c, 0) for c in s.get("categories", [])),
+            s.get("rating", 0) or 0,
+        ), reverse=True)
+        return {"success": True, "data": recs[:limit]}
+
+    # 全局热门
+    hot, _ = await registry.search(q="", sort="hot", page=1, page_size=limit)
+    return {"success": True, "data": hot}

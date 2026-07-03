@@ -68,6 +68,7 @@ export default function Market() {
         language: language || undefined,
         install_type: installType || undefined,
         security_level: securityLevel || undefined,
+        tracked_filter: trackedFilter || undefined,
         sort,
         page,
       })
@@ -78,7 +79,7 @@ export default function Market() {
     } finally {
       setLoading(false)
     }
-  }, [query, category, tag, author, language, installType, securityLevel, sort, page])
+  }, [query, category, tag, author, language, installType, securityLevel, trackedFilter, sort, page])
 
   useEffect(() => { load() }, [load])
 
@@ -93,7 +94,7 @@ export default function Market() {
     apiGet<any[]>('/search/authors').then((r) => { if (r.data) setAuthors(r.data) }).catch(() => {})
   }, [])
 
-  useEffect(() => { setPage(1) }, [query, category, tag, author, language, installType, securityLevel, sort])
+  useEffect(() => { setPage(1) }, [query, category, tag, author, language, installType, securityLevel, trackedFilter, sort])
 
   return (
     <div className="space-y-6">
@@ -216,18 +217,19 @@ export default function Market() {
                       onClick={async (e) => {
                         e.preventDefault()
                         if (!window.confirm(`从配置中移除 "${s.id}"？`)) return
+                        // 更新 localStorage
                         const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
                         const filtered = existing.filter((x: any) => x.name !== s.id && x.hub_id !== s.id)
                         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(filtered))
                         const next = new Set(addedServers)
                         next.delete(s.id)
                         setAddedServers(next)
+                        // 通过 DELETE 端点精确删除单条记录，不覆盖其他记录
                         try {
                           const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
-                          await fetch('/api/v1/config/user-servers/save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-                            body: JSON.stringify({ servers: filtered.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
+                          await fetch(`/api/v1/config/user-servers/${encodeURIComponent(s.id)}`, {
+                            method: 'DELETE',
+                            headers: { 'x-user-id': uid },
                           })
                         } catch {}
                         setMessage(`已从配置中移除 ${s.id}`)
@@ -242,11 +244,13 @@ export default function Market() {
                     <button
                       onClick={async (e) => {
                         e.preventDefault()
+                        // 更新 localStorage
                         const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
                         const cmd = 'install_command' in s ? (s as any).install_command : ''
                         existing.push({ name: s.id, command: cmd || '', matched: true, hub_id: s.id })
                         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
                         setAddedServers(new Set([...addedServers, s.id]))
+                        // 保存到服务端：追加式更新，不覆盖
                         try {
                           const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
                           await fetch('/api/v1/config/user-servers/save', {

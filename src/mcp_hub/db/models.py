@@ -123,6 +123,7 @@ class InstallHistoryModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
+    user_id = Column(String(255), default="")
     version = Column(String(50), default="")
     action = Column(String(50), nullable=False)  # install / update / rollback / uninstall
     status = Column(String(50), default="success")
@@ -144,9 +145,11 @@ class UsageStatsModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     server_id = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), default="", index=True)
     tool_name = Column(String(255), default="")
     status = Column(String(50), default="ok")  # ok / error
     duration_ms = Column(Integer, default=0)
+    token_count = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -166,3 +169,34 @@ class UserServerModel(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "server_id", name="uq_user_server"),
     )
+
+
+class NotificationModel(Base):
+    """用户通知 — 系统事件、Server 告警、版本更新等。"""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    type = Column(String(50), nullable=False)  # alert / update / reply / system
+    title = Column(String(255), nullable=False)
+    message = Column(Text, default="")
+    server_id = Column(String(255), default="")
+    link = Column(String(500), default="")
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PresetModel(Base):
+    """配置方案 — 用户可发布整套 MCP 配置供他人一键导入。"""
+    __tablename__ = "presets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    tags = Column(String(500), default="")  # 逗号分隔
+    servers = Column(Text, nullable=False)  # JSON: [{server_id, command, ...}]
+    download_count = Column(Integer, default=0)
+    rating = Column(Float, default=0.0)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

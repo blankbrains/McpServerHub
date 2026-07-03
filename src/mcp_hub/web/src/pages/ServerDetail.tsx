@@ -50,6 +50,7 @@ export default function ServerDetail() {
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
   const [tokenAnalysis, setTokenAnalysis] = useState<TokenAnalysisResult | null>(null)
   const [reliability, setReliability] = useState<any>(null)
+  const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
 
   // Review states
   const [reviews, setReviews] = useState<any[]>([])
@@ -88,6 +89,7 @@ export default function ServerDetail() {
       analyzeServerTokens(sid).then(r => setTokenAnalysis(r.data)).catch(() => {}),
       getServerReliability(sid).then(r => setReliability(r.data)).catch(() => {}),
       apiGet<any[]>(`/community/reviews/${encodeURIComponent(sid)}`).then(r => setReviews(r.data || [])).catch(() => {}),
+      apiGet<ServerInfo[]>(`/market/recommendations?server_id=${encodeURIComponent(sid)}&limit=4`).then(r => setRecommendations(r.data || [])).catch(() => {}),
       // Auto-fetch config for first agent
       apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=claude-code`)
         .then(r => { if (r.data) { setConfigData(r.data); setShowConfig(true) }})
@@ -139,6 +141,7 @@ export default function ServerDetail() {
         existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
         localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
       }
+      setIsTracked(true)  // 安装后标记为已追踪
       if (r.data?.configs) {
         const agentCfg = r.data.configs.find((c: any) =>
           c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
@@ -180,7 +183,12 @@ export default function ServerDetail() {
       setMessage(r.message || '已卸载')
       if (r.success) {
         setServer({ ...server, status: 'not_installed' })
+        setIsTracked(false)
         setShowConfig(false)
+        // 同步清理 localStorage
+        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
+        const filtered = existing.filter((x: any) => x.name !== server.id && x.hub_id !== server.id)
+        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(filtered))
       }
     } catch { setMessage('卸载失败') }
   }
@@ -634,6 +642,69 @@ export default function ServerDetail() {
           )}
         </div>
       )}
+
+      {/* 同类推荐 */}
+      {recommendations.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-semibold text-gray-900 mb-4">🔗 同类推荐</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {recommendations.map(rec => (
+              <Link key={rec.id} to={`/servers/${encodeURIComponent(rec.id)}`}
+                className="p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors border border-transparent hover:border-blue-200">
+                <p className="text-sm font-medium text-gray-800 truncate">{rec.id.split('/').pop()}</p>
+                <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
+                  <span>⭐ {rec.rating?.toFixed(1) || '-'}</span>
+                  <span>📥 {rec.download_count >= 1000 ? `${(rec.download_count/1000).toFixed(1)}K` : rec.download_count}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MCP 工具 Playground */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xl">🧪</span>
+          <h2 className="font-semibold text-gray-900">工具测试台</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          查看此 Server 暴露的 MCP 工具及其参数格式。如果 Server 正在 Hub 上运行，可直接测试。
+        </p>
+        <div className="bg-gray-900 rounded-lg p-4">
+          <p className="text-green-400 text-xs font-mono mb-2"># 工具列表（JSON-RPC 2.0）</p>
+          <pre className="text-gray-300 text-xs font-mono whitespace-pre-wrap">
+{`// 获取工具列表
+{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+
+// 调用工具（示例）
+{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+  "name": "tool_name",
+  "arguments": { "key": "value" }
+}}`}
+          </pre>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => {
+              const cmd = (server as any).install_command || `npx ${server.name}`
+              navigator.clipboard.writeText(
+                `# 在本地终端运行此 Server 后，可通过 MCP 协议调用其工具\n${cmd}`
+              ).catch(() => {})
+              setMessage('✅ 命令已复制')
+              setTimeout(() => setMessage(''), 2000)
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            📋 复制安装命令
+          </button>
+          <a
+            href={server.homepage || `https://github.com/search?q=${encodeURIComponent(server.id)}`}
+            target="_blank" rel="noopener noreferrer"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+            📖 查看文档
+          </a>
+        </div>
+      </div>
 
     </div>
   )

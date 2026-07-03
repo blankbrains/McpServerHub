@@ -76,6 +76,11 @@ def serve():
       Gateway 将所有已安装且已启用的 Server 的工具聚合暴露给 Agent。
 
       每次 tools/call 自动记录到 usage_stats 表，监控大屏可看到真实调用数据。
+
+      远程上报（可选）：
+        设置环境变量后，调用数据自动上报到远程 Hub：
+          MCP_HUB_REPORT_URL=http://your-hub:3987
+          MCP_HUB_USER_ID=your-github-username
     """
     from mcp_hub.core.mcp_gateway import McpGateway
 

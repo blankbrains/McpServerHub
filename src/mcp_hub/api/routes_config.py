@@ -9,9 +9,13 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, File, Header, UploadFile
+from fastapi import APIRouter, File, Header, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, select, text
+
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from mcp_hub.core.registry import Registry
 from mcp_hub.db.database import async_session_factory
@@ -719,12 +723,10 @@ async def server_dependency_analyze(data: dict):
 
 
 @router.get("/config/groups")
-async def list_groups(request: Request):
+async def list_groups(x_user_id: str = Header("anonymous")):
     """列出当前用户的所有分组及其包含的 Server。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
-
-    user_id = request.headers.get("x-user-id", "anonymous")
     async with async_session_factory() as session:
         result = await session.execute(
             text(
@@ -732,7 +734,7 @@ async def list_groups(request: Request):
                 "WHERE user_id = :uid AND group_name != '' "
                 "ORDER BY group_name, server_id"
             ),
-            {"uid": user_id},
+            {"uid": x_user_id},
         )
         rows = result.fetchall()
 
@@ -754,12 +756,10 @@ async def list_groups(request: Request):
 
 
 @router.post("/config/groups/set")
-async def set_server_group(request: Request, data: dict):
+async def set_server_group(data: dict, x_user_id: str = Header("anonymous")):
     """为指定 Server 设置分组。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
-
-    user_id = request.headers.get("x-user-id", "anonymous")
     server_id = data.get("server_id", "")
     group_name = data.get("group_name", "")
 
@@ -772,7 +772,7 @@ async def set_server_group(request: Request, data: dict):
                 "UPDATE user_servers SET group_name = :gname "
                 "WHERE user_id = :uid AND server_id = :sid"
             ),
-            {"gname": group_name, "uid": user_id, "sid": server_id},
+            {"gname": group_name, "uid": x_user_id, "sid": server_id},
         )
         await session.commit()
 
@@ -780,12 +780,10 @@ async def set_server_group(request: Request, data: dict):
 
 
 @router.post("/config/groups/batch")
-async def batch_set_group(request: Request, data: dict):
+async def batch_set_group(data: dict, x_user_id: str = Header("anonymous")):
     """批量设置多个 Server 的分组（启用/禁用整个分组时用）。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
-
-    user_id = request.headers.get("x-user-id", "anonymous")
     group_name = data.get("group_name", "")
     action = data.get("action", "")  # "enable" or "disable"
     enabled = True if action == "enable" else (False if action == "disable" else None)
@@ -800,7 +798,7 @@ async def batch_set_group(request: Request, data: dict):
                     "UPDATE user_servers SET enabled = :en "
                     "WHERE user_id = :uid AND group_name = :gname"
                 ),
-                {"en": enabled, "uid": user_id, "gname": group_name},
+                {"en": enabled, "uid": x_user_id, "gname": group_name},
             )
         await session.commit()
 

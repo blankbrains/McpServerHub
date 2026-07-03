@@ -193,7 +193,7 @@ async def stop_server(server_id: str):
 
 
 @router.post("/servers/{server_id:path}/uninstall")
-async def uninstall_server(server_id: str):
+async def uninstall_server(server_id: str, x_user_id: str = Header("anonymous")):
     """卸载 Server。"""
     registry = Registry()
     pm = get_process_manager()
@@ -206,6 +206,22 @@ async def uninstall_server(server_id: str):
     await pm.kill(server_id)
     # 重置状态
     await registry.update_status(server_id, "not_installed")
+
+    # 从 user_servers 中移除（避免卸载后仍显示"已追踪"）
+    try:
+        from mcp_hub.db.database import async_session_factory
+        from mcp_hub.db.models import UserServerModel
+        from sqlalchemy import delete
+        async with async_session_factory() as session:
+            await session.execute(
+                delete(UserServerModel).where(
+                    UserServerModel.server_id == server_id,
+                    UserServerModel.user_id == x_user_id,
+                )
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning("manage.uninstall.user_servers_cleanup_failed", server_id=server_id, error=str(e))
 
     # 清理残留
     try:
@@ -383,4 +399,59 @@ async def search_logs(
         "query": q,
         "servers_scanned": servers_scanned,
         "total_matches": len(results),
+    }
+
+
+@router.get("/servers/check-updates")
+async def check_updates(x_user_id: str = Header("anonymous")):
+    """检查用户已安装的 Server 是否有新版本可用。"""
+    from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.models import UserServerModel
+
+    registry = Registry()
+    updates: list[dict] = []
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(UserServerModel).where(UserServerModel.user_id == x_user_id)
+        )
+        user_servers = result.scalars().all()
+
+    # 批量查询所有 Server（避免 N+1）
+    all_servers = await registry.get_all()
+    server_map = {s["id"]: s for s in all_servers}
+
+    for us in user_servers:
+        server = server_map.get(us.server_id)
+        if not server:
+            continue
+        current = server.get("current_version", "")
+        latest = server.get("latest_version", "")
+        if latest and current and latest != current:
+            updates.append({
+                "server_id": us.server_id,
+                "name": server.get("name", us.server_id),
+                "current_version": current,
+                "latest_version": latest,
+            })
+
+    # 自动为有更新的 Server 创建通知
+    if updates:
+        try:
+            from mcp_hub.api.routes_notifications import create_notification
+            for u in updates[:3]:  # 最多 3 条通知
+                await create_notification(
+                    user_id=x_user_id,
+                    notif_type="update",
+                    title=f"新版本可用: {u['name']}",
+                    message=f"v{u['current_version']} → v{u['latest_version']}",
+                    server_id=u["server_id"],
+                    link=f"/servers/{u['server_id']}",
+                )
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "data": {"updates": updates, "count": len(updates)},
     }

@@ -202,6 +202,7 @@ export async function searchAdvanced(params: {
   if (params.language) qs.set('language', params.language)
   if (params.install_type) qs.set('install_type', params.install_type)
   if (params.security_level) qs.set('security_level', params.security_level)
+  if (params.tracked_filter) qs.set('tracked_filter', params.tracked_filter)
   if (params.sort) qs.set('sort', params.sort)
   if (params.page) qs.set('page', String(params.page))
   qs.set('page_size', '9')
