@@ -45,6 +45,8 @@ export default function ServerDetail() {
   const [copied, setCopied] = useState(false)
   const [isFavorited, setIsFavorited] = useState(false)
   const [installing, setInstalling] = useState(false)
+  const [configCopied, setConfigCopied] = useState(false)
+  const [generatedConfig, setGeneratedConfig] = useState('')
 
   // New feature states
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
@@ -121,6 +123,28 @@ export default function ServerDetail() {
     navigator.clipboard.writeText(JSON.stringify(configData.config_content, null, 2)).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const fetchInstallConfig = async (agent: string) => {
+    if (!id) return
+    const sid = decodeURIComponent(id)
+    try {
+      const r = await apiGet<any>(`/config/generate?server=${encodeURIComponent(sid)}&agent=${encodeURIComponent(agent)}`)
+      setGeneratedConfig((r as any).data?.config || JSON.stringify((r as any).data, null, 2))
+    } catch {
+      // 如果 API 不存在，生成简单配置
+      const cmd = (server as any)?.install_command || ''
+      const parts = cmd.split(' ')
+      const config = {
+        mcpServers: {
+          [(server?.id || 'server').split('/').pop() || 'server']: {
+            command: parts[0] || 'npx',
+            args: parts.slice(1),
+          },
+        },
+      }
+      setGeneratedConfig(JSON.stringify(config, null, 2))
+    }
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
@@ -367,6 +391,73 @@ export default function ServerDetail() {
           <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">{message}</div>
         )}
       </div>
+
+      {/* === 安装到本地（新增 SaaS 引导） === */}
+      {(server as any).install_command && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-5 mb-6 border border-blue-200 dark:border-blue-800">
+          <h3 className="font-semibold text-lg mb-3">🚀 安装到你的本地 Agent</h3>
+
+          {/* 命令复制区 */}
+          <div className="flex items-center gap-2 mb-4">
+            <code className="flex-1 bg-gray-900 text-green-400 px-4 py-2.5 rounded-lg text-sm font-mono overflow-x-auto">
+              {(server as any).install_command || ''}
+            </code>
+            <button
+              onClick={() => {
+                const cmd = (server as any).install_command || ''
+                if (cmd) {
+                  navigator.clipboard?.writeText(cmd).then(() => setCopied(true)).catch(() => {})
+                  setTimeout(() => setCopied(false), 2000)
+                }
+              }}
+              className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium whitespace-nowrap transition-colors"
+            >
+              {copied ? '✅ 已复制' : '📋 复制命令'}
+            </button>
+          </div>
+
+          {/* Agent 选择器 + 配置预览 */}
+          <div className="text-sm text-gray-500 mb-2">选择你的 Agent 查看配置:</div>
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {['Claude Code', 'Cursor', 'VS Code Copilot', 'Codex', 'Trae', 'Windsurf'].map(agent => (
+              <button
+                key={agent}
+                onClick={() => { setSelectedAgent(agent); fetchInstallConfig(agent) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  selectedAgent === agent
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:border-blue-400'
+                }`}
+              >
+                {agent}
+              </button>
+            ))}
+          </div>
+
+          {/* 生成的配置预览 */}
+          {generatedConfig && (
+            <div className="relative">
+              <div className="text-xs text-gray-400 mb-1">mcp.json 配置片段:</div>
+              <pre className="bg-gray-900 text-gray-300 p-3 rounded-lg text-xs overflow-x-auto max-h-48">
+                {generatedConfig}
+              </pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(generatedConfig).then(() => setConfigCopied(true)).catch(() => {})
+                  setTimeout(() => setConfigCopied(false), 2000)
+                }}
+                className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+              >
+                {configCopied ? '✅' : '📋'}
+              </button>
+            </div>
+          )}
+
+          <div className="text-xs text-gray-400 mt-3">
+            💡 复制命令后在终端运行，或复制配置到你的 Agent 的 mcp.json 文件中
+          </div>
+        </div>
+      )}
 
       {/* Security Details */}
       {security && (

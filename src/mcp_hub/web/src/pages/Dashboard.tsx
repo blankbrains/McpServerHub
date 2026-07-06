@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [topRated, setTopRated] = useState<ServerInfo[]>([])
   const [installed, setInstalled] = useState<ServerInfo[]>([])
   const [trackedServers, setTrackedServers] = useState<any[]>([])  // 来自 monitor API 的所有追踪 Server
+  const [userServers, setUserServers] = useState<any[]>([])  // 来自 /config/user-servers 的用户追踪 Server（SaaS 概览）
   const [runningCount, setRunningCount] = useState<number>(0)
   const [totalAvailable, setTotalAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -99,6 +100,16 @@ export default function Dashboard() {
     return () => window.removeEventListener('storage', handler)
   }, [])
 
+  // 加载用户追踪的 Server（SaaS 概览数据源）
+  useEffect(() => {
+    const uid = localStorage.getItem('mcp_hub_user')
+    if (uid) {
+      apiGet<any[]>('/config/user-servers')
+        .then(r => setUserServers(r.data || []))
+        .catch(() => {})
+    }
+  }, [])
+
   const handleDownloadConfig = async () => {
     try {
       const blob = await downloadConfig()
@@ -137,8 +148,73 @@ export default function Dashboard() {
     )
   }
 
+  // === SaaS 概览数据 ===
+  const userId = localStorage.getItem('mcp_hub_user')
+  const saasServers = userServers.length > 0 ? userServers : trackedServers
+  const trackedCount = saasServers.length
+  const updateCount = saasServers.filter((s: any) => s.has_update).length
+  const riskCount = saasServers.filter((s: any) => {
+    const level = s.security_level
+    return !level || (level !== 'verified' && level !== 'reviewed')
+  }).length
+
   return (
     <div className="space-y-8">
+      {/* === SaaS 概览（新增）=== */}
+      {userId && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">👋 欢迎, {userId}</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+              <div className="text-3xl font-bold text-blue-600">{trackedCount}</div>
+              <div className="text-sm text-gray-500">已追踪</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+              <div className="text-3xl font-bold text-yellow-500">{favorites.length}</div>
+              <div className="text-sm text-gray-500">已收藏</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+              <div className="text-3xl font-bold text-orange-500">{updateCount}</div>
+              <div className="text-sm text-gray-500">有更新</div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+              <div className="text-3xl font-bold text-red-500">{riskCount}</div>
+              <div className="text-sm text-gray-500">安全风险</div>
+            </div>
+          </div>
+
+          {/* 最近追踪的 Server */}
+          {saasServers.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+              <h3 className="font-semibold mb-3">📋 我的追踪 Server</h3>
+              <div className="space-y-2">
+                {saasServers.slice(0, 5).map((s: any) => (
+                  <div key={s.server_id || s.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${s.security_level === 'verified' ? 'bg-green-500' : s.security_level === 'reviewed' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                      <span className="font-mono text-sm">{s.server_id || s.id}</span>
+                      {s.has_update && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">🆕</span>}
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(s.install_command || '')}
+                      className="text-xs text-gray-400 hover:text-blue-600"
+                      title="复制安装命令"
+                    >
+                      📋 复制
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {saasServers.length > 5 && (
+                <Link to="/my-servers" className="text-sm text-blue-600 mt-2 inline-block">
+                  查看全部 {saasServers.length} 个 →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" to="/my-servers" />

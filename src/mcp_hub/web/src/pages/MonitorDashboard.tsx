@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet } from '../api/client'
+import { apiGet, getAuthState } from '../api/client'
 
 interface ServerMetric {
   server_id: string
@@ -68,6 +68,13 @@ export default function MonitorDashboard() {
   const [search, setSearch] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  const [trackedCount, setTrackedCount] = useState(0)
+  const [favCount, setFavCount] = useState(0)
+  const [updateCount, setUpdateCount] = useState(0)
+  const [trackedServerIds, setTrackedServerIds] = useState<Set<string>>(new Set())
+
+  const userId = getAuthState().userId
+
   const errorCountRef = useRef(0)
 
   const load = async (manual = false) => {
@@ -96,6 +103,36 @@ export default function MonitorDashboard() {
     return () => clearTimeout(timer)
   }, [])
 
+  // 加载 SaaS 概览数据
+  useEffect(() => {
+    if (!userId) return
+    // 已追踪 Server 数量
+    apiGet<any[]>('/config/user-servers').then(r => {
+      if (r.data) {
+        setTrackedCount(r.data.length)
+        setTrackedServerIds(new Set(r.data.map((s: any) => String(s.name || s.hub_id || ''))))
+      }
+    }).catch(() => {})
+    // 已收藏数量
+    const favs = localStorage.getItem('mcp_hub_favorites')
+    if (favs) {
+      try { const arr = JSON.parse(favs); if (Array.isArray(arr)) setFavCount(arr.length) } catch { /* ignore */ }
+    }
+    // 有更新的 Server 数量
+    fetch('/api/v1/servers/check-updates', { headers: { 'x-user-id': userId } })
+      .then(r => r.json())
+      .then(r => { if (r.data?.updates) setUpdateCount(r.data.updates.length) })
+      .catch(() => {})
+  }, [userId])
+
+  const riskCount = useMemo(() => {
+    if (!data || trackedServerIds.size === 0) return 0
+    return data.servers.filter(s =>
+      trackedServerIds.has(s.server_id) &&
+      s.security_level && s.security_level !== 'high'
+    ).length
+  }, [data, trackedServerIds])
+
   const toggleSort = (field: string) => {
     if (sortField === field) setSortAsc(!sortAsc)
     else { setSortField(field); setSortAsc(false) }
@@ -118,6 +155,52 @@ export default function MonitorDashboard() {
 
   return (
     <div className={`space-y-6 transition-opacity duration-300 ${refreshing ? 'opacity-40' : 'opacity-100'}`}>
+      {/* === SaaS 概览（新增）=== */}
+      {userId && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4">📊 我的概览</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: '已追踪', value: trackedCount, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+              { label: '已收藏', value: favCount, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
+              { label: '有更新', value: updateCount, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+              { label: '安全风险', value: riskCount, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+            ].map(card => (
+              <div key={card.label} className={`${card.bg} rounded-xl p-4`}>
+                <div className={`text-3xl font-bold ${card.color}`}>{card.value}</div>
+                <div className="text-sm text-gray-500 mt-1">{card.label}</div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+            <h3 className="font-semibold mb-3">🔔 待处理</h3>
+            <div className="space-y-2 text-sm">
+              {updateCount > 0 && (
+                <div className="flex items-center gap-2 text-orange-600">
+                  <span>🆕</span>
+                  <span>{updateCount} 个 Server 有版本更新</span>
+                  <Link to="/my-servers" className="text-blue-600 ml-auto">查看 →</Link>
+                </div>
+              )}
+              {riskCount > 0 && (
+                <div className="flex items-center gap-2 text-red-600">
+                  <span>⚠️</span>
+                  <span>{riskCount} 个 Server 安全评分偏低</span>
+                  <Link to="/my-servers" className="text-blue-600 ml-auto">查看 →</Link>
+                </div>
+              )}
+              {updateCount === 0 && riskCount === 0 && (
+                <div className="text-gray-400">✅ 一切正常，没有待处理的问题</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 原有监控面板（不变）*/}
+      <hr className="my-6 border-gray-200 dark:border-gray-700" />
+      <h3 className="text-sm text-gray-400 mb-4">⚙️ 服务端监控（自托管模式）</h3>
+
       {/* 标题 */}
       <div className="flex items-center justify-between">
         <div>

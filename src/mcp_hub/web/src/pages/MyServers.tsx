@@ -56,6 +56,8 @@ export default function MyServers() {
   const [batchActing, setBatchActing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [updates, setUpdates] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<'track' | 'manage'>('track')
+  const [msg, setMsg] = useState('')
 
   const load = async () => {
     try {
@@ -321,6 +323,31 @@ export default function MyServers() {
         </div>
       )}
 
+      {/* 视图切换 */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setViewMode('track')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'track'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+          }`}
+        >
+          📋 配置追踪
+        </button>
+        <button
+          onClick={() => setViewMode('manage')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'manage'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+          }`}
+        >
+          ⚙️ 进程管理
+        </button>
+      </div>
+
+      {viewMode === 'manage' && (<>
       {/* Tabs + Batch Bar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
@@ -370,6 +397,91 @@ export default function MyServers() {
 
       {/* Content */}
       {renderList(currentList)}
+      </>)}
+      {viewMode === 'track' && (
+        <div className="space-y-2">
+          {msg && (
+            <div className="p-2 bg-green-50 text-green-700 rounded-lg text-sm flex items-center justify-between">
+              <span>{msg}</span>
+              <button onClick={() => setMsg('')} className="text-green-400 hover:text-green-600 ml-2">✕</button>
+            </div>
+          )}
+          {servers.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">没有追踪的 Server</div>
+          ) : servers.map((s) => (
+            <div key={s.server_id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:border-gray-300 transition-colors">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  s.security_level === 'verified' ? 'bg-green-500' :
+                  s.security_level === 'reviewed' ? 'bg-yellow-500' :
+                  s.security_level === 'blocked' ? 'bg-red-500' : 'bg-gray-400'
+                }`} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Link to={`/servers/${encodeURIComponent(s.server_id)}`} className="font-mono text-sm font-medium text-gray-900 hover:text-blue-600 truncate">
+                      {s.name || s.server_id}
+                    </Link>
+                    {updates.has(s.server_id) && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">🆕 有更新</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5 font-mono truncate">
+                    {(s as any).install_command || '命令未知'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <button
+                  onClick={() => {
+                    const cmd = (s as any).install_command || ''
+                    if (cmd) { navigator.clipboard?.writeText(cmd); setMsg('✅ 已复制'); setTimeout(() => setMsg(''), 2000) }
+                  }}
+                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded font-medium"
+                  title="复制安装命令"
+                >
+                  📋 复制
+                </button>
+                <button
+                  onClick={async () => {
+                    const isFav = favorites.includes(s.server_id)
+                    const next = isFav ? favorites.filter(f => f !== s.server_id) : [...favorites, s.server_id]
+                    setFavorites(next)
+                    localStorage.setItem('mcp_hub_favorites', JSON.stringify(next))
+                    try {
+                      await fetch('/api/v1/community/favorite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-user-id': getAuthState().userId || 'anonymous' },
+                        body: JSON.stringify({ server_id: s.server_id }),
+                      })
+                    } catch {
+                      setFavorites(isFav ? [...favorites, s.server_id] : favorites.filter(f => f !== s.server_id))
+                    }
+                  }}
+                  className={`text-xs px-2 py-1 rounded font-medium ${
+                    favorites.includes(s.server_id)
+                      ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-gray-200'
+                  }`}
+                  title={favorites.includes(s.server_id) ? '取消收藏' : '收藏'}
+                >
+                  {favorites.includes(s.server_id) ? '⭐' : '☆'}
+                </button>
+                <button
+                  onClick={() => handleRemove(s.server_id)}
+                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded font-medium"
+                  title="取消追踪"
+                >
+                  👁 取消追踪
+                </button>
+                <Link to={`/servers/${encodeURIComponent(s.server_id)}`}
+                  className="text-xs px-2 py-1 text-blue-600 hover:underline font-medium">
+                  详情 →
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
