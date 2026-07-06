@@ -57,9 +57,9 @@ class ReviewModel(Base):
     __tablename__ = "reviews"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
-    user_id = Column(String(255), nullable=False)
-    parent_id = Column(Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True)
+    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True, index=True)
     rating = Column(Integer, nullable=False)
     content = Column(Text, default="")
     created_at = Column(DateTime, server_default=func.now())
@@ -100,7 +100,7 @@ class HealthLogModel(Base):
     __tablename__ = "health_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
+    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
     check_type = Column(String(50), nullable=False)  # L1_process / L2_connection / L3_functional
     status = Column(String(50), nullable=False)  # ok / warning / error
     message = Column(Text, default="")
@@ -112,29 +112,29 @@ class EventModel(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    topic = Column(String(255), nullable=False)
+    topic = Column(String(255), nullable=False, index=True)
     publisher = Column(String(255), nullable=False)
     payload = Column(Text, default="{}")
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now(), index=True)
 
 
 class InstallHistoryModel(Base):
     __tablename__ = "install_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
+    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
     user_id = Column(String(255), default="")
     version = Column(String(50), default="")
     action = Column(String(50), nullable=False)  # install / update / rollback / uninstall
     status = Column(String(50), default="success")
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now(), index=True)
 
 
 class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    server_id = Column(String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True)
     topic = Column(String(255), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -159,7 +159,7 @@ class UserServerModel(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(255), nullable=False, index=True)
-    server_id = Column(String(255), nullable=False)
+    server_id = Column(String(255), nullable=False, index=True)
     matched = Column(Boolean, default=True)
     enabled = Column(Boolean, default=True)
     agent = Column(String(50), default="")

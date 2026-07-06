@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, File, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, select, text
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -135,12 +136,12 @@ async def download_config():
 
 
 @router.get("/config/user-servers")
-async def get_user_servers(x_user_id: str = Header("anonymous")):
+async def get_user_servers(user_id: str = Depends(get_current_user)):
     """获取当前用户的 Server 配置列表（用户隔离）。"""
     async with async_session_factory() as session:
         result = await session.execute(
             select(UserServerModel)
-            .where(UserServerModel.user_id == x_user_id)
+            .where(UserServerModel.user_id == user_id)
             .order_by(UserServerModel.created_at)
         )
         servers = []
@@ -157,7 +158,7 @@ async def get_user_servers(x_user_id: str = Header("anonymous")):
 
 
 @router.post("/config/user-servers/save")
-async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
+async def save_user_servers(data: dict, user_id: str = Depends(get_current_user)):
     """保存当前用户的 Server 配置列表（覆盖式）。"""
     servers = data.get("servers", [])
     if not isinstance(servers, list):
@@ -166,14 +167,14 @@ async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
     async with async_session_factory() as session:
         # 删除旧记录
         await session.execute(
-            delete(UserServerModel).where(UserServerModel.user_id == x_user_id)
+            delete(UserServerModel).where(UserServerModel.user_id == user_id)
         )
         # 写入新记录
         for s in servers:
             sid = s.get("hub_id") or s.get("name", "")
             if sid:
                 session.add(UserServerModel(
-                    user_id=x_user_id,
+                    user_id=user_id,
                     server_id=sid,
                     matched=s.get("matched", True),
                     enabled=s.get("enabled", True),
@@ -186,7 +187,7 @@ async def save_user_servers(data: dict, x_user_id: str = Header("anonymous")):
 
 
 @router.post("/config/user-servers/toggle")
-async def toggle_server_enabled(data: dict, x_user_id: str = Header("anonymous")):
+async def toggle_server_enabled(data: dict, user_id: str = Depends(get_current_user)):
     """直接切换单个 Server 的启用/禁用状态（无需加载全部再保存）。"""
     server_id = data.get("server_id", "")
     enabled = data.get("enabled", True)
@@ -200,7 +201,7 @@ async def toggle_server_enabled(data: dict, x_user_id: str = Header("anonymous")
                 "UPDATE user_servers SET enabled = :en "
                 "WHERE user_id = :uid AND server_id = :sid"
             ),
-            {"en": enabled, "uid": x_user_id, "sid": server_id},
+            {"en": enabled, "uid": user_id, "sid": server_id},
         )
         await session.commit()
 
@@ -212,12 +213,12 @@ async def toggle_server_enabled(data: dict, x_user_id: str = Header("anonymous")
 
 
 @router.delete("/config/user-servers/{server_id:path}")
-async def remove_user_server(server_id: str, x_user_id: str = Header("anonymous")):
+async def remove_user_server(server_id: str, user_id: str = Depends(get_current_user)):
     """从用户配置中移除单个 Server。"""
     async with async_session_factory() as session:
         result = await session.execute(
             delete(UserServerModel)
-            .where(UserServerModel.user_id == x_user_id, UserServerModel.server_id == server_id)
+            .where(UserServerModel.user_id == user_id, UserServerModel.server_id == server_id)
         )
         await session.commit()
 
@@ -225,7 +226,7 @@ async def remove_user_server(server_id: str, x_user_id: str = Header("anonymous"
 
 
 @router.post("/config/upload")
-async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str = Header("anonymous"), x_agent_id: str = Header("")):
+async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = Depends(get_current_user), x_agent_id: str = Header("")):
     """上传本地的 claude_desktop_config.json，匹配市场中的 Server。
 
     返回上传配置中每个 Server 在 Hub 市场中的匹配情况，
@@ -354,12 +355,12 @@ async def upload_config(file: Annotated[UploadFile, File(...)], x_user_id: str =
     async with async_session_factory() as session:
         # 先清理当前用户的旧记录
         await session.execute(
-            delete(UserServerModel).where(UserServerModel.user_id == x_user_id)
+            delete(UserServerModel).where(UserServerModel.user_id == user_id)
         )
         # 写入新记录
         for ts in all_tracked:
             session.add(UserServerModel(
-                user_id=x_user_id,
+                user_id=user_id,
                 server_id=ts["server_id"],
                 matched=ts["matched"],
                 agent=x_agent_id if x_agent_id else "",
@@ -723,7 +724,7 @@ async def server_dependency_analyze(data: dict):
 
 
 @router.get("/config/groups")
-async def list_groups(x_user_id: str = Header("anonymous")):
+async def list_groups(user_id: str = Depends(get_current_user)):
     """列出当前用户的所有分组及其包含的 Server。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
@@ -734,7 +735,7 @@ async def list_groups(x_user_id: str = Header("anonymous")):
                 "WHERE user_id = :uid AND group_name != '' "
                 "ORDER BY group_name, server_id"
             ),
-            {"uid": x_user_id},
+            {"uid": user_id},
         )
         rows = result.fetchall()
 
@@ -756,7 +757,7 @@ async def list_groups(x_user_id: str = Header("anonymous")):
 
 
 @router.post("/config/groups/set")
-async def set_server_group(data: dict, x_user_id: str = Header("anonymous")):
+async def set_server_group(data: dict, user_id: str = Depends(get_current_user)):
     """为指定 Server 设置分组。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
@@ -772,7 +773,7 @@ async def set_server_group(data: dict, x_user_id: str = Header("anonymous")):
                 "UPDATE user_servers SET group_name = :gname "
                 "WHERE user_id = :uid AND server_id = :sid"
             ),
-            {"gname": group_name, "uid": x_user_id, "sid": server_id},
+            {"gname": group_name, "uid": user_id, "sid": server_id},
         )
         await session.commit()
 
@@ -780,7 +781,7 @@ async def set_server_group(data: dict, x_user_id: str = Header("anonymous")):
 
 
 @router.post("/config/groups/batch")
-async def batch_set_group(data: dict, x_user_id: str = Header("anonymous")):
+async def batch_set_group(data: dict, user_id: str = Depends(get_current_user)):
     """批量设置多个 Server 的分组（启用/禁用整个分组时用）。"""
     from sqlalchemy import text
     from mcp_hub.db.database import async_session_factory
@@ -798,7 +799,7 @@ async def batch_set_group(data: dict, x_user_id: str = Header("anonymous")):
                     "UPDATE user_servers SET enabled = :en "
                     "WHERE user_id = :uid AND group_name = :gname"
                 ),
-                {"en": enabled, "uid": x_user_id, "gname": group_name},
+                {"en": enabled, "uid": user_id, "gname": group_name},
             )
         await session.commit()
 

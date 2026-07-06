@@ -31,7 +31,7 @@ async def callback(
     if not code:
         raise AuthError("缺少授权码")
 
-    result = await auth_service.authenticate_with_github(code)
+    result = await auth_service.authenticate_with_github(code, _state)
     if not result["success"]:
         raise AuthError(result.get("error", "认证失败"))
 

@@ -114,12 +114,20 @@ MCP_HUB_WORKERS=2
                 f" --host 0.0.0.0 --port {mcp_port}"
                 f" --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
             )
-            crontab_cmd = (
-                f'(crontab -l 2>/dev/null | grep -v "mcp-hub";'
-                f' echo "{cron_job}") | crontab -'
+            import subprocess as _sp
+            # 获取现有 crontab，过滤掉 mcp-hub 相关条目
+            existing = _sp.run(
+                ["crontab", "-l"], capture_output=True, text=True
             )
-            result = os.system(crontab_cmd)
-            if result == 0:
+            lines: list[str] = []
+            if existing.returncode == 0 and existing.stdout:
+                lines = [line for line in existing.stdout.splitlines() if "mcp-hub" not in line]
+            lines.append(cron_job)
+            new_crontab = "\n".join(lines) + "\n"
+            result_proc = _sp.run(
+                ["crontab", "-"], input=new_crontab, text=True, capture_output=True
+            )
+            if result_proc.returncode == 0:
                 click.echo("   ✅ crontab 开机自启已配置")
             else:
                 click.echo("   ⚠️  crontab 配置失败，可手动添加开机自启")

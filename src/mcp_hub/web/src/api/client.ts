@@ -1,5 +1,13 @@
 const API_BASE = '/api/v1'
 
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('mcp_hub_token')
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` }
+  }
+  return { 'x-user-id': getUserId() }
+}
+
 export interface ServerInfo {
   id: string
   name: string
@@ -21,7 +29,7 @@ export interface ServerInfo {
 
 export async function apiGet<T>(path: string): Promise<{ success: boolean; data: T; meta?: any }> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'x-user-id': getUserId() },
+    headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
@@ -34,7 +42,7 @@ function getUserId(): string {
 export async function apiPost<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new Error(`API error: ${res.status}`)

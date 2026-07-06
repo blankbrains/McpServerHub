@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { searchAdvanced, apiGet, ServerInfo } from '../api/client'
+import { searchAdvanced, apiGet, apiPost, ServerInfo } from '../api/client'
 import ServerCard from '../components/ServerCard'
 
 const PAGE_SIZE = 9
 
 export default function Market() {
   const [query, setQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [category, setCategory] = useState('')
   const [tag, setTag] = useState('')
   const [author, setAuthor] = useState('')
@@ -30,12 +31,17 @@ export default function Market() {
     } catch { return new Set() }
   })
 
+  // Search debounce: 300ms delay before updating query
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(searchInput), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
   // 从服务端加载 user_servers（与 localStorage 合并）
   useEffect(() => {
     const uid = localStorage.getItem('mcp_hub_user')
     if (!uid) return
-    fetch('/api/v1/config/user-servers', { headers: { 'x-user-id': uid } })
-      .then(r => r.json())
+    apiGet<any[]>('/config/user-servers')
       .then(r => {
         if (r.data && r.data.length > 0) {
           const apiIds: string[] = r.data.map((s: any) => String(s.name || s.hub_id || ''))
@@ -52,7 +58,7 @@ export default function Market() {
           localStorage.setItem('mcp_hub_my_servers', JSON.stringify([...localMap.values()]))
         }
       })
-      .catch(() => {})
+      .catch((e) => { console.error('User servers load failed:', e) })
   }, [])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -107,7 +113,7 @@ export default function Market() {
 
       {/* Search + Sort */}
       <div className="flex gap-3">
-        <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+        <input type="text" value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
           placeholder="搜索名称、描述、标签..."
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <select value={sort} onChange={(e) => setSort(e.target.value)}
@@ -231,7 +237,7 @@ export default function Market() {
                             method: 'DELETE',
                             headers: { 'x-user-id': uid },
                           })
-                        } catch {}
+                        } catch (e) { console.error('Delete user-server failed:', e) }
                         setMessage(`已从配置中移除 ${s.id}`)
                         setTimeout(() => setMessage(''), 3000)
                       }}
@@ -252,13 +258,8 @@ export default function Market() {
                         setAddedServers(new Set([...addedServers, s.id]))
                         // 保存到服务端：追加式更新，不覆盖
                         try {
-                          const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
-                          await fetch('/api/v1/config/user-servers/save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-                            body: JSON.stringify({ servers: existing.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) }),
-                          })
-                        } catch {}
+                          await apiPost('/config/user-servers/save', { servers: existing.map((x: any) => ({ name: x.name || x.hub_id, hub_id: x.hub_id, matched: x.matched })) })
+                        } catch (e) { console.error('Save user-server failed:', e) }
                         setMessage(`✅ 已添加 ${s.id} 到我的配置`)
                         setTimeout(() => setMessage(''), 3000)
                       }}

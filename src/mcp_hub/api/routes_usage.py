@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import UsageStatsModel
 from mcp_hub.logging_config import get_logger
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 @router.post("/usage/record")
 async def record_usage(
     data: dict,
-    x_user_id: str = Header("anonymous"),
+    user_id: str = Depends(get_current_user),
 ):
     """记录一次 MCP 工具调用。
 
@@ -57,7 +58,7 @@ async def record_usage(
                     continue
                 session.add(UsageStatsModel(
                     server_id=sid,
-                    user_id=rec.get("user_id", x_user_id),
+                    user_id=rec.get("user_id", user_id),
                     tool_name=rec.get("tool_name", ""),
                     status=rec.get("status", "ok"),
                     duration_ms=rec.get("duration_ms", 0),
@@ -79,7 +80,7 @@ async def record_usage(
                 try:
                     from mcp_hub.api.routes_notifications import create_notification
                     await create_notification(
-                        user_id=x_user_id,
+                        user_id=user_id,
                         notif_type="alert",
                         title=f"Server 调用异常: {sid.split('/')[-1]}",
                         message=f"工具 {rec.get('tool_name', 'unknown')} 调用失败，耗时 {rec.get('duration_ms', 0)}ms",
@@ -87,9 +88,9 @@ async def record_usage(
                         link=f"/servers/{sid}",
                     )
                 except Exception:
-                    pass
+                    logger.warning("创建告警通知失败", server_id=sid, exc_info=True)
 
-    logger.info("usage.recorded", saved=saved, user=x_user_id)
+    logger.info("usage.recorded", saved=saved, user=user_id)
     return {
         "success": True,
         "data": {"saved": saved},
@@ -101,7 +102,7 @@ async def record_usage(
 async def get_usage_stats(
     server_id: str = "",
     user_id: str = "",
-    x_user_id: str = Header("anonymous"),
+    user_id: str = Depends(get_current_user),
     days: int = 7,
 ):
     """查询使用统计（支持按 server_id 或 user_id 过滤）。

@@ -71,8 +71,10 @@ def import_config(file: str):
     """导入配置。"""
     try:
         with open(file, encoding="utf-8") as f:
-            json.load(f)
-        ConfigManager()
+            data = json.load(f)
+        cm = ConfigManager()
+        config_path = cm.config_dir / "mcp.json"
+        config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         click.echo(f"✅ 配置已从 {file} 导入")
     except FileNotFoundError:
         click.echo(f"❌ 文件未找到: {file}")

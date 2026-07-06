@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+from mcp_hub.logging_config import configure_logging
+
+configure_logging()
+
 from mcp_hub.api.app import create_app
 
 app = create_app(dev=True)

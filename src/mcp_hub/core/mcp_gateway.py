@@ -28,6 +28,49 @@ from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
+# 子进程环境变量安全白名单前缀
+_GATEWAY_SAFE_ENV_PREFIXES = (
+    "PATH", "HOME", "USER", "LANG", "LC_", "TZ",
+    "MCP_HUB_", "NODE", "NPM", "PYTHON", "PIP",
+    "VIRTUAL_ENV", "CONDA_", "SHELL", "TERM",
+    "DISPLAY", "XDG_", "DBUS_", "SSH_",
+    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
+    "TEMP", "TMP", "USERPROFILE", "APPDATA",
+    "PROGRAMFILES", "PROGRAMDATA", "COMPUTERNAME",
+    "HOSTNAME", "LOGNAME", "PWD", "OLDPWD",
+    "COLORTERM", "EDITOR", "VISUAL", "PAGER",
+)
+
+
+def _filter_gateway_env() -> dict[str, str]:
+    """过滤环境变量，仅保留白名单前缀的变量。"""
+    result: dict[str, str] = {}
+    for k, v in os.environ.items():
+        upper_k = k.upper()
+        for prefix in _GATEWAY_SAFE_ENV_PREFIXES:
+            if upper_k.startswith(prefix):
+                result[k] = v
+                break
+    return result
+
+
+async def _drain_stderr(server_id: str, stderr_stream) -> None:
+    """后台任务：持续读取子进程 stderr 防止管道阻塞。"""
+    try:
+        while True:
+            line = await stderr_stream.readline()
+            if not line:
+                break
+            logger.debug(
+                "gateway.stderr",
+                server_id=server_id,
+                line=line.decode(errors="replace").rstrip()[:200],
+            )
+    except Exception:
+        pass
+
+
 # 远程上报 URL（环境变量配置，用于用户本地的 mcp serve 上报到远程 Hub）
 _REPORT_URL = os.environ.get("MCP_HUB_REPORT_URL", "").rstrip("/")
 _REPORT_USER_ID = os.environ.get("MCP_HUB_USER_ID", "anonymous")
@@ -288,7 +331,10 @@ class McpGateway:
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    env=_filter_gateway_env(),
                 )
+                # 后台任务持续读取 stderr，防止管道阻塞
+                asyncio.ensure_future(_drain_stderr(sid, proc.stderr))
                 mcp = ManagedMCP(sid, proc, proc.stdin, proc.stdout)
                 ok = await mcp.initialize()
                 if ok:

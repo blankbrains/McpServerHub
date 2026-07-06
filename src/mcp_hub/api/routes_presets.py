@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy import select, func, text
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import PresetModel
 
@@ -92,7 +93,7 @@ async def get_preset(preset_id: int):
 
 
 @router.post("/presets")
-async def create_preset(data: dict, x_user_id: str = Header("anonymous")):
+async def create_preset(data: dict, user_id: str = Depends(get_current_user)):
     """创建/发布一个配置方案。"""
     name = data.get("name", "").strip()
     if not name:
@@ -103,7 +104,7 @@ async def create_preset(data: dict, x_user_id: str = Header("anonymous")):
 
     async with async_session_factory() as session:
         preset = PresetModel(
-            user_id=x_user_id,
+            user_id=user_id,
             name=name,
             description=data.get("description", ""),
             tags=",".join(data.get("tags", [])),
@@ -117,7 +118,7 @@ async def create_preset(data: dict, x_user_id: str = Header("anonymous")):
 
 
 @router.post("/presets/{preset_id}/import")
-async def import_preset(preset_id: int, x_user_id: str = Header("anonymous")):
+async def import_preset(preset_id: int, user_id: str = Depends(get_current_user)):
     """一键导入方案：将方案中的所有 Server 添加到用户配置。"""
     from mcp_hub.db.models import UserServerModel
 
@@ -139,7 +140,7 @@ async def import_preset(preset_id: int, x_user_id: str = Header("anonymous")):
         all_sids = [s for s in all_sids if s]
         existing_result = await session.execute(
             select(UserServerModel.server_id).where(
-                UserServerModel.user_id == x_user_id,
+                UserServerModel.user_id == user_id,
                 UserServerModel.server_id.in_(all_sids),
             )
         )
@@ -151,7 +152,7 @@ async def import_preset(preset_id: int, x_user_id: str = Header("anonymous")):
             if not sid or sid in existing_ids:
                 continue
             session.add(UserServerModel(
-                user_id=x_user_id,
+                user_id=user_id,
                 server_id=sid,
                 matched=srv.get("matched", True),
             ))
@@ -173,13 +174,13 @@ async def import_preset(preset_id: int, x_user_id: str = Header("anonymous")):
 
 
 @router.delete("/presets/{preset_id}")
-async def delete_preset(preset_id: int, x_user_id: str = Header("anonymous")):
+async def delete_preset(preset_id: int, user_id: str = Depends(get_current_user)):
     """删除自己的方案。"""
     async with async_session_factory() as session:
         result = await session.execute(
             select(PresetModel).where(
                 PresetModel.id == preset_id,
-                PresetModel.user_id == x_user_id,
+                PresetModel.user_id == user_id,
             )
         )
         preset = result.scalar_one_or_none()

@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from mcp_hub.cli.logs import safe_log_path
 from mcp_hub.core.process_manager import get_process_manager
 
 router = APIRouter(tags=["realtime"])
@@ -18,13 +19,8 @@ router = APIRouter(tags=["realtime"])
 @router.get("/realtime/logs/{server_id:path}")
 async def stream_logs(server_id: str, lines: int = 50):
     """SSE 实时日志流。"""
-    log_file = (
-        Path.home()
-        / ".config"
-        / "mcp-hub"
-        / "logs"
-        / f"{server_id.replace('/', '_').replace('@', '')}.log"
-    )
+    log_dir = str(Path.home() / ".config" / "mcp-hub" / "logs")
+    log_file = safe_log_path(log_dir, server_id)
 
     async def event_stream():
         # 发送初始日志

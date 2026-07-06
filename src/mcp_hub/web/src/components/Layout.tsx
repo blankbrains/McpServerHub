@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
-import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo } from '../api/client'
+import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet } from '../api/client'
 
 const navItems = [
   { path: '/', label: '仪表盘', icon: '📊' },
@@ -76,14 +76,11 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   // 轮询未读通知数
   useEffect(() => {
-    const uid = getAuthState().userId || 'anonymous'
     const poll = async () => {
       try {
-        const r = await fetch('/api/v1/notifications/unread-count', {
-          headers: { 'x-user-id': uid },
-        }).then(r => r.json())
+        const r = await apiGet<{ count: number }>('/notifications/unread-count')
         if (r.data) setUnreadNotif(r.data.count || 0)
-      } catch {}
+      } catch (e) { console.error('Notification poll failed:', e) }
     }
     poll()
     const t = setInterval(poll, 30000)

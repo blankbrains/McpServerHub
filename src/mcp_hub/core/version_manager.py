@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class VersionManager:
@@ -66,7 +69,7 @@ class VersionManager:
                 if resp.status_code == 200:
                     return resp.json().get("info", {}).get("version", "")
         except Exception:
-            pass
+            logger.debug("获取最新版本失败", exc_info=True)
         return None
 
     async def update_server(self, server_id: str) -> dict:
@@ -109,6 +112,29 @@ class VersionManager:
         rollback_to = target_version or (versions[1] if len(versions) > 1 else None)
         if not rollback_to:
             return {"success": False, "message": "没有找到上一个版本"}
+
+        # 真正执行安装（回滚到目标版本）
+        install_cmd = await self._get_install_command(server_id)
+        if install_cmd:
+            try:
+                from mcp_hub.core.installer import Installer
+                from mcp_hub.models.server import InstallConfig, ServerMeta
+                installer = Installer()
+                meta = ServerMeta(
+                    name=server_id,
+                    version=rollback_to,
+                    install=InstallConfig(
+                        type="pip" if "pip" in install_cmd else "npm",
+                        package="",
+                        command=install_cmd,
+                    ),
+                )
+                install_result = await installer.install(meta)
+                if not install_result.get("success"):
+                    return {"success": False, "message": f"回滚安装失败: {install_result.get('error', '未知错误')}"}
+            except Exception as e:
+                logger.warning("回滚安装失败", server_id=server_id, error=str(e))
+                return {"success": False, "message": f"回滚安装异常: {e}"}
 
         await self._update_db_version(server_id, versions[0], rollback_to)
         await self._record_action(server_id, rollback_to, "rollback")

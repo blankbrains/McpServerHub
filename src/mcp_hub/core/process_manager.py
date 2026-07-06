@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,31 @@ from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
 from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# 子进程环境变量安全白名单前缀
+_SAFE_ENV_PREFIXES = (
+    "PATH", "HOME", "USER", "LANG", "LC_", "TZ",
+    "MCP_HUB_", "NODE", "NPM", "PYTHON", "PIP",
+    "VIRTUAL_ENV", "CONDA_", "SHELL", "TERM",
+    "DISPLAY", "XDG_", "DBUS_", "SSH_",
+    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
+    "TEMP", "TMP", "USERPROFILE", "APPDATA",
+    "PROGRAMFILES", "PROGRAMDATA", "COMPUTERNAME",
+    "HOSTNAME", "LOGNAME", "PWD", "OLDPWD",
+    "COLORTERM", "EDITOR", "VISUAL", "PAGER",
+)
+
+
+def _filter_env() -> dict[str, str]:
+    """过滤环境变量，仅保留白名单前缀的变量。"""
+    result: dict[str, str] = {}
+    for k, v in os.environ.items():
+        upper_k = k.upper()
+        for prefix in _SAFE_ENV_PREFIXES:
+            if upper_k.startswith(prefix):
+                result[k] = v
+                break
+    return result
 
 
 @dataclass
@@ -46,6 +72,7 @@ class ProcessManager:
         self.log_dir = log_dir or Path.home() / ".config" / "mcp-hub" / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._processes: dict[str, ManagedProcess] = {}
+        self._keepalive_tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
 
     async def spawn(
@@ -65,7 +92,7 @@ class ProcessManager:
             log_fd.write(f"\n--- {datetime.now().isoformat()} Started ---\n")
             log_fd.flush()
 
-            cmd_list = command.split()
+            cmd_list = shlex.split(command)
             full_cmd = cmd_list[0]
             full_args = cmd_list[1:] + (args or [])
 
@@ -75,7 +102,7 @@ class ProcessManager:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=log_fd,
                 stderr=asyncio.subprocess.STDOUT,
-                env={**os.environ},
+                env=_filter_env(),
             )
 
             managed = ManagedProcess(
@@ -106,6 +133,8 @@ class ProcessManager:
                     exit_code=process.returncode,
                     stderr=''.join(error_msg)[:500],
                 )
+                log_fd.close()
+                self._processes.pop(server_id, None)
                 raise ProcessStartupError(server_id, process.returncode, ''.join(error_msg))
 
             # Start keep-alive pings for stdio-based MCP servers
@@ -135,8 +164,6 @@ class ProcessManager:
                 pass
 
         task = asyncio.ensure_future(_ping())
-        # Store task to prevent garbage collection
-        self._keepalive_tasks = getattr(self, "_keepalive_tasks", {})
         self._keepalive_tasks[server_id] = task
 
     async def kill(self, server_id: str, timeout: float = 5.0) -> bool:
@@ -160,6 +187,9 @@ class ProcessManager:
             except ProcessLookupError:
                 pass
             finally:
+                keepalive_task = self._keepalive_tasks.pop(server_id, None)
+                if keepalive_task:
+                    keepalive_task.cancel()
                 self._processes.pop(server_id, None)
                 logger.info("process.killed", server_id=server_id, pid=pid)
 

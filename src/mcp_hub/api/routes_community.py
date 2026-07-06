@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import get_session
 from mcp_hub.db.repositories import ReviewRepository, UserRepository
 
@@ -23,13 +24,11 @@ class FavoriteRequest(BaseModel):
 
 
 @router.post("/community/rate")
-async def rate_server(req: RateRequest, x_user_id: str = Header("api-user")):  # noqa: E501
-    """评价 Server。
-    已登录用户使用 GitHub ID，未登录使用 anonymous。
-    """
+async def rate_server(req: RateRequest, user_id: str = Depends(get_current_user)):  # noqa: E501
+    """评价 Server。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
-        result = await repo.rate(req.server_id, x_user_id, req.rating, req.content, req.parent_id)
+        result = await repo.rate(req.server_id, user_id, req.rating, req.content, req.parent_id)
     return {"success": True, "message": f"评分 {req.rating} 星已提交", "data": result}
 
 
@@ -43,18 +42,18 @@ async def get_reviews(server_id: str):
 
 
 @router.post("/community/review/delete/{review_id}")
-async def delete_review(review_id: int, x_user_id: str = Header("anonymous")):
+async def delete_review(review_id: int, user_id: str = Depends(get_current_user)):
     """删除评价（仅评价作者可删除——服务器端验证）。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
-        result = await repo.delete_review(review_id, x_user_id, "user")
+        result = await repo.delete_review(review_id, user_id, "user")
     return result
 
 
 @router.post("/community/favorite")
-async def favorite_server(req: FavoriteRequest, x_user_id: str = Header("api-user")):
+async def favorite_server(req: FavoriteRequest, user_id: str = Depends(get_current_user)):
     """收藏 Server。"""
     async with get_session() as session:
         repo = UserRepository(session)
-        is_fav = await repo.favorite(x_user_id, req.server_id)
+        is_fav = await repo.favorite(user_id, req.server_id)
     return {"success": True, "favorited": is_fav}

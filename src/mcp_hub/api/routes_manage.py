@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.config_manager import get_config_for_agent
 from mcp_hub.core.installer import Installer
 from mcp_hub.core.process_manager import get_process_manager
@@ -29,7 +30,7 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/servers/install")
-async def install_server(req: InstallRequest, x_user_id: str = Header("anonymous")):
+async def install_server(req: InstallRequest, user_id: str = Depends(get_current_user)):
     """将 Server 添加到用户的配置中（非实际安装）。
 
     在 Web 界面点击「一键安装」时，不尝试在服务器上运行 pip/npm 安装，
@@ -55,7 +56,7 @@ async def install_server(req: InstallRequest, x_user_id: str = Header("anonymous
         # 检查是否已存在
         existing = await session.execute(
             select(UserServerModel)
-            .where(UserServerModel.user_id == x_user_id, UserServerModel.server_id == req.server_id)
+            .where(UserServerModel.user_id == user_id, UserServerModel.server_id == req.server_id)
         )
         row = existing.scalar_one_or_none()
         if row:
@@ -63,7 +64,7 @@ async def install_server(req: InstallRequest, x_user_id: str = Header("anonymous
             row.matched = True
         else:
             session.add(UserServerModel(
-                user_id=x_user_id,
+                user_id=user_id,
                 server_id=req.server_id,
                 matched=True,
                 enabled=True,
@@ -91,7 +92,7 @@ async def install_server(req: InstallRequest, x_user_id: str = Header("anonymous
             )
             await session.commit()
     except Exception:
-        pass
+        logger.warning("记录安装历史失败", exc_info=True)
 
     return {
         "success": True,
@@ -136,7 +137,7 @@ async def get_status(server_id: str):
 
 
 @router.post("/servers/{server_id:path}/start")
-async def start_server(server_id: str, x_user_id: str = Header("anonymous")):
+async def start_server(server_id: str, user_id: str = Depends(get_current_user)):
     """启动 Server。"""
     # 检查是否已被当前用户禁用
     try:
@@ -148,7 +149,7 @@ async def start_server(server_id: str, x_user_id: str = Header("anonymous")):
                 select(UserServerModel.enabled)
                 .where(
                     UserServerModel.server_id == server_id,
-                    UserServerModel.user_id == x_user_id,
+                    UserServerModel.user_id == user_id,
                 )
                 .limit(1)
             )
@@ -193,7 +194,7 @@ async def stop_server(server_id: str):
 
 
 @router.post("/servers/{server_id:path}/uninstall")
-async def uninstall_server(server_id: str, x_user_id: str = Header("anonymous")):
+async def uninstall_server(server_id: str, user_id: str = Depends(get_current_user)):
     """卸载 Server。"""
     registry = Registry()
     pm = get_process_manager()
@@ -216,7 +217,7 @@ async def uninstall_server(server_id: str, x_user_id: str = Header("anonymous"))
             await session.execute(
                 delete(UserServerModel).where(
                     UserServerModel.server_id == server_id,
-                    UserServerModel.user_id == x_user_id,
+                    UserServerModel.user_id == user_id,
                 )
             )
             await session.commit()
@@ -403,7 +404,7 @@ async def search_logs(
 
 
 @router.get("/servers/check-updates")
-async def check_updates(x_user_id: str = Header("anonymous")):
+async def check_updates(user_id: str = Depends(get_current_user)):
     """检查用户已安装的 Server 是否有新版本可用。"""
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import UserServerModel
@@ -413,7 +414,7 @@ async def check_updates(x_user_id: str = Header("anonymous")):
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(UserServerModel).where(UserServerModel.user_id == x_user_id)
+            select(UserServerModel).where(UserServerModel.user_id == user_id)
         )
         user_servers = result.scalars().all()
 
@@ -441,7 +442,7 @@ async def check_updates(x_user_id: str = Header("anonymous")):
             from mcp_hub.api.routes_notifications import create_notification
             for u in updates[:3]:  # 最多 3 条通知
                 await create_notification(
-                    user_id=x_user_id,
+                    user_id=user_id,
                     notif_type="update",
                     title=f"新版本可用: {u['name']}",
                     message=f"v{u['current_version']} → v{u['latest_version']}",
@@ -449,7 +450,7 @@ async def check_updates(x_user_id: str = Header("anonymous")):
                     link=f"/servers/{u['server_id']}",
                 )
         except Exception:
-            pass
+            logger.warning("创建更新通知失败", exc_info=True)
 
     return {
         "success": True,

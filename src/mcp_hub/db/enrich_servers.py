@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import logging
 import re
 
 import httpx
+
+logger = logging.getLogger(__name__)
 from sqlalchemy import select
 
 from mcp_hub.db.database import async_session_factory
@@ -159,7 +162,7 @@ async def translate_descriptions() -> int:
                     if result and result != text:
                         return result
         except Exception:
-            pass
+            logger.debug("翻译 API 调用失败", exc_info=True)
         return None
 
     async with async_session_factory() as session:

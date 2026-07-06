@@ -173,12 +173,12 @@ class CommandAnalyzer:
                     score_impact=-8,
                 ))
         elif install_type == "npm":
-            if "npm" in install_command and not install_command.startswith("npx"):
+            if re.search(r'\bnpm\s+(i|install)\b.*(-g|--global)(?:\s|$)', install_command):
                 findings.append(ScanFinding(
                     severity="suspicious",
                     category="command",
                     title="全局安装 npm 包",
-                    description=f"npm install 可能导致全局污染: {install_command[:80]}",
+                    description=f"npm install -g 可能导致全局污染: {install_command[:80]}",
                     score_impact=-5,
                 ))
         elif install_type == "docker":
@@ -592,6 +592,14 @@ class SecurityScanner:
 
         # 计算总分
         score = self._calculate_score(all_findings)
+
+        # 评分维度最低分机制：命令安全性 < 25 时总分上限 40
+        command_safety_penalty = sum(
+            f.score_impact for f in command_findings if f.score_impact < 0
+        )
+        command_safety_score = max(0, 40 + command_safety_penalty)
+        if command_safety_score < 25:
+            score = min(score, 40)
 
         # 确定等级
         level = self._determine_level(score, server_data)

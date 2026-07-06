@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy import func, select, update
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import NotificationModel
 from mcp_hub.logging_config import get_logger
@@ -15,7 +16,7 @@ logger = get_logger(__name__)
 
 @router.get("/notifications")
 async def list_notifications(
-    x_user_id: str = Header("anonymous"),
+    user_id: str = Depends(get_current_user),
     unread_only: bool = False,
     page: int = 1,
     page_size: int = 50,
@@ -23,7 +24,7 @@ async def list_notifications(
     """获取当前用户的通知列表（未读优先）。"""
     async with async_session_factory() as session:
         stmt = select(NotificationModel).where(
-            NotificationModel.user_id == x_user_id
+            NotificationModel.user_id == user_id
         )
         if unread_only:
             stmt = stmt.where(NotificationModel.is_read == False)  # noqa: E712
@@ -31,12 +32,12 @@ async def list_notifications(
         # 总数（使用 SQL COUNT，避免全量加载）
         total_result = await session.execute(
             select(func.count()).select_from(NotificationModel).where(
-                NotificationModel.user_id == x_user_id
+                NotificationModel.user_id == user_id
             )
         )
         unread_result = await session.execute(
             select(func.count()).select_from(NotificationModel).where(
-                NotificationModel.user_id == x_user_id,
+                NotificationModel.user_id == user_id,
                 NotificationModel.is_read == False,  # noqa: E712
             )
         )
@@ -74,12 +75,12 @@ async def list_notifications(
 
 
 @router.post("/notifications/{notif_id}/read")
-async def mark_read(notif_id: int, x_user_id: str = Header("anonymous")):
+async def mark_read(notif_id: int, user_id: str = Depends(get_current_user)):
     """标记单条通知为已读。"""
     async with async_session_factory() as session:
         await session.execute(
             update(NotificationModel)
-            .where(NotificationModel.id == notif_id, NotificationModel.user_id == x_user_id)
+            .where(NotificationModel.id == notif_id, NotificationModel.user_id == user_id)
             .values(is_read=True)
         )
         await session.commit()
@@ -87,12 +88,12 @@ async def mark_read(notif_id: int, x_user_id: str = Header("anonymous")):
 
 
 @router.post("/notifications/read-all")
-async def mark_all_read(x_user_id: str = Header("anonymous")):
+async def mark_all_read(user_id: str = Depends(get_current_user)):
     """标记所有通知为已读。"""
     async with async_session_factory() as session:
         await session.execute(
             update(NotificationModel)
-            .where(NotificationModel.user_id == x_user_id, NotificationModel.is_read == False)  # noqa: E712
+            .where(NotificationModel.user_id == user_id, NotificationModel.is_read == False)  # noqa: E712
             .values(is_read=True)
         )
         await session.commit()
@@ -100,12 +101,12 @@ async def mark_all_read(x_user_id: str = Header("anonymous")):
 
 
 @router.get("/notifications/unread-count")
-async def unread_count(x_user_id: str = Header("anonymous")):
+async def unread_count(user_id: str = Depends(get_current_user)):
     """获取未读通知数量（供导航栏铃铛使用）。"""
     async with async_session_factory() as session:
         result = await session.execute(
             select(NotificationModel).where(
-                NotificationModel.user_id == x_user_id,
+                NotificationModel.user_id == user_id,
                 NotificationModel.is_read == False,  # noqa: E712
             )
         )

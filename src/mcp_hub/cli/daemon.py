@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
+import subprocess as sp
+import sys
+import time
+from pathlib import Path
 
 import click
 
@@ -24,6 +30,11 @@ def start_daemon(host: str, port: int, dev: bool):
 
     from mcp_hub.api.app import create_app
 
+    # 写入 PID 文件供 stop 命令使用
+    pid_file = Path.home() / ".config" / "mcp-hub" / "daemon.pid"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()))
+
     app = create_app()
     click.echo("🚀 MCP Server Hub 正在启动...")
     click.echo(f"   📍 API: http://{host}:{port}/api/v1")
@@ -31,13 +42,44 @@ def start_daemon(host: str, port: int, dev: bool):
     if dev:
         click.echo("   🔧 Dev Mode: 热重载已启用")
     click.echo("   按 Ctrl+C 停止")
-    uvicorn.run(app, host=host, port=port, reload=dev)
+    try:
+        uvicorn.run(app, host=host, port=port, reload=dev)
+    finally:
+        pid_file.unlink(missing_ok=True)
 
 
 @daemon.command("stop")
 def stop_daemon():
     """停止 Hub 守护进程。"""
-    click.echo("⏹ MCP Hub 已停止")
+    pid_file = Path.home() / ".config" / "mcp-hub" / "daemon.pid"
+
+    if not pid_file.exists():
+        click.echo("⚠️  守护进程未运行（PID 文件不存在）")
+        return
+
+    try:
+        pid = int(pid_file.read_text().strip())
+        # 尝试优雅终止
+        sp.run(["kill", "-TERM", str(pid)], capture_output=True)
+        time.sleep(1)
+        # 检查进程是否还在运行
+        check = sp.run(["kill", "-0", str(pid)], capture_output=True)
+        if check.returncode != 0:
+            pid_file.unlink(missing_ok=True)
+            click.echo("⏹ MCP Hub 已停止")
+        else:
+            click.echo("⚠️  进程未响应 TERM 信号，使用 KILL 强制终止...")
+            sp.run(["kill", "-KILL", str(pid)], capture_output=True)
+            pid_file.unlink(missing_ok=True)
+            click.echo("⏹ MCP Hub 已强制停止")
+    except ValueError:
+        pid_file.unlink(missing_ok=True)
+        click.echo("⚠️  PID 文件无效，已清理")
+    except ProcessLookupError:
+        pid_file.unlink(missing_ok=True)
+        click.echo("⚠️  进程已不存在，PID 文件已清理")
+    except Exception as e:
+        click.echo(f"❌ 停止失败: {e}")
 
 
 @daemon.command("status")
@@ -55,13 +97,54 @@ def daemon_status():
 @daemon.command("enable")
 def daemon_enable():
     """配置开机自启。"""
-    click.echo("✅ 已配置开机自启（systemd service 已创建）")
+    username = os.environ.get("USER", os.environ.get("USERNAME", "root"))
+    service_content = f"""[Unit]
+Description=MCP Server Hub Daemon
+After=network.target
+
+[Service]
+Type=simple
+User={username}
+WorkingDirectory={os.getcwd()}
+ExecStart={sys.executable} -m uvicorn mcp_hub.api.app:create_app --host 0.0.0.0 --port 3987 --workers 2
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_dir = Path.home() / ".config" / "systemd" / "user"
+    service_dir.mkdir(parents=True, exist_ok=True)
+    service_path = service_dir / "mcp-hub.service"
+    service_path.write_text(service_content)
+
+    # 尝试通过 systemctl 启用
+    result = sp.run(
+        ["systemctl", "--user", "enable", "mcp-hub.service"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        click.echo("✅ 已配置开机自启（systemd user service 已创建并启用）")
+    else:
+        click.echo(f"✅ 已创建 service 文件: {service_path}")
+        click.echo("   手动启用: systemctl --user enable mcp-hub.service")
 
 
 @daemon.command("disable")
 def daemon_disable():
     """取消开机自启。"""
-    click.echo("✅ 已取消开机自启")
+    result = sp.run(
+        ["systemctl", "--user", "disable", "mcp-hub.service"],
+        capture_output=True, text=True,
+    )
+    service_path = Path.home() / ".config" / "systemd" / "user" / "mcp-hub.service"
+    if service_path.exists():
+        service_path.unlink()
+
+    if result.returncode == 0:
+        click.echo("✅ 已取消开机自启")
+    else:
+        click.echo("✅ 已取消开机自启（service 文件已移除）")
 
 
 @click.command("serve")

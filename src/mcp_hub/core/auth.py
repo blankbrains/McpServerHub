@@ -66,9 +66,15 @@ def simple_jwt_decode(token: str) -> dict | None:
 class AuthService:
     """认证服务：GitHub OAuth + JWT。"""
 
-    @staticmethod
-    def get_github_login_url(state: str = "") -> str:
-        """生成 GitHub OAuth 授权 URL。"""
+    def __init__(self) -> None:
+        self._oauth_states: dict[str, str] = {}
+
+    def get_github_login_url(self, state: str = "") -> str:
+        """生成 GitHub OAuth 授权 URL（自动生成 CSRF state）。"""
+        import secrets
+        if not state:
+            state = secrets.token_urlsafe(32)
+        self._oauth_states[state] = state
         params = {
             "client_id": settings.GITHUB_CLIENT_ID,
             "redirect_uri": settings.GITHUB_REDIRECT_URI,
@@ -113,8 +119,14 @@ class AuthService:
                 return None
             return resp.json()
 
-    async def authenticate_with_github(self, code: str) -> dict:
+    async def authenticate_with_github(self, code: str, state: str = "") -> dict:
         """完整的 GitHub OAuth 认证流程。"""
+        # Step 0: 验证 CSRF state
+        if state and state not in self._oauth_states:
+            return {"success": False, "error": "OAuth state 验证失败，可能是 CSRF 攻击"}
+        if state:
+            del self._oauth_states[state]
+
         # Step 1: code → access_token
         access_token = await self.exchange_code_for_token(code)
         if not access_token:
@@ -164,10 +176,8 @@ class AuthService:
         }
 
     async def verify_token(self, token: str) -> dict | None:
-        """验证 token 并返回用户信息。"""
+        """验证 token 并返回 payload（不再创建用户，创建逻辑移至 OAuth 回调）。"""
         payload = simple_jwt_decode(token)
         if not payload:
             return None
-        async with async_session_factory() as session:
-            repo = UserRepository(session)
-            return await repo.get_or_create({"id": payload["sub"]})
+        return payload

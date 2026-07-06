@@ -98,6 +98,7 @@ export default function ServerDetail() {
   }, [id])
 
   const latestAgentRef = useRef<string>('')
+  const reviewInputRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchConfig = async (agentId: string) => {
     if (!id) return
@@ -217,8 +218,6 @@ export default function ServerDetail() {
       if (favd) { if (!favs.includes(server.id)) favs.push(server.id) }
       else { const idx = favs.indexOf(server.id); if (idx >= 0) favs.splice(idx, 1) }
       localStorage.setItem('mcp_hub_favorites', JSON.stringify(favs))
-      // 触发其他 tab 更新
-      window.dispatchEvent(new Event('storage'))
       setMessage(favd ? '⭐ 已收藏' : '已取消收藏')
     } catch (e: any) {
       setMessage(`收藏操作失败: ${e.message || '未知错误'}`)
@@ -352,9 +351,15 @@ export default function ServerDetail() {
             {isFavorited ? '⭐ 已收藏' : '☆ 收藏'}
           </button>
           {server.homepage && (
-            <a href={server.homepage} target="_blank" rel="noopener noreferrer" className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
-              🔗 GitHub
-            </a>
+            /^https?:\/\//i.test(server.homepage) ? (
+              <a href={server.homepage} target="_blank" rel="noopener noreferrer" className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+                🔗 GitHub
+              </a>
+            ) : (
+              <span className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-400">
+                🔗 {server.homepage}
+              </span>
+            )
           )}
         </div>
 
@@ -503,7 +508,7 @@ export default function ServerDetail() {
                   {r.content && <p className="text-sm text-gray-600 mb-2">{r.content}</p>}
                   <button onClick={() => {
                     setReplyTo(r)
-                    document.getElementById('review-input')?.focus()
+                    reviewInputRef.current?.focus()
                   }} className="text-xs text-blue-500 hover:text-blue-700">↩ 回复</button>
 
                   {/* Replies */}
@@ -543,7 +548,7 @@ export default function ServerDetail() {
                 className={`text-xl ${n <= reviewRating ? '' : 'opacity-30'}`}>★</button>
             ))}
           </div>
-          <textarea id="review-input" value={reviewText} onChange={e => setReviewText(e.target.value)}
+          <textarea ref={reviewInputRef} value={reviewText} onChange={e => setReviewText(e.target.value)}
             placeholder="分享你的使用体验..."
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" />
@@ -698,7 +703,7 @@ export default function ServerDetail() {
             📋 复制安装命令
           </button>
           <a
-            href={server.homepage || `https://github.com/search?q=${encodeURIComponent(server.id)}`}
+            href={(server.homepage && /^https?:\/\//i.test(server.homepage)) ? server.homepage : `https://github.com/search?q=${encodeURIComponent(server.id)}`}
             target="_blank" rel="noopener noreferrer"
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
             📖 查看文档

@@ -1,9 +1,10 @@
 """发布 API — 含安全检查。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
+from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.security_scanner import SecurityScanner
 
@@ -21,7 +22,7 @@ class PublishRequest(BaseModel):
 
 
 @router.post("/publish")
-async def publish_server(req: PublishRequest, x_user_id: str = Header("api-user")):
+async def publish_server(req: PublishRequest, user_id: str = Depends(get_current_user)):
     """发布 MCP Server（含自动安全扫描）。"""
     server_id = f"@{req.name}" if not req.name.startswith("@") else req.name
 
@@ -33,7 +34,7 @@ async def publish_server(req: PublishRequest, x_user_id: str = Header("api-user"
         "description": req.description,
         "install_command": req.install_command,
         "install_type": req.install_type,
-        "author": x_user_id,
+        "author": user_id,
     }
     report = await scanner.scan(scan_data)
     if report.score < 50:
@@ -58,29 +59,29 @@ async def publish_server(req: PublishRequest, x_user_id: str = Header("api-user"
         "install_command": req.install_command,
         "homepage": req.homepage,
         "security_level": report.level,
-        "author": x_user_id if x_user_id != "api-user" else "",
+        "author": user_id if user_id != "api-user" else "",
     })
     return {"success": True, "data": {"id": result_id}, "security": {"score": report.score, "level": report.level}}
 
 
 @router.get("/publish/mine")
-async def my_published_servers(x_user_id: str = Header("api-user")):
+async def my_published_servers(user_id: str = Depends(get_current_user)):
     """获取当前用户发布的 Server。"""
-    if x_user_id == "api-user":
+    if user_id == "api-user":
         return {"success": True, "data": []}
     registry = Registry()
-    servers = await registry.get_by_author(x_user_id)
+    servers = await registry.get_by_author(user_id)
     return {"success": True, "data": servers}
 
 
 @router.post("/publish/unpublish/{server_id:path}")
-async def unpublish_server(server_id: str, x_user_id: str = Header("api-user")):
+async def unpublish_server(server_id: str, user_id: str = Depends(get_current_user)):
     """下架自己发布的 Server。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
         return {"success": False, "error": "Server 不存在"}
-    if server.get("author", "") != x_user_id and x_user_id != "api-user":
+    if server.get("author", "") != user_id and user_id != "api-user":
         return {"success": False, "error": "只能下架自己发布的 Server"}
     ok = await registry.unpublish_server(server_id)
     return {"success": ok, "message": "已下架" if ok else "下架失败"}

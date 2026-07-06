@@ -181,7 +181,7 @@ class ServerRepository:
                 if hasattr(new_server, key) and key not in ("id", "created_at"):
                     if isinstance(value, (list, dict)):
                         setattr(new_server, key, json.dumps(value))
-                    elif value is not None:
+                    else:
                         setattr(new_server, key, value)
             self.session.add(new_server)
 
@@ -205,13 +205,26 @@ class ServerRepository:
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
     async def delete_server(self, server_id: str) -> bool:
-        """删除 Server 记录。"""
+        """删除 Server 记录（级联删除关联数据）。"""
         result = await self.session.execute(
             select(ServerModel).where(ServerModel.id == server_id)
         )
         server = result.scalar_one_or_none()
         if not server:
             return False
+        # 级联删除关联数据
+        from sqlalchemy import delete as sa_delete
+
+        from mcp_hub.db.models import FavoriteModel, ReviewModel, UsageStatsModel
+        await self.session.execute(
+            sa_delete(FavoriteModel).where(FavoriteModel.server_id == server_id)
+        )
+        await self.session.execute(
+            sa_delete(ReviewModel).where(ReviewModel.server_id == server_id)
+        )
+        await self.session.execute(
+            sa_delete(UsageStatsModel).where(UsageStatsModel.server_id == server_id)
+        )
         await self.session.delete(server)
         await self.session.commit()
         return True
@@ -250,8 +263,6 @@ class ReviewRepository:
             )
             self.session.add(review)
 
-        await self.session.commit()
-
         # Update average rating
         avg_result = await self.session.execute(
             select(func.avg(ReviewModel.rating), func.count(ReviewModel.id))
@@ -271,15 +282,23 @@ class ReviewRepository:
         return {"rating": avg_rating, "review_count": count}
 
     async def get_reviews(self, server_id: str, limit: int = 50) -> list[dict]:
-        result = await self.session.execute(
+        # 先查父评论（顶层评价），limit 只对父评论生效
+        parent_result = await self.session.execute(
             select(ReviewModel)
-            .where(ReviewModel.server_id == server_id)
-            .order_by(ReviewModel.created_at.asc())
+            .where(
+                ReviewModel.server_id == server_id,
+                ReviewModel.parent_id.is_(None),
+            )
+            .order_by(ReviewModel.created_at.desc())
             .limit(limit)
         )
-        reviews = []
-        for r in result.scalars().all():
-            reviews.append({
+        parent_reviews = parent_result.scalars().all()
+        parent_ids = [r.id for r in parent_reviews]
+
+        reviews: list[dict] = []
+
+        def _to_dict(r: ReviewModel) -> dict:
+            return {
                 "id": r.id,
                 "server_id": r.server_id,
                 "user_id": r.user_id,
@@ -287,10 +306,27 @@ class ReviewRepository:
                 "rating": r.rating,
                 "content": r.content or "",
                 "created_at": str(r.created_at) if r.created_at else "",
-            })
+            }
+
+        for r in parent_reviews:
+            reviews.append(_to_dict(r))
+
+        # 获取这些父评论的所有回复（不限数量）
+        if parent_ids:
+            reply_result = await self.session.execute(
+                select(ReviewModel)
+                .where(
+                    ReviewModel.server_id == server_id,
+                    ReviewModel.parent_id.in_(parent_ids),
+                )
+                .order_by(ReviewModel.created_at.asc())
+            )
+            for r in reply_result.scalars().all():
+                reviews.append(_to_dict(r))
+
         # 构建树结构：顶层评价按时间降序，回复在 replies 里
         top = [r for r in reviews if r["parent_id"] is None]
-        reply_map = {}
+        reply_map: dict[int, list[dict]] = {}
         for r in reviews:
             if r["parent_id"] is not None:
                 reply_map.setdefault(r["parent_id"], []).append(r)
@@ -350,6 +386,21 @@ class UserRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_by_id(self, user_id: str) -> dict | None:
+        """根据 ID 查找用户（不创建）。"""
+        result = await self.session.execute(
+            select(UserModel).where(UserModel.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            return None
+        return {
+            "id": user.id,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "role": user.role,
+        }
+
     async def get_or_create(self, user_data: dict) -> dict:
         user_id = user_data.get("id") or user_data.get("login", "")
         result = await self.session.execute(
@@ -392,8 +443,6 @@ class UserRepository:
             fav = FavoriteModel(user_id=user_id, server_id=server_id)
             self.session.add(fav)
             is_favorited = True
-
-        await self.session.commit()
 
         # Update count
         count_result = await self.session.execute(

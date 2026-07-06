@@ -292,4 +292,4 @@ class HealthChecker:
                 message=result.message,
             )
         except Exception:
-            pass  # 记录失败不影响主流程
+            logger.warning("健康检查结果记录失败", server_id=server_id, exc_info=True)

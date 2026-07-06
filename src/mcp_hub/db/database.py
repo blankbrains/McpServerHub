@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -96,7 +99,7 @@ async def _run_migrations():
                     )
                     await conn.commit()
             except Exception:
-                pass  # 表可能已存在该列
+                logger.debug("迁移步骤 reviews.parent_id 失败", exc_info=True)
 
     # 添加 user_servers.enabled 列
     try:
@@ -117,7 +120,7 @@ async def _run_migrations():
                     await conn.execute(text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 user_servers.enabled 失败", exc_info=True)
 
     # 添加 user_servers.agent 列
     try:
@@ -138,7 +141,7 @@ async def _run_migrations():
                     await conn.execute(text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 user_servers.agent 失败", exc_info=True)
 
     # 添加 usage_stats.user_id 列
     try:
@@ -161,7 +164,7 @@ async def _run_migrations():
                     await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage_stats(user_id)"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 usage_stats.user_id 失败", exc_info=True)
 
     # 添加 usage_stats.token_count 列
     try:
@@ -182,7 +185,7 @@ async def _run_migrations():
                     await conn.execute(text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 usage_stats.token_count 失败", exc_info=True)
 
     # 添加 install_history.user_id 列
     try:
@@ -203,7 +206,7 @@ async def _run_migrations():
                     await conn.execute(text("ALTER TABLE install_history ADD COLUMN user_id VARCHAR(255) DEFAULT ''"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 install_history.user_id 失败", exc_info=True)
 
     # 添加 usage_stats.created_at 索引
     try:
@@ -211,7 +214,7 @@ async def _run_migrations():
             await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_created_at ON usage_stats(created_at)"))
             await conn.commit()
     except Exception:
-        pass
+        logger.debug("迁移步骤 idx_usage_created_at 索引失败", exc_info=True)
 
     # 添加 user_servers.group_name 列
     try:
@@ -232,7 +235,7 @@ async def _run_migrations():
                     await conn.execute(text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"))
                     await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 user_servers.group_name 失败", exc_info=True)
 
 
     # 创建 notifications 表（如果不存在）
@@ -275,7 +278,7 @@ async def _run_migrations():
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, is_read)"))
                 await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 notifications 表失败", exc_info=True)
 
 
     # 创建 presets 表（如果不存在）
@@ -315,7 +318,7 @@ async def _run_migrations():
                 ))
                 await conn.commit()
         except Exception:
-            pass
+            logger.debug("迁移步骤 presets 表失败", exc_info=True)
 
 
 async def init_db():

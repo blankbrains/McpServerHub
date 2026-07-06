@@ -41,7 +41,7 @@ async def monitor_dashboard():
             for row in result.fetchall():
                 tracked_info[row[0]] = row[1] if row[1] is not None else True
     except Exception:
-        pass
+        logger.warning("获取 user_servers 追踪信息失败", exc_info=True)
 
     # 3. 过滤：展示用户相关的 Server
     #    - 已安装/运行中的
@@ -104,7 +104,7 @@ async def monitor_dashboard():
                 )
                 calls = result.scalar() or 0
         except Exception:
-            pass
+            logger.warning("获取调用次数统计失败", server_id=sid, exc_info=True)
         total_calls_all += calls
 
         items.append({
