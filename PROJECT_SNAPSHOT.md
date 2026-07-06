@@ -1,10 +1,12 @@
 # MCP Server Hub — 项目快照
 
-> 新对话快速恢复上下文的完整项目状态。v2.2（2026-07-06）
+> 新对话快速恢复上下文的完整项目状态。v2.3（2026-07-06）
 
 ## 项目定位
 
 MCP 生态的一站式管理平台。发现 · 安装 · 管理 · 发布 · 社区。
+
+**SaaS + 自托管双模式**：打开浏览器即可搜索/对比/追踪 Server（SaaS），或部署 Hub 集中管理所有 MCP Server 进程（自托管）。
 
 ## 部署信息
 
@@ -102,6 +104,13 @@ servers / reviews / users / favorites / health_logs / events / subscriptions / i
 | 团队空间 / VS Code 插件 | ❌ 远期 |
 
 ## 最近更新（2026-07-06）
+
+### Phase 1 SaaS 改造
+- Dashboard: 新增用户概览区（已追踪/收藏/更新/风险 四维统计 + 最近追踪列表）
+- MyServers: 新增视图切换（📋配置追踪 / ⚙️进程管理），配置追踪模式支持复制安装命令、安全指示灯
+- MonitorDashboard: 新增用户追踪统计 + 待处理提醒（更新/安全风险）
+- ServerDetail: 新增"安装到本地"引导区（命令复制 + Agent 选择器 + 配置生成器）
+- 所有原有进程管理功能完整保留
 
 ### systematic-bug-hunting 全量审计修复
 - 15 个并行 agent 审查 120+ 文件，发现 16 Critical + 68 High + 150+ Medium
