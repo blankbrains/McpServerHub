@@ -39,12 +39,16 @@ src/mcp_hub/
 ├── exceptions.py        # 统一异常体系 (McpHubError + 12 子类)
 ├── logging_config.py    # structlog 结构化日志
 │
-├── api/                 # 15 个路由模块
+├── api/                 # 18 个路由模块
 │   ├── app.py           # FastAPI 实例 + CORS + 中间件 + 路由注册
+│   ├── dependencies.py  # FastAPI 认证依赖 (get_current_user/get_admin_user)
+│   ├── routes_admin.py  # 管理后台 API (17 端点 + _audit 审计)
 │   ├── routes_market.py / routes_manage.py / routes_community.py
 │   ├── routes_health.py / routes_auth.py / routes_realtime.py
 │   ├── routes_config.py / routes_search.py / routes_export.py
 │   ├── routes_security.py / routes_token.py / routes_builder.py
+│   ├── routes_monitor.py / routes_usage.py
+│   ├── routes_notifications.py / routes_presets.py
 │   └── schemas.py       # Pydantic 模型 (ApiResponse/ErrorDetail)
 │
 ├── cli/                 # 24 个命令模块 → 注册 46 个 CLI 命令
@@ -88,8 +92,13 @@ src/mcp_hub/
     ├── app.py           # 静态文件服务 + SPA fallback
     └── src/
         ├── pages/       # Dashboard / Market / ServerDetail / MyServers / ConfigPage
-        │              # Builder / MyConfig / Login / Publish / MonitorDashboard / LocalDiscovery
+        │              # Builder / MyConfig / Login / Publish / MonitorDashboard
+        │              # LocalDiscovery / ComparePage / PresetMarket / ProfilePage
+        │              # NotificationsPage / Guide
+        │   └── admin/   # AdminOverview / AdminUsers / AdminServers / AdminAnalytics
+        │              # AdminReviews / AdminAuditLog / AdminLayout + Detail pages
         └── components/  # StatusBadge / StarRating / LogViewer / ServerCard / Layout
+                       # ErrorBoundary
 ```
 
 ## 核心功能速览
@@ -137,7 +146,7 @@ docker-compose up -d
 ## 数据库
 
 - PostgreSQL 生产 / SQLite 快速体验
-- 10 张表：servers / reviews / users / favorites / health_logs / events / subscriptions / install_history / user_servers / alembic_version
+- 13 张表：servers / reviews / users / favorites / health_logs / events / subscriptions / install_history / user_servers / usage_stats / notifications / presets / alembic_version
 - ServerModel.id 格式：`@org/server-name`
 
 ## 关键设计决策
@@ -182,7 +191,7 @@ docker-compose up -d
 
 ## 开发测试规则
 
-每次新增或修改模块都要写相应测试。当前 206 个测试覆盖 exceptions/logging/health_check/models/api_schemas/security_scanner/token_analyzer/server_builder/monitor。
+每次新增或修改模块都要写相应测试。当前 286 个测试覆盖 exceptions/logging/health_check/models/api_schemas/security_scanner/token_analyzer/server_builder/monitor。
 
 ## 计划规划规则
 
@@ -195,3 +204,4 @@ docker-compose up -d
 - `mcp monitor` 需要 daemon 模式 + 已安装并启动 Server 才有数据
 - Token 分析在没有实际工具定义时只能做估算
 - 部分 CLI 命令 `@community/` 前缀硬编码
+- `routes_usage.py` 中 SQLAlchemy `func.case` API 兼容性问题（`else_` 参数）
