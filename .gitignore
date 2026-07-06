@@ -38,11 +38,7 @@ alembic.ini
 alembic/
 src/mcp_hub/db/migrations.py
 
-# Project docs (local only)
-*开发文档.md
-*项目文档.md
-CLAUDE.md
+# Project docs (tracked in git for team sync)
 project.toml
-PROJECT_SNAPSHOT.md
 
 
