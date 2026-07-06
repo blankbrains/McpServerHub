@@ -101,7 +101,7 @@ async def record_usage(
 @router.get("/usage/stats")
 async def get_usage_stats(
     server_id: str = "",
-    user_id: str = "",
+    filter_user_id: str = "",
     user_id: str = Depends(get_current_user),
     days: int = 7,
 ):
@@ -109,7 +109,7 @@ async def get_usage_stats(
 
     Query params:
     - server_id: 可选，不传则返回所有 Server 的统计
-    - user_id: 可选，不传则返回所有用户的统计
+    - filter_user_id: 可选，不传则返回所有用户的统计
     - days: 统计天数 (default 7)
     """
     from sqlalchemy import func, select, text
@@ -122,8 +122,8 @@ async def get_usage_stats(
         filters = [time_filter]
         if server_id:
             filters.append(UsageStatsModel.server_id == server_id)
-        if user_id:
-            filters.append(UsageStatsModel.user_id == user_id)
+        if filter_user_id:
+            filters.append(UsageStatsModel.user_id == filter_user_id)
 
         result = await session.execute(
             select(

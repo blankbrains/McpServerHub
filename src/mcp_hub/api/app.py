@@ -29,6 +29,7 @@ from mcp_hub.api.routes_token import router as token_router
 from mcp_hub.api.routes_monitor import router as monitor_router
 from mcp_hub.api.routes_usage import router as usage_router
 from mcp_hub.api.routes_notifications import router as notifications_router
+from mcp_hub.api.routes_admin import router as admin_router
 from mcp_hub.api.routes_presets import router as presets_router
 from mcp_hub.config import get_settings
 from mcp_hub.exceptions import McpHubError
@@ -136,6 +137,7 @@ def create_app(dev: bool = False) -> FastAPI:
     app.include_router(monitor_router, prefix="/api/v1")
     app.include_router(usage_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
+    app.include_router(admin_router, prefix="/api/v1")
     app.include_router(presets_router, prefix="/api/v1")
 
     # === Web Dashboard SPA ===
