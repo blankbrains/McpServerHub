@@ -68,11 +68,37 @@ async def get_current_user(request: Request):
     if not token:
         raise AuthError("未登录")
 
-    user = await auth_service.verify_token(token)
-    if not user:
+    payload = await auth_service.verify_token(token)
+    if not payload:
         raise TokenInvalidError()
 
-    return {"success": True, "data": user}
+    # verify_token 返回 JWT payload（含 sub=user_id），需从 DB 查完整用户信息
+    user_id = payload.get("sub", "")
+    if not user_id:
+        raise TokenInvalidError()
+
+    from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.models import UserModel
+    from sqlalchemy import select
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(UserModel).where(UserModel.id == user_id)
+        )
+        usr = result.scalar_one_or_none()
+        if not usr:
+            raise TokenInvalidError()
+        return {
+            "success": True,
+            "data": {
+                "id": usr.id,
+                "display_name": usr.display_name or usr.id,
+                "avatar_url": usr.avatar_url or "",
+                "email": usr.email or "",
+                "role": usr.role or "user",
+                "created_at": usr.created_at.isoformat() if usr.created_at else "",
+            },
+        }
 
 
 @router.post("/auth/logout")
