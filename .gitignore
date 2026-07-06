@@ -39,10 +39,10 @@ alembic/
 src/mcp_hub/db/migrations.py
 
 # Project docs (local only)
-PROJECT_SNAPSHOT.md
 *开发文档.md
 *项目文档.md
 CLAUDE.md
 project.toml
+PROJECT_SNAPSHOT.md
 
 
