@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, apiPost, getAuthState } from '../api/client'
+import { apiDelete, apiGet, apiPost, getAuthState } from '../api/client'
 
 interface NotifItem {
   id: number
@@ -25,6 +25,7 @@ export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set())
 
   const { token } = getAuthState()
 
@@ -74,6 +75,27 @@ export default function NotificationsPage() {
       setItems(prevItems)
       setUnreadCount(prevItems.filter(i => !i.is_read).length)
       setError('操作失败')
+    }
+  }
+
+  const deleteNotification = async (notification: NotifItem, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    setDeletingIds(previous => new Set(previous).add(notification.id))
+    setError('')
+    try {
+      await apiDelete(`/notifications/${notification.id}`)
+      setItems(previous => previous.filter(item => item.id !== notification.id))
+      if (!notification.is_read) {
+        setUnreadCount(previous => Math.max(0, previous - 1))
+      }
+    } catch {
+      setError('删除通知失败，请稍后重试')
+    } finally {
+      setDeletingIds(previous => {
+        const next = new Set(previous)
+        next.delete(notification.id)
+        return next
+      })
     }
   }
 
@@ -138,10 +160,19 @@ export default function NotificationsPage() {
                     <p className="text-xs text-gray-400 mt-1">{n.created_at?.slice(0, 16) || ''}</p>
                   </div>
                   {n.link && (
-                    <Link to={n.link} className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0">
+                    <Link to={n.link} onClick={(event) => event.stopPropagation()} className="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0">
                       查看 →
                     </Link>
                   )}
+                  <button
+                    type="button"
+                    onClick={(event) => void deleteNotification(n, event)}
+                    disabled={deletingIds.has(n.id)}
+                    aria-label={`删除通知：${n.title}`}
+                    className="text-xs text-gray-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingIds.has(n.id) ? '删除中...' : '删除'}
+                  </button>
                 </div>
               </div>
             )

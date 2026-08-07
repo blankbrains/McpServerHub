@@ -50,4 +50,11 @@ project.toml
 /计划方案/
 /AGENTS.md
 
+# Local-only plans and operator notes that may contain deployment details
+/*_plan.md
+/*_计划方案.md
+/*_执行计划.md
+/*_local.md
+/*_private.md
+
 

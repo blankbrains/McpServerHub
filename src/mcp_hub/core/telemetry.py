@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.core.token_analyzer import Tokenizer
 from mcp_hub.logging_config import get_logger
 
@@ -20,16 +21,17 @@ logger = get_logger(__name__)
 TELEMETRY_TOKEN_ENV = "MCP_HUB_TELEMETRY_TOKEN"
 REPORT_URL_ENV = "MCP_HUB_REPORT_URL"
 STATE_DIR_ENV = "MCP_HUB_AGENT_STATE_DIR"
+AGENT_TYPE_ENV = "MCP_HUB_AGENT_TYPE"
 SPOOL_FILENAME = "telemetry-spool.sqlite3"
 _BATCH_SIZE = 100
 
 
-def get_agent_state_dir() -> Path:
+def get_agent_state_dir(agent_type: str = DEFAULT_AGENT_TYPE) -> Path:
     """返回本地 Agent 状态目录，支持通过环境变量覆盖。"""
     configured = os.environ.get(STATE_DIR_ENV)
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ".config" / "mcp-hub"
+    return Path.home() / ".config" / "mcp-hub" / normalize_agent_type(agent_type)
 
 
 def get_spool_path(state_dir: Path | None = None) -> Path:

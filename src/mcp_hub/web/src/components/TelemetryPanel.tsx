@@ -30,14 +30,40 @@ interface TelemetryServer {
 interface TelemetryDevice {
   id: string
   name: string
+  agent_type: string
   created_at: string | null
   last_seen_at: string | null
   revoked_at: string | null
 }
 
+interface TelemetryAgentSummary {
+  agent_type: string
+  total_calls: number
+  ok_calls: number
+  error_calls: number
+  success_rate: number
+  total_tokens: number
+  device_count: number
+  last_seen_at: string | null
+}
+
 interface CreatedDevice {
   device: TelemetryDevice
   token: string
+}
+
+const AGENT_OPTIONS = [
+  { id: 'claude-code', label: 'Claude Code' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'cursor', label: 'Cursor' },
+  { id: 'windsurf', label: 'Windsurf' },
+  { id: 'vscode-copilot', label: 'VS Code Copilot' },
+  { id: 'trae', label: 'Trae' },
+  { id: 'generic', label: '通用 MCP 客户端' },
+] as const
+
+function agentLabel(agentType: string): string {
+  return AGENT_OPTIONS.find((agent) => agent.id === agentType)?.label || agentType
 }
 
 function formatTokens(value: number): string {
@@ -65,35 +91,55 @@ export default function TelemetryPanel() {
   const [summary, setSummary] = useState<TelemetrySummary | null>(null)
   const [servers, setServers] = useState<TelemetryServer[]>([])
   const [devices, setDevices] = useState<TelemetryDevice[]>([])
+  const [agents, setAgents] = useState<TelemetryAgentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deviceName, setDeviceName] = useState('Local MCP Agent')
+  const [deviceAgentType, setDeviceAgentType] = useState('generic')
+  const [selectedAgent, setSelectedAgent] = useState('')
+  const [refreshVersion, setRefreshVersion] = useState(0)
   const [creating, setCreating] = useState(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [createdDevice, setCreatedDevice] = useState<CreatedDevice | null>(null)
   const [copyState, setCopyState] = useState('')
 
-  const load = async () => {
-    setError('')
-    try {
-      const [summaryResult, serversResult, devicesResult] = await Promise.all([
-        apiGet<TelemetrySummary>('/telemetry/summary?days=7'),
-        apiGet<{ days: number; servers: TelemetryServer[] }>('/telemetry/servers?days=7'),
-        apiGet<TelemetryDevice[]>('/telemetry/devices'),
-      ])
-      setSummary(summaryResult.data)
-      setServers(serversResult.data?.servers || [])
-      setDevices(devicesResult.data || [])
-    } catch {
-      setError('遥测数据加载失败，请稍后重试。')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
+    let active = true
+    const query = selectedAgent
+      ? `&agent_type=${encodeURIComponent(selectedAgent)}`
+      : ''
+
+    const load = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const [summaryResult, serversResult, devicesResult, agentsResult] = await Promise.all([
+          apiGet<TelemetrySummary>(`/telemetry/summary?days=7${query}`),
+          apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=7${query}`),
+          apiGet<TelemetryDevice[]>('/telemetry/devices'),
+          apiGet<{ days: number; agents: TelemetryAgentSummary[] }>('/telemetry/agents?days=7'),
+        ])
+        if (!active) return
+        setSummary(summaryResult.data)
+        setServers(serversResult.data?.servers || [])
+        setDevices(devicesResult.data || [])
+        setAgents(agentsResult.data?.agents || [])
+      } catch {
+        if (active) setError('遥测数据加载失败，请稍后重试。')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
     void load()
-  }, [])
+    return () => {
+      active = false
+    }
+  }, [refreshVersion, selectedAgent])
+
+  const refresh = () => {
+    setRefreshVersion((version) => version + 1)
+  }
 
   const createDevice = async () => {
     const normalizedName = deviceName.trim()
@@ -104,11 +150,14 @@ export default function TelemetryPanel() {
     setCreating(true)
     setError('')
     try {
-      const result = await apiPost<CreatedDevice>('/telemetry/devices', { name: normalizedName })
+      const result = await apiPost<CreatedDevice>('/telemetry/devices', {
+        name: normalizedName,
+        agent_type: deviceAgentType,
+      })
       if (!result.success || !result.data) throw new Error('Create device failed')
       setCreatedDevice(result.data)
       setDeviceName('Local MCP Agent')
-      await load()
+      refresh()
     } catch {
       setError('设备密钥创建失败，请稍后重试。')
     } finally {
@@ -121,7 +170,7 @@ export default function TelemetryPanel() {
     setError('')
     try {
       await apiPost(`/telemetry/devices/${encodeURIComponent(deviceId)}/revoke`)
-      await load()
+      refresh()
     } catch {
       setError('设备撤销失败，请稍后重试。')
     } finally {
@@ -145,6 +194,7 @@ export default function TelemetryPanel() {
           env: {
             MCP_HUB_REPORT_URL: window.location.origin,
             MCP_HUB_TELEMETRY_TOKEN: createdDevice.token,
+            MCP_HUB_AGENT_TYPE: createdDevice.device.agent_type,
           },
         },
       },
@@ -152,6 +202,10 @@ export default function TelemetryPanel() {
     const copied = await copyText(JSON.stringify(config, null, 2))
     setCopyState(copied ? '配置已复制' : '复制失败')
   }
+
+  const registeredAgentTypes = new Set(agents.map((agent) => agent.agent_type))
+  if (selectedAgent) registeredAgentTypes.add(selectedAgent)
+  const visibleAgents = AGENT_OPTIONS.filter((agent) => registeredAgentTypes.has(agent.id))
 
   return (
     <section className="space-y-4" aria-labelledby="telemetry-heading">
@@ -162,7 +216,7 @@ export default function TelemetryPanel() {
         </div>
         <button
           type="button"
-          onClick={() => { setLoading(true); void load() }}
+          onClick={refresh}
           disabled={loading}
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -193,6 +247,46 @@ export default function TelemetryPanel() {
             </div>
           ))}
         </div>
+      )}
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="按 Agent 筛选遥测数据">
+        <button
+          type="button"
+          onClick={() => setSelectedAgent('')}
+          aria-pressed={selectedAgent === ''}
+          className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+            selectedAgent === ''
+              ? 'border-blue-600 bg-blue-600 text-white'
+              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          全部
+        </button>
+        {visibleAgents.map((agent) => {
+          const aggregate = agents.find((item) => item.agent_type === agent.id)
+          return (
+            <button
+              key={agent.id}
+              type="button"
+              onClick={() => setSelectedAgent(agent.id)}
+              aria-pressed={selectedAgent === agent.id}
+              className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                selectedAgent === agent.id
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {agent.label}
+              {aggregate ? ` · ${aggregate.total_calls} 次` : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      {agents.length > 0 && (
+        <p className="text-xs text-gray-500">
+          每个 Agent 使用独立设备令牌和本地队列。事件归属由服务端根据令牌绑定，客户端上报的身份不会被采信。
+        </p>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -232,7 +326,10 @@ export default function TelemetryPanel() {
 
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="font-semibold text-gray-900">本地 Agent 设备</h3>
-          <div className="mt-3 flex gap-2">
+          <p className="mt-1 text-xs text-gray-500">
+            为每个使用的 Agent 分别创建令牌，避免 Claude Code、Codex 等客户端的数据混在一起。
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
               value={deviceName}
               onChange={(event) => setDeviceName(event.target.value)}
@@ -240,6 +337,16 @@ export default function TelemetryPanel() {
               aria-label="设备名称"
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <select
+              value={deviceAgentType}
+              onChange={(event) => setDeviceAgentType(event.target.value)}
+              aria-label="Agent 类型"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {AGENT_OPTIONS.map((agent) => (
+                <option key={agent.id} value={agent.id}>{agent.label}</option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => void createDevice()}
@@ -253,6 +360,9 @@ export default function TelemetryPanel() {
           {createdDevice && (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
               <p className="text-sm font-medium text-amber-900">设备密钥仅显示这一次</p>
+              <p className="mt-1 text-xs text-amber-800">
+                已绑定到 {agentLabel(createdDevice.device.agent_type)}，请只配置给这个 Agent。
+              </p>
               <code className="mt-2 block break-all rounded bg-white p-2 text-xs text-gray-800">{createdDevice.token}</code>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void copyToken()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制密钥</button>
@@ -269,7 +379,9 @@ export default function TelemetryPanel() {
               <li key={device.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-800">{device.name}</p>
-                  <p className="text-xs text-gray-500">最后在线 {formatDate(device.last_seen_at)}</p>
+                  <p className="text-xs text-gray-500">
+                    {agentLabel(device.agent_type)} · 最后在线 {formatDate(device.last_seen_at)}
+                  </p>
                 </div>
                 {device.revoked_at ? (
                   <span className="text-xs text-gray-500">已撤销</span>

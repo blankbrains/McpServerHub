@@ -57,7 +57,7 @@ const STEPS = [
   "command": "mcp",
   "args": ["serve"]
 }`,
-    note: '将上述配置添加到你的 Agent MCP 配置文件的 mcpServers 中。添加后，所有 MCP 工具调用都会经过 Hub 网关，调用次数、响应时长、Token 消耗将自动记录。',
+    note: '请为每个使用的 Agent 单独在监控页创建设备并复制对应 Gateway 配置。设备令牌在服务端绑定 Agent 类型，调用次数、响应时长和 Token 消耗会按 Agent 隔离记录。',
   },
   {
     num: 7,

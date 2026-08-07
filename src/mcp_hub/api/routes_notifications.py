@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
-from sqlalchemy import func, select, update
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete, func, select, update
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
@@ -98,6 +98,22 @@ async def mark_all_read(user_id: str = Depends(get_current_user)):
         )
         await session.commit()
     return {"success": True}
+
+
+@router.delete("/notifications/{notif_id}")
+async def delete_notification(notif_id: int, user_id: str = Depends(get_current_user)):
+    """删除当前用户的一条通知。"""
+    async with async_session_factory() as session:
+        result = await session.execute(
+            delete(NotificationModel).where(
+                NotificationModel.id == notif_id,
+                NotificationModel.user_id == user_id,
+            )
+        )
+        if not result.rowcount:
+            raise HTTPException(status_code=404, detail="通知不存在")
+        await session.commit()
+    return {"success": True, "message": "通知已删除"}
 
 
 @router.get("/notifications/unread-count")

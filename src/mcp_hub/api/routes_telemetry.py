@@ -11,9 +11,10 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.exc import IntegrityError
 
+from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import TelemetryDeviceModel, TelemetryEventModel
@@ -30,6 +31,7 @@ class DeviceCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
+    agent_type: str = Field(default=DEFAULT_AGENT_TYPE, max_length=32)
 
     @field_validator("name")
     @classmethod
@@ -38,6 +40,11 @@ class DeviceCreateRequest(BaseModel):
         if not normalized:
             raise ValueError("设备名称不能为空")
         return normalized
+
+    @field_validator("agent_type")
+    @classmethod
+    def validate_agent_type(cls, value: str) -> str:
+        return normalize_agent_type(value)
 
 
 class TelemetryEventInput(BaseModel):
@@ -82,10 +89,20 @@ def _serialize_device(device: TelemetryDeviceModel) -> dict[str, str | None]:
     return {
         "id": device.id,
         "name": device.name,
+        "agent_type": device.agent_type or DEFAULT_AGENT_TYPE,
         "created_at": device.created_at.isoformat() if device.created_at else None,
         "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
         "revoked_at": device.revoked_at.isoformat() if device.revoked_at else None,
     }
+
+
+def _resolve_agent_filter(agent_type: str) -> str | None:
+    if not agent_type.strip():
+        return None
+    try:
+        return normalize_agent_type(agent_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 async def get_telemetry_identity(
@@ -123,6 +140,7 @@ async def create_telemetry_device(
         id=uuid.uuid4().hex,
         user_id=user_id,
         name=data.name,
+        agent_type=data.agent_type,
         token_hash=_hash_token(token),
     )
     async with async_session_factory() as session:
@@ -229,15 +247,20 @@ def _time_window(days: int) -> datetime:
 @router.get("/telemetry/summary")
 async def get_telemetry_summary(
     days: int = Query(7, ge=1, le=365),
+    agent_type: str = "",
     user_id: str = Depends(get_current_user),
 ):
     """返回当前用户的真实 Agent 遥测聚合。"""
     since = _time_window(days)
-    call_filter = (
+    selected_agent = _resolve_agent_filter(agent_type)
+    call_filters = [
         TelemetryEventModel.user_id == user_id,
         TelemetryEventModel.event_type == "tool_call",
         TelemetryEventModel.occurred_at >= since,
-    )
+    ]
+    if selected_agent:
+        call_filters.append(TelemetryDeviceModel.agent_type == selected_agent)
+
     async with async_session_factory() as session:
         calls_row = (
             await session.execute(
@@ -256,16 +279,25 @@ async def get_telemetry_summary(
                     func.coalesce(func.sum(TelemetryEventModel.output_tokens), 0),
                     func.count(func.distinct(TelemetryEventModel.device_id)),
                     func.count(func.distinct(TelemetryEventModel.server_id)),
-                ).where(*call_filter)
+                )
+                .select_from(TelemetryEventModel)
+                .join(
+                    TelemetryDeviceModel,
+                    TelemetryDeviceModel.id == TelemetryEventModel.device_id,
+                )
+                .where(*call_filters)
             )
         ).one()
 
-        last_seen = await session.scalar(
-            select(func.max(TelemetryDeviceModel.last_seen_at)).where(
-                TelemetryDeviceModel.user_id == user_id,
-                TelemetryDeviceModel.revoked_at.is_(None),
-            )
+        last_seen_query = select(func.max(TelemetryDeviceModel.last_seen_at)).where(
+            TelemetryDeviceModel.user_id == user_id,
+            TelemetryDeviceModel.revoked_at.is_(None),
         )
+        if selected_agent:
+            last_seen_query = last_seen_query.where(
+                TelemetryDeviceModel.agent_type == selected_agent
+            )
+        last_seen = await session.scalar(last_seen_query)
 
     total_calls = int(calls_row[0] or 0)
     ok_calls = int(calls_row[1] or 0)
@@ -277,6 +309,7 @@ async def get_telemetry_summary(
         "success": True,
         "data": {
             "days": days,
+            "agent_type": selected_agent,
             "total_calls": total_calls,
             "ok_calls": ok_calls,
             "error_calls": error_calls,
@@ -295,10 +328,20 @@ async def get_telemetry_summary(
 @router.get("/telemetry/servers")
 async def get_telemetry_servers(
     days: int = Query(7, ge=1, le=365),
+    agent_type: str = "",
     user_id: str = Depends(get_current_user),
 ):
     """按 Server 聚合当前用户的工具调用遥测。"""
     since = _time_window(days)
+    selected_agent = _resolve_agent_filter(agent_type)
+    filters = [
+        TelemetryEventModel.user_id == user_id,
+        TelemetryEventModel.event_type == "tool_call",
+        TelemetryEventModel.occurred_at >= since,
+    ]
+    if selected_agent:
+        filters.append(TelemetryDeviceModel.agent_type == selected_agent)
+
     async with async_session_factory() as session:
         result = await session.execute(
             select(
@@ -319,11 +362,12 @@ async def get_telemetry_servers(
                 ).label("total_tokens"),
                 func.max(TelemetryEventModel.occurred_at).label("last_call_at"),
             )
-            .where(
-                TelemetryEventModel.user_id == user_id,
-                TelemetryEventModel.event_type == "tool_call",
-                TelemetryEventModel.occurred_at >= since,
+            .select_from(TelemetryEventModel)
+            .join(
+                TelemetryDeviceModel,
+                TelemetryDeviceModel.id == TelemetryEventModel.device_id,
             )
+            .where(*filters)
             .group_by(TelemetryEventModel.server_id)
             .order_by(func.count(TelemetryEventModel.id).desc())
             .limit(100)
@@ -346,4 +390,88 @@ async def get_telemetry_servers(
                 "last_call_at": row.last_call_at.isoformat() if row.last_call_at else None,
             }
         )
-    return {"success": True, "data": {"days": days, "servers": servers}}
+    return {
+        "success": True,
+        "data": {
+            "days": days,
+            "agent_type": selected_agent,
+            "servers": servers,
+        },
+    }
+
+
+@router.get("/telemetry/agents")
+async def get_telemetry_agents(
+    days: int = Query(7, ge=1, le=365),
+    user_id: str = Depends(get_current_user),
+):
+    """按已授权 Agent 类型汇总当前用户的真实遥测。"""
+    since = _time_window(days)
+    event_join = and_(
+        TelemetryEventModel.device_id == TelemetryDeviceModel.id,
+        TelemetryEventModel.event_type == "tool_call",
+        TelemetryEventModel.occurred_at >= since,
+    )
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(
+                TelemetryDeviceModel.agent_type,
+                func.count(TelemetryEventModel.id).label("total_calls"),
+                func.coalesce(
+                    func.sum(
+                        case((TelemetryEventModel.status == "ok", 1), else_=0)
+                    ),
+                    0,
+                ).label("ok_calls"),
+                func.coalesce(
+                    func.sum(
+                        case((TelemetryEventModel.status == "error", 1), else_=0)
+                    ),
+                    0,
+                ).label("error_calls"),
+                func.coalesce(
+                    func.sum(
+                        TelemetryEventModel.input_tokens
+                        + TelemetryEventModel.output_tokens
+                    ),
+                    0,
+                ).label("total_tokens"),
+                func.count(func.distinct(TelemetryDeviceModel.id)).label(
+                    "device_count"
+                ),
+                func.max(TelemetryDeviceModel.last_seen_at).label("last_seen_at"),
+            )
+            .select_from(TelemetryDeviceModel)
+            .outerjoin(TelemetryEventModel, event_join)
+            .where(
+                TelemetryDeviceModel.user_id == user_id,
+                TelemetryDeviceModel.revoked_at.is_(None),
+            )
+            .group_by(TelemetryDeviceModel.agent_type)
+            .order_by(func.count(TelemetryEventModel.id).desc())
+        )
+        rows = result.fetchall()
+
+    agents = []
+    for row in rows:
+        total_calls = int(row.total_calls or 0)
+        ok_calls = int(row.ok_calls or 0)
+        agents.append(
+            {
+                "agent_type": row.agent_type or DEFAULT_AGENT_TYPE,
+                "total_calls": total_calls,
+                "ok_calls": ok_calls,
+                "error_calls": int(row.error_calls or 0),
+                "success_rate": (
+                    round(ok_calls / total_calls * 100, 1)
+                    if total_calls
+                    else 0
+                ),
+                "total_tokens": int(row.total_tokens or 0),
+                "device_count": int(row.device_count or 0),
+                "last_seen_at": (
+                    row.last_seen_at.isoformat() if row.last_seen_at else None
+                ),
+            }
+        )
+    return {"success": True, "data": {"days": days, "agents": agents}}

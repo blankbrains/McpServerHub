@@ -8,7 +8,9 @@ from pathlib import Path
 
 import click
 
+from mcp_hub.agent_types import AGENT_TYPES, DEFAULT_AGENT_TYPE
 from mcp_hub.core.telemetry import (
+    AGENT_TYPE_ENV,
     REPORT_URL_ENV,
     STATE_DIR_ENV,
     TELEMETRY_TOKEN_ENV,
@@ -24,6 +26,14 @@ def agent() -> None:
 
 
 @agent.command("config")
+@click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+    help="此设备令牌绑定的 MCP 客户端类型。",
+)
 @click.option(
     "--hub-url",
     default=lambda: os.environ.get(REPORT_URL_ENV, "http://127.0.0.1:3987"),
@@ -42,9 +52,14 @@ def agent() -> None:
     default=None,
     help="本地离线队列目录，默认 ~/.config/mcp-hub。",
 )
-def agent_config(hub_url: str, telemetry_token: str, state_dir: Path | None) -> None:
+def agent_config(
+    agent_type: str,
+    hub_url: str,
+    telemetry_token: str,
+    state_dir: Path | None,
+) -> None:
     """输出可放入 MCP 客户端配置的 Gateway 配置片段。"""
-    agent_state_dir = state_dir or get_agent_state_dir()
+    agent_state_dir = state_dir or get_agent_state_dir(agent_type)
     config = {
         "mcpServers": {
             "mcp-hub": {
@@ -54,6 +69,7 @@ def agent_config(hub_url: str, telemetry_token: str, state_dir: Path | None) -> 
                     REPORT_URL_ENV: hub_url.rstrip("/"),
                     TELEMETRY_TOKEN_ENV: telemetry_token,
                     STATE_DIR_ENV: str(agent_state_dir),
+                    AGENT_TYPE_ENV: agent_type,
                 },
             }
         }
@@ -63,14 +79,22 @@ def agent_config(hub_url: str, telemetry_token: str, state_dir: Path | None) -> 
 
 @agent.command("status")
 @click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+    help="查看指定 MCP 客户端的本地遥测队列。",
+)
+@click.option(
     "--state-dir",
     type=click.Path(path_type=Path),
     default=None,
     help="本地离线队列目录，默认 ~/.config/mcp-hub。",
 )
-def agent_status(state_dir: Path | None) -> None:
+def agent_status(agent_type: str, state_dir: Path | None) -> None:
     """显示本地 Agent 的遥测配置和待上传事件数。"""
-    agent_state_dir = state_dir or get_agent_state_dir()
+    agent_state_dir = state_dir or get_agent_state_dir(agent_type)
     spool_path = get_spool_path(agent_state_dir)
     queued_events = 0
     if spool_path.exists():
@@ -88,6 +112,7 @@ def agent_status(state_dir: Path | None) -> None:
         json.dumps(
             {
                 "telemetry_configured": configured,
+                "agent_type": agent_type,
                 "state_dir": str(agent_state_dir),
                 "queued_events": queued_events,
             },

@@ -317,7 +317,7 @@ export default function ConfigPage() {
       <div className="bg-white rounded-xl border border-green-200 bg-green-50 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：配置本地遥测（可选）</h2>
         <p className="text-sm text-gray-600 mb-4">
-          追踪 Server 不会自动产生本地调用数据。需要在监控页创建本地 Agent 设备，再将设备密钥配置到本地 Gateway 后，调用、延迟和 Token 统计才会上报。
+          追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应设备密钥配置到本地 Gateway；调用、延迟和 Token 统计才会上报且会按 Agent 隔离。
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
@@ -328,7 +328,7 @@ export default function ConfigPage() {
           </pre>
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          请在监控页创建设备后使用“复制 Gateway 配置”；其中会包含设备遥测令牌。
+          请在监控页为当前 Agent 创建设备后使用“复制 Gateway 配置”；其中会包含绑定该 Agent 的设备遥测令牌。
         </p>
         <div className="flex gap-2">
           <button onClick={() => { navigator.clipboard.writeText('"mcp-hub-gateway": {\n  "command": "mcp",\n  "args": ["serve"]\n}'); setMessage('✅ 已复制到剪贴板') }}

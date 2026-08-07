@@ -210,6 +210,7 @@ class TelemetryDeviceModel(Base):
     id = Column(String(64), primary_key=True)
     user_id = Column(String(255), nullable=False, index=True)
     name = Column(String(100), nullable=False)
+    agent_type = Column(String(32), nullable=False, default="generic", index=True)
     token_hash = Column(String(64), nullable=False, unique=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
     last_seen_at = Column(DateTime, nullable=True, index=True)

@@ -68,7 +68,6 @@ async def get_db():
 async def _run_migrations():
     """运行数据库迁移：添加缺失的列到已有表。"""
     from sqlalchemy import text
-    from mcp_hub.db.models import ReviewModel
 
     # 检查并添加 reviews.parent_id 列
     async with engine.connect() as conn:
@@ -319,6 +318,57 @@ async def _run_migrations():
                 await conn.commit()
         except Exception:
             logger.debug("迁移步骤 presets 表失败", exc_info=True)
+
+
+    # 为已存在的遥测设备增加 Agent 类型。历史设备默认归为 generic。
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='telemetry_devices' AND column_name='agent_type'"
+                )
+            )
+            if not result.fetchone():
+                await conn.execute(
+                    text(
+                        "ALTER TABLE telemetry_devices "
+                        "ADD COLUMN agent_type VARCHAR(32) NOT NULL DEFAULT 'generic'"
+                    )
+                )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_telemetry_devices_agent_type "
+                    "ON telemetry_devices(agent_type)"
+                )
+            )
+            await conn.commit()
+    except Exception:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("PRAGMA table_info(telemetry_devices)"))
+                columns = [row[1] for row in result.fetchall()]
+                if "agent_type" not in columns:
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE telemetry_devices "
+                            "ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'generic'"
+                        )
+                    )
+                await conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_telemetry_devices_agent_type "
+                        "ON telemetry_devices(agent_type)"
+                    )
+                )
+                await conn.commit()
+        except Exception:
+            logger.debug(
+                "迁移步骤 telemetry_devices.agent_type 失败",
+                exc_info=True,
+            )
 
 
 async def init_db():
