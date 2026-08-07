@@ -26,12 +26,29 @@ SPOOL_FILENAME = "telemetry-spool.sqlite3"
 _BATCH_SIZE = 100
 
 
-def get_agent_state_dir(agent_type: str = DEFAULT_AGENT_TYPE) -> Path:
+def get_agent_state_dir(agent_type: str | None = None) -> Path:
     """返回本地 Agent 状态目录，支持通过环境变量覆盖。"""
     configured = os.environ.get(STATE_DIR_ENV)
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ".config" / "mcp-hub" / normalize_agent_type(agent_type)
+
+    configured_agent_type = (
+        agent_type
+        if agent_type is not None
+        else os.environ.get(AGENT_TYPE_ENV, DEFAULT_AGENT_TYPE)
+    )
+    try:
+        normalized_agent_type = normalize_agent_type(configured_agent_type)
+    except ValueError:
+        if agent_type is not None:
+            raise
+        logger.warning(
+            "telemetry.invalid_agent_type",
+            agent_type=configured_agent_type,
+        )
+        normalized_agent_type = DEFAULT_AGENT_TYPE
+
+    return Path.home() / ".config" / "mcp-hub" / normalized_agent_type
 
 
 def get_spool_path(state_dir: Path | None = None) -> Path:
@@ -126,7 +143,7 @@ class TelemetryReporter:
         token = os.environ.get(TELEMETRY_TOKEN_ENV, "").strip()
         if not report_url or not token:
             return None
-        return cls(report_url, token)
+        return cls(report_url, token, get_agent_state_dir())
 
     async def record(
         self,

@@ -22,7 +22,17 @@ from mcp_hub.api.routes_telemetry import (
     revoke_telemetry_device,
 )
 from mcp_hub.cli.agent import agent
-from mcp_hub.core.telemetry import TelemetrySpool
+from mcp_hub.core import telemetry
+from mcp_hub.core.telemetry import (
+    AGENT_TYPE_ENV,
+    REPORT_URL_ENV,
+    SPOOL_FILENAME,
+    STATE_DIR_ENV,
+    TELEMETRY_TOKEN_ENV,
+    TelemetryReporter,
+    TelemetrySpool,
+    get_agent_state_dir,
+)
 from mcp_hub.db.database import async_session_factory, engine
 from mcp_hub.db.models import Base, TelemetryDeviceModel, TelemetryEventModel
 
@@ -176,6 +186,39 @@ def test_telemetry_spool_keeps_only_metrics(tmp_path) -> None:
     assert queued[0]["input_tokens"] == 12
     assert "arguments" not in queued[0]
     assert "response" not in queued[0]
+
+
+def test_agent_state_dir_uses_environment_agent_type(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv(STATE_DIR_ENV, raising=False)
+    monkeypatch.setenv(AGENT_TYPE_ENV, "codex")
+    monkeypatch.setattr(telemetry.Path, "home", staticmethod(lambda: tmp_path))
+
+    assert get_agent_state_dir() == tmp_path / ".config" / "mcp-hub" / "codex"
+
+
+def test_reporter_uses_agent_specific_default_queue(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv(STATE_DIR_ENV, raising=False)
+    monkeypatch.setenv(AGENT_TYPE_ENV, "claude-code")
+    monkeypatch.setenv(REPORT_URL_ENV, "https://hub.example.test")
+    monkeypatch.setenv(TELEMETRY_TOKEN_ENV, "mcpht_test-token")
+    monkeypatch.setattr(telemetry.Path, "home", staticmethod(lambda: tmp_path))
+
+    reporter = TelemetryReporter.from_environment()
+    assert reporter is not None
+    try:
+        assert reporter.spool.path == (
+            tmp_path / ".config" / "mcp-hub" / "claude-code" / SPOOL_FILENAME
+        )
+    finally:
+        reporter.spool.close()
+
+
+def test_invalid_environment_agent_type_falls_back_to_generic(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv(STATE_DIR_ENV, raising=False)
+    monkeypatch.setenv(AGENT_TYPE_ENV, "not-supported")
+    monkeypatch.setattr(telemetry.Path, "home", staticmethod(lambda: tmp_path))
+
+    assert get_agent_state_dir().name == "generic"
 
 
 def test_agent_config_outputs_gateway_environment(tmp_path) -> None:
