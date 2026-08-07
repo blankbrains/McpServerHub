@@ -57,4 +57,7 @@ project.toml
 /*_local.md
 /*_private.md
 
+# Server-local deployment credentials
+/deploy/mcp-hub.env
+
 

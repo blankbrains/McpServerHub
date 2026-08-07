@@ -12,11 +12,8 @@ WorkingDirectory=/home/djl/code/McpServerHub
 
 # Conda environment
 Environment=PATH=/home/djl/miniconda3/envs/McpServerHub/bin:/usr/local/bin:/usr/bin:/bin
-Environment=MCP_HUB_DATABASE_URL=postgresql+asyncpg://mcp_hub:***REMOVED***@localhost:5432/mcp_hub
-Environment=MCP_HUB_SECRET=REDACTED_OLD_JWT_SECRET
-Environment=MCP_HUB_LOG_DIR=/var/log/mcp-hub
-Environment=MCP_HUB_HOST=0.0.0.0
-Environment=MCP_HUB_PORT=3987
+# Keep credentials outside the repository. The file must be owned by root and mode 0600.
+EnvironmentFile=/etc/mcp-hub/mcp-hub.env
 
 ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --factory --host 0.0.0.0 --port 3987 --workers 2 --log-level info
 ExecReload=/bin/kill -HUP $MAINPID
