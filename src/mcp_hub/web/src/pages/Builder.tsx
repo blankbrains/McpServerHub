@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import InfoTooltip from '../components/InfoTooltip'
 
 interface Tool {
   name: string
@@ -100,7 +101,9 @@ export default function Builder() {
         <span className="text-3xl">🛠️</span>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">MCP Server Builder</h1>
-          <p className="text-sm text-gray-500">生成可编辑的 MCP Server 项目脚手架，并下载为 ZIP</p>
+          <p className="text-sm text-gray-500">
+            生成可编辑的 <InfoTooltip description="项目脚手架会生成基础目录、示例工具、配置和 README；它不是可直接用于生产的完整实现。">MCP Server 项目脚手架</InfoTooltip>，并下载为 ZIP
+          </p>
         </div>
       </div>
 
@@ -158,7 +161,10 @@ export default function Builder() {
 
         {/* 工具选择 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">工具模板 <span className="text-gray-400 font-normal">（至少要选一个）</span></label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <InfoTooltip description="工具模板会生成 MCP 工具的输入参数和示例处理逻辑，便于在下载后继续实现业务能力。">工具模板</InfoTooltip>
+            <span className="text-gray-400 font-normal">（至少要选一个）</span>
+          </label>
           {loading ? (
             <div className="text-sm text-gray-400">加载中...</div>
           ) : error ? (

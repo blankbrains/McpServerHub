@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mcp_hub}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-***REMOVED***}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-mcp_hub}
     ports:
       - "5432:5432"
@@ -29,8 +29,11 @@ services:
   hub:
     build: .
     environment:
-      MCP_HUB_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mcp_hub}:${POSTGRES_PASSWORD:-***REMOVED***}@postgres:5432/${POSTGRES_DB:-mcp_hub}
-      MCP_HUB_SECRET: ${MCP_HUB_SECRET:-change-this-in-production}
+      MCP_HUB_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mcp_hub}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-mcp_hub}
+      MCP_HUB_SECRET: ${MCP_HUB_SECRET:?Set MCP_HUB_SECRET in .env}
+      MCP_HUB_GITHUB_CLIENT_ID: ${MCP_HUB_GITHUB_CLIENT_ID:?Set MCP_HUB_GITHUB_CLIENT_ID in .env}
+      MCP_HUB_GITHUB_CLIENT_SECRET: ${MCP_HUB_GITHUB_CLIENT_SECRET:?Set MCP_HUB_GITHUB_CLIENT_SECRET in .env}
+      MCP_HUB_GITHUB_REDIRECT_URI: ${MCP_HUB_GITHUB_REDIRECT_URI:?Set MCP_HUB_GITHUB_REDIRECT_URI in .env}
       MCP_HUB_HOST: 0.0.0.0
       MCP_HUB_PORT: 3987
     ports:

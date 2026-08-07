@@ -17,7 +17,13 @@ function SecBadge({ level }: { level: string }) {
     blocked: { icon: '🔴', color: 'text-red-600' },
   }
   const c = cfg[level] || { icon: '❓', color: 'text-gray-400' }
-  return <span className={`text-xs ${c.color}`}>{c.icon}</span>
+  const descriptions: Record<string, string> = {
+    verified: '已通过 Hub 的安全认证流程。',
+    reviewed: '已完成基础审查，但仍应结合你的运行环境自行确认。',
+    unreviewed: '尚未完成审查，不代表一定有风险，但安装前应检查来源和命令。',
+    blocked: 'Hub 已将此条目标记为不应安装或使用。',
+  }
+  return <span className={`text-xs ${c.color}`} title={descriptions[level] || '该 Server 的安全状态未提供说明。'}>{c.icon}</span>
 }
 
 export default function ServerCard({ server }: ServerCardProps) {
@@ -68,7 +74,14 @@ export default function ServerCard({ server }: ServerCardProps) {
             {cat}
           </span>
         ))}
-        <span className="text-xs text-gray-400 flex items-center gap-0.5">
+        <span
+          className="text-xs text-gray-400 flex items-center gap-0.5"
+          title={{
+            verified: '已通过 Hub 的安全认证流程。',
+            reviewed: '已完成基础审查，但仍应结合你的运行环境自行确认。',
+            unreviewed: '尚未完成审查，不代表一定有风险，但安装前应检查来源和命令。',
+          }[server.security_level] || '该 Server 的安全状态未提供说明。'}
+        >
           <SecBadge level={server.security_level} />
           {securityLabels[server.security_level] || server.security_level}
         </span>

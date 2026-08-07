@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, apiGet, apiPost, getAuthState } from '../api/client'
+import InfoTooltip from '../components/InfoTooltip'
 
 interface PublishForm {
   name: string
@@ -161,7 +162,7 @@ export default function Publish() {
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-8">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">发布 MCP Server</h1>
       <p className="text-sm text-gray-500 mb-8">
-        将你的 MCP Server 提交到 Hub 市场。提交时会自动执行安全扫描，安全评分低于 50 的安装命令会被拒绝。
+        将你的 MCP Server 提交到 Hub 市场。提交时会自动执行 <InfoTooltip description="安全扫描会基于安装命令、依赖来源、发布者和代码模式等信号计算风险提示；它不能替代发布者和使用者自己的安全审查。">安全扫描</InfoTooltip>，<InfoTooltip description="安全评分为 0-100 分的风险提示。低于 50 分的安装命令会被拒绝发布。">安全评分</InfoTooltip>低于 50 的安装命令会被拒绝。
       </p>
 
       {status === 'success' && (
@@ -201,7 +202,9 @@ export default function Publish() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">安装方式</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <InfoTooltip description="安装方式决定 Hub 如何解释安装命令。例如 npx 用于 Node.js 包，pip 和 uvx 用于 Python 包或工具。">安装方式</InfoTooltip>
+            </label>
             <select value={form.installType} onChange={e => handleChange('installType', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none">
               {INSTALL_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -210,7 +213,10 @@ export default function Publish() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">安装命令 <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            <InfoTooltip description="用户复制或导出后会在本地执行的命令。请只发布必要、可验证且不包含凭证的命令。">安装命令</InfoTooltip>
+            <span className="text-red-500">*</span>
+          </label>
           <input type="text" value={form.installCommand} onChange={e => handleChange('installCommand', e.target.value)}
             placeholder="例: npx -y @myorg/my-mcp-server"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />

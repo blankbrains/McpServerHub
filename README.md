@@ -110,7 +110,9 @@ pip install mcp-hub-cli
 ```bash
 git clone https://github.com/blankbrains/McpServerHub
 cd McpServerHub
-docker-compose up -d
+cp .env.example .env
+# 在 .env 中填写 POSTGRES_PASSWORD、MCP_HUB_SECRET 和 GitHub OAuth 配置
+docker compose up -d
 # 打开 http://localhost:3987
 ```
 </details>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet, getAuthHeaders, getAuthState, getFavoriteServers } from '../api/client'
 import TelemetryPanel from '../components/TelemetryPanel'
+import InfoTooltip from '../components/InfoTooltip'
 
 interface ServerMetric {
   server_id: string
@@ -77,31 +78,41 @@ export default function MonitorDashboard() {
   const userId = getAuthState().userId
 
   const errorCountRef = useRef(0)
+  const hasDataRef = useRef(false)
 
   const load = async (manual = false) => {
     if (manual) setRefreshing(true)
     try {
       const r = await apiGet<DashboardData>('/monitor/dashboard')
-      if (r.data) { setData(r.data); errorCountRef.current = 0 }
+      if (r.data) {
+        setData(r.data)
+        hasDataRef.current = true
+        errorCountRef.current = 0
+        setErrorMsg(null)
+      }
     } catch {
       errorCountRef.current++
-      if (errorCountRef.current >= 3 && data === null) {
+      if (errorCountRef.current >= 3 && !hasDataRef.current) {
         setErrorMsg('监控数据加载失败，请检查服务是否正常运行')
       }
-    } finally { setLoading(false); if (manual) setTimeout(() => setRefreshing(false), 500) }
+    } finally { setLoading(false); if (manual) setRefreshing(false) }
   }
 
   // 基础间隔 10 秒，错误后退避 (最多 60 秒)
   const getInterval = () => Math.min(10 * Math.pow(2, errorCountRef.current), 60) * 1000
 
   useEffect(() => {
-    load()
     let timer: ReturnType<typeof setTimeout>
-    const scheduleNext = () => {
-      timer = setTimeout(() => { load(false); scheduleNext() }, getInterval())
+    let cancelled = false
+    const scheduleNext = async () => {
+      await load()
+      if (!cancelled) timer = setTimeout(() => { void scheduleNext() }, getInterval())
     }
-    scheduleNext()
-    return () => clearTimeout(timer)
+    void scheduleNext()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [])
 
   // 加载 SaaS 概览数据
@@ -160,17 +171,19 @@ export default function MonitorDashboard() {
         <div className="mb-8">
           <TelemetryPanel />
           <hr className="my-6 border-gray-200 dark:border-gray-700" />
-          <h2 className="text-xl font-bold mb-4">📊 我的概览</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <h2 className="text-xl font-bold mb-4">📊 我的概览</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {[
-              { label: '已追踪', value: trackedCount, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-              { label: '已收藏', value: favCount, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
-              { label: '有更新', value: updateCount, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
-              { label: '安全风险', value: riskCount, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+              { label: '已追踪', description: '已保存到当前账户追踪列表的 Server；这不会自动采集本地调用数据。', value: trackedCount, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+              { label: '已收藏', description: '当前账户收藏的市场条目，用于快速访问。', value: favCount, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
+              { label: '有更新', description: 'Hub 检测到存在比当前记录更新的版本信息。', value: updateCount, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+              { label: '安全风险', description: '当前已追踪 Server 中安全状态为“未审查”或“已阻止”的数量。', value: riskCount, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
             ].map(card => (
               <div key={card.label} className={`${card.bg} rounded-xl p-4`}>
                 <div className={`text-3xl font-bold ${card.color}`}>{card.value}</div>
-                <div className="text-sm text-gray-500 mt-1">{card.label}</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  <InfoTooltip description={card.description}>{card.label}</InfoTooltip>
+                </div>
               </div>
             ))}
           </div>
@@ -220,20 +233,22 @@ export default function MonitorDashboard() {
 
       {/* 摘要卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <SummaryCard label="总 Server" value={String(s?.total_servers ?? 0)} icon="📦" color="gray" />
-        <SummaryCard label="运行中" value={String(s?.running ?? 0)} icon="🟢" color="green" />
-        <SummaryCard label="已停止" value={String(s?.stopped ?? 0)} icon="⏹" color="gray" />
-        <SummaryCard label="异常" value={String(s?.error ?? 0)} icon="🔴" color="red" />
-        <SummaryCard label="7 天调用" value={String(s?.total_calls_7d ?? 0)} icon="📞" color="blue" />
-        <SummaryCard label="Token 总量" value={fmtTokens(s?.total_token_consumption ?? 0)} icon="📊" color="purple" />
-        <SummaryCard label={`平均可靠性 ${s?.avg_reliability ?? 0}`} value="" icon="🏆" color={s && s.avg_reliability >= 90 ? 'green' : s && s.avg_reliability >= 60 ? 'yellow' : 'red'} />
+        <SummaryCard label="总 Server" description="当前自托管监控端已发现或登记的 Server 总数。" value={String(s?.total_servers ?? 0)} icon="📦" color="gray" />
+        <SummaryCard label="运行中" description="当前由自托管监控端检测为正在运行的 Server 数量。" value={String(s?.running ?? 0)} icon="🟢" color="green" />
+        <SummaryCard label="已停止" description="当前未运行但仍被监控端登记的 Server 数量。" value={String(s?.stopped ?? 0)} icon="⏹" color="gray" />
+        <SummaryCard label="异常" description="当前监控端检测到运行异常的 Server 数量。" value={String(s?.error ?? 0)} icon="🔴" color="red" />
+        <SummaryCard label="7 天调用" description="过去 7 天内记录到的工具调用总数；只有经 Gateway 或遥测上报的调用会计入。" value={String(s?.total_calls_7d ?? 0)} icon="📞" color="blue" />
+        <SummaryCard label="Token 总量" description="已记录调用按载荷估算的 Token 总数，不包含原始请求和响应内容。" value={fmtTokens(s?.total_token_consumption ?? 0)} icon="📊" color="purple" />
+        <SummaryCard label={`平均可靠性 ${s?.avg_reliability ?? 0}`} description="所有具有健康检查记录的 Server 的可靠性评分平均值。" value="" icon="🏆" color={s && s.avg_reliability >= 90 ? 'green' : s && s.avg_reliability >= 60 ? 'yellow' : 'red'} />
       </div>
 
       {/* 健康分布条 */}
       {data && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-1 text-xs text-gray-500 mb-1.5">
-            <span className="w-16">健康分布</span>
+            <span className="w-16">
+              <InfoTooltip description="按当前运行、停止和异常状态统计的 Server 分布，不等同于历史可用性。">健康分布</InfoTooltip>
+            </span>
             <div className="flex-1 flex gap-0.5 h-3 rounded-full overflow-hidden">
               {s!.running > 0 && <div className="bg-green-500 transition-all" style={{ flex: s!.running }} title={`运行中 ${s!.running}`} />}
               {s!.stopped > 0 && <div className="bg-gray-300 transition-all" style={{ flex: s!.stopped }} title={`已停止 ${s!.stopped}`} />}
@@ -343,7 +358,7 @@ export default function MonitorDashboard() {
   )
 }
 
-function SummaryCard({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function SummaryCard({ label, description, value, icon, color }: { label: string; description: string; value: string; icon: string; color: string }) {
   const colors: Record<string, string> = {
     green: 'bg-green-50 border-green-200',
     red: 'bg-red-50 border-red-200',
@@ -354,7 +369,7 @@ function SummaryCard({ label, value, icon, color }: { label: string; value: stri
   }
   return (
     <div className={`rounded-xl border p-3 ${colors[color] || colors.gray}`}>
-      <p className="text-xs text-gray-500 mb-0.5">{icon} {label}</p>
+      <p className="text-xs text-gray-500 mb-0.5">{icon} <InfoTooltip description={description}>{label}</InfoTooltip></p>
       {value && <p className="text-lg font-bold text-gray-900">{value}</p>}
     </div>
   )

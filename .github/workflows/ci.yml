@@ -14,7 +14,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: mcp_hub
-          POSTGRES_PASSWORD: ***REMOVED***
+          POSTGRES_PASSWORD: ${{ github.run_id }}_${{ github.run_attempt }}
           POSTGRES_DB: mcp_hub
         ports:
           - 5432:5432
@@ -49,7 +49,7 @@ jobs:
 
       - name: Test with pytest
         env:
-          MCP_HUB_DATABASE_URL: postgresql+asyncpg://mcp_hub:***REMOVED***@localhost:5432/mcp_hub
+          MCP_HUB_DATABASE_URL: postgresql+asyncpg://mcp_hub:${{ github.run_id }}_${{ github.run_attempt }}@localhost:5432/mcp_hub
         run: |
           pytest tests/ -v --tb=short
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, getAuthState, apiGet } from '../api/client'
+import InfoTooltip from '../components/InfoTooltip'
 
 interface UserProfile {
   id: string
@@ -172,10 +173,10 @@ export default function ProfilePage() {
 
       {/* 使用统计卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon="📦" label="我的 Server" value={String(servers.length)} color="blue" />
-        <StatCard icon="📞" label="30 日调用" value={fmtNum(totalCalls)} color="green" />
-        <StatCard icon="🔤" label="30 日 Token" value={fmtNum(totalTokens)} color="purple" />
-        <StatCard icon="✅" label="成功率" value={successRate === null ? '-' : `${successRate}%`} color={successRate !== null && successRate >= 95 ? 'green' : 'yellow'} />
+        <StatCard icon="📦" label="我的 Server" description="当前账户已追踪的 Server 数量。" value={String(servers.length)} color="blue" />
+        <StatCard icon="📞" label="30 日调用" description="过去 30 天由已授权 Gateway 或遥测设备上报的工具调用总数。" value={fmtNum(totalCalls)} color="green" />
+        <StatCard icon="🔤" label="30 日 Token" description="过去 30 天按上报调用载荷估算的 Token 总数，不包含原始请求和响应内容。" value={fmtNum(totalTokens)} color="purple" />
+        <StatCard icon="✅" label="成功率" description="成功调用占已上报调用总数的比例；没有调用数据时显示为“-”。" value={successRate === null ? '-' : `${successRate}%`} color={successRate !== null && successRate >= 95 ? 'green' : 'yellow'} />
       </div>
 
       {(configError || monitorWarning || usageWarning) && (
@@ -265,9 +266,9 @@ export default function ProfilePage() {
                 <tr className="text-left text-xs text-gray-400 border-b">
                   <th className="pb-2 font-medium">Server</th>
                   <th className="pb-2 font-medium text-right">调用次数</th>
-                  <th className="pb-2 font-medium text-right">Token 消耗</th>
-                  <th className="pb-2 font-medium text-right">平均耗时</th>
-                  <th className="pb-2 font-medium text-right">成功率</th>
+                  <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="按调用载荷估算的 Token 总数，不包含原始请求和响应内容。">Token 消耗</InfoTooltip></th>
+                  <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="从本地 Gateway 发起工具调用到收到结果的平均耗时。">平均耗时</InfoTooltip></th>
+                  <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="状态为成功的调用占该 Server 已上报调用总数的比例。">成功率</InfoTooltip></th>
                 </tr>
               </thead>
               <tbody>
@@ -309,7 +310,7 @@ export default function ProfilePage() {
   )
 }
 
-function StatCard({ icon, label, value, color }: { icon: string; label: string; value: string; color: string }) {
+function StatCard({ icon, label, description, value, color }: { icon: string; label: string; description: string; value: string; color: string }) {
   const colors: Record<string, string> = {
     green: 'bg-green-50 border-green-200',
     blue: 'bg-blue-50 border-blue-200',
@@ -322,7 +323,7 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
         <span className="text-2xl">{icon}</span>
         <div>
           <p className="text-2xl font-bold text-gray-900">{value}</p>
-          <p className="text-sm text-gray-500">{label}</p>
+          <p className="text-sm text-gray-500"><InfoTooltip description={description}>{label}</InfoTooltip></p>
         </div>
       </div>
     </div>

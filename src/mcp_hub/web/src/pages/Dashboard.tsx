@@ -6,6 +6,7 @@ import {
 } from '../api/client'
 import ServerCard from '../components/ServerCard'
 import LogViewer from '../components/LogViewer'
+import InfoTooltip from '../components/InfoTooltip'
 
 export default function Dashboard() {
   const auth = getAuthState()
@@ -196,19 +197,27 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-blue-600">{trackedCount}</div>
-              <div className="text-sm text-gray-500">已追踪</div>
+              <div className="text-sm text-gray-500">
+                <InfoTooltip description="已保存到当前账户追踪列表的 Server；追踪本身不会自动采集本地调用数据。">已追踪</InfoTooltip>
+              </div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-yellow-500">{favorites.length}</div>
-              <div className="text-sm text-gray-500">已收藏</div>
+              <div className="text-sm text-gray-500">
+                <InfoTooltip description="当前账户收藏的市场条目，用于快速访问。">已收藏</InfoTooltip>
+              </div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-orange-500">{updateCount}</div>
-              <div className="text-sm text-gray-500">有更新</div>
+              <div className="text-sm text-gray-500">
+                <InfoTooltip description="Hub 检测到存在比当前记录更新的版本信息。">有更新</InfoTooltip>
+              </div>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
               <div className="text-3xl font-bold text-red-500">{riskCount}</div>
-              <div className="text-sm text-gray-500">安全风险</div>
+              <div className="text-sm text-gray-500">
+                <InfoTooltip description="当前已追踪 Server 中未通过认证或审查状态的数量，用于提示优先检查，并非绝对风险判定。">安全风险</InfoTooltip>
+              </div>
             </div>
           </div>
 
@@ -259,7 +268,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {monitorSummary && (
               <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-sm text-gray-500 mb-2">健康检查总览</p>
+                <p className="text-sm text-gray-500 mb-2">
+                  <InfoTooltip description="Hub 对已托管或可访问的 Server 执行的连通性与运行状态检查汇总。">健康检查总览</InfoTooltip>
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xl font-bold text-gray-900">{monitorSummary.total_health_checks}</p>
@@ -269,7 +280,7 @@ export default function Dashboard() {
                     <p className={`text-xl font-bold ${monitorSummary.errors_last_24h > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {monitorSummary.errors_last_24h}
                     </p>
-                    <p className="text-xs text-gray-400">24h 错误</p>
+                    <p className="text-xs text-gray-400"><InfoTooltip description="过去 24 小时内健康检查或监控记录到的错误次数。">24h 错误</InfoTooltip></p>
                   </div>
                   <div>
                     <p className="text-xl font-bold text-gray-900">{monitorSummary.running}</p>
@@ -284,7 +295,7 @@ export default function Dashboard() {
             )}
             {topReliable.length > 0 && (
               <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-sm text-gray-500 mb-2">🏆 最稳定 Server</p>
+                <p className="text-sm text-gray-500 mb-2">🏆 <InfoTooltip description="按已记录的健康检查计算出的可靠性评分排序；没有检查记录的 Server 不应被解读为不稳定。">最稳定 Server</InfoTooltip></p>
                 <div className="space-y-1.5">
                   {topReliable.slice(0, 5).map((s, i) => (
                     <Link key={s.server_id} to={`/servers/${encodeURIComponent(s.server_id)}`}

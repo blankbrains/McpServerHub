@@ -11,6 +11,7 @@ import {
   installServer,
 } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
+import InfoTooltip from '../components/InfoTooltip'
 
 interface TrackedServer {
   server_id: string
@@ -319,10 +320,20 @@ export default function MyServers() {
               )}
             </Link>
             <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-              <span title="7 日调用次数">📞 {fmtNum(s.call_count_7d || 0)}</span>
-              <span title="Token 消耗">🔤 {fmtTokens(s.token_consumption || 0)}</span>
-              {s.uptime_seconds > 0 && <span title="运行时长">⏱ {fmtUptime(s.uptime_seconds)}</span>}
-              <span title="可靠性评分">📊 {s.reliability_score || 0}%</span>
+              <InfoTooltip description="过去 7 天内已记录的工具调用次数；只有经 Gateway 或遥测上报的调用会计入。">
+                <span>📞 {fmtNum(s.call_count_7d || 0)}</span>
+              </InfoTooltip>
+              <InfoTooltip description="按已上报调用载荷估算的 Token 数量，不包含原始请求和响应内容。">
+                <span>🔤 {fmtTokens(s.token_consumption || 0)}</span>
+              </InfoTooltip>
+              {s.uptime_seconds > 0 && (
+                <InfoTooltip description="当前进程自最近一次启动以来的持续运行时间。">
+                  <span>⏱ {fmtUptime(s.uptime_seconds)}</span>
+                </InfoTooltip>
+              )}
+              <InfoTooltip description="依据已记录的健康检查计算的 0-100 分指标；没有检查记录时 0 不代表服务不可靠。">
+                <span>📊 {s.reliability_score || 0}%</span>
+              </InfoTooltip>
             </div>
           </div>
           {/* 操作按钮 */}

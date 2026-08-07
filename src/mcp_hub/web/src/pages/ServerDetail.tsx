@@ -7,6 +7,7 @@ import {
 } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 import StarRating from '../components/StarRating'
+import InfoTooltip from '../components/InfoTooltip'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', color: 'bg-green-100 text-green-800' },
@@ -312,7 +313,11 @@ export default function ServerDetail() {
 
         {/* Security + Token row */}
         <div className="flex items-center gap-3 flex-wrap mb-4">
-          <span className="text-sm text-gray-500">{securityLabels[server.security_level] || server.security_level}</span>
+          <span className="text-sm text-gray-500">
+            <InfoTooltip description="市场安全状态基于发布信息和安全扫描；它提示已知风险，但不能替代在你的运行环境中进行的审查。">
+              {securityLabels[server.security_level] || server.security_level}
+            </InfoTooltip>
+          </span>
           {security && (
             <SecurityBadge level={security.level} />
           )}
@@ -327,7 +332,7 @@ export default function ServerDetail() {
           )}
           {security && (
             <span className={`text-xs font-medium ${security.score >= 90 ? 'text-green-600' : security.score >= 70 ? 'text-yellow-600' : security.score >= 50 ? 'text-orange-600' : 'text-red-600'}`}>
-              🛡️ 安全评分 {security.score}/100
+              🛡️ <InfoTooltip description="安全扫描根据命令、依赖来源、发布者和代码模式等信号计算的 0-100 分风险提示，不是绝对安全保证。">安全评分</InfoTooltip> {security.score}/100
             </span>
           )}
         </div>
@@ -492,13 +497,13 @@ export default function ServerDetail() {
           <div className="grid grid-cols-3 gap-4 mb-3">
             <div>
               <p className="text-2xl font-bold text-gray-900">{formatTokens(tokenAnalysis.total_tokens)}</p>
-              <p className="text-xs text-gray-500">工具定义总计</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description="将此 Server 的工具名称、描述和输入参数定义编码后估算的 Token 数量。">工具定义总计</InfoTooltip></p>
             </div>
             <div>
               <p className={`text-2xl font-bold ${(tokenAnalysis.context_pct ?? 0) > 16 ? 'text-red-600' : (tokenAnalysis.context_pct ?? 0) > 10 ? 'text-yellow-600' : 'text-green-600'}`}>
                 {(tokenAnalysis.context_pct ?? 0).toFixed(1)}%
               </p>
-              <p className="text-xs text-gray-500">上下文占比</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description="工具定义估算 Token 占 128K 上下文窗口的比例，用于判断工具描述是否过于冗长。">上下文占比</InfoTooltip></p>
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{tokenAnalysis.tool_count}</p>
@@ -530,17 +535,17 @@ export default function ServerDetail() {
               <p className={`text-2xl font-bold ${reliability.reliability_score >= 90 ? 'text-green-600' : reliability.reliability_score >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
                 {reliability.reliability_score}
               </p>
-              <p className="text-xs text-gray-500">可靠性评分</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description="依据已记录的健康检查计算的 0-100 分指标；没有检查记录时不应将低分解释为不可靠。">可靠性评分</InfoTooltip></p>
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{reliability.total_checks}</p>
-              <p className="text-xs text-gray-500">健康检查次数</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description="Hub 对该 Server 执行并记录的健康检查次数。">健康检查次数</InfoTooltip></p>
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
                 {(() => { const u = (reliability.uptime_stats as any[])?.find((u: any) => u.window === '24h'); return u ? (u.uptime_pct != null ? u.uptime_pct.toFixed(1) : '-') : '-'; })()}%
               </p>
-              <p className="text-xs text-gray-500">24h Uptime</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description="过去 24 小时健康检查中成功的比例；没有检查记录时显示“-”。">24h Uptime</InfoTooltip></p>
             </div>
           </div>
           {reliability.uptime_stats && reliability.uptime_stats.length > 0 && (
