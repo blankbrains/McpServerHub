@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import psutil
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
@@ -157,17 +158,15 @@ async def trigger_health_check(server_id: str):
         }
 
     # L1 检查
-    import os
-    try:
-        os.kill(proc.pid, 0)
+    if psutil.pid_exists(proc.pid):
         await Monitor.record_check(server_id, "L1_process", "ok", message="进程存活")
         return {
             "success": True,
             "data": {"server_id": server_id, "status": "ok", "level": "L1"},
         }
-    except (OSError, ProcessLookupError):
-        await Monitor.record_check(server_id, "L1_process", "error", message="进程不存在")
-        return {
-            "success": True,
-            "data": {"server_id": server_id, "status": "error", "message": "进程不存在"},
-        }
+
+    await Monitor.record_check(server_id, "L1_process", "error", message="进程不存在")
+    return {
+        "success": True,
+        "data": {"server_id": server_id, "status": "error", "message": "进程不存在"},
+    }

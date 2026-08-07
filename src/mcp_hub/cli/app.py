@@ -15,6 +15,7 @@ def cli():
 
 # Import and register all subcommands
 from mcp_hub.cli.auth import login, logout, whoami  # noqa: E402
+from mcp_hub.cli.agent import agent  # noqa: E402
 from mcp_hub.cli.community import favorite, favorites, rate, review  # noqa: E402
 from mcp_hub.cli.config import config  # noqa: E402
 from mcp_hub.cli.create import create  # noqa: E402
@@ -81,6 +82,7 @@ cli.add_command(event)
 cli.add_command(login)
 cli.add_command(logout)
 cli.add_command(whoami)
+cli.add_command(agent)
 
 
 if __name__ == "__main__":

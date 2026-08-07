@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getServer, installServer, startServer, stopServer, rateServer, favoriteServer,
-  apiGet, apiPost, ServerInfo, SecurityScanResult, TokenAnalysisResult,
+  apiDelete, apiGet, apiPost, getAuthState, getFavoriteServers, ServerInfo, SecurityScanResult, TokenAnalysisResult,
   scanServerSecurity, analyzeServerTokens, getServerReliability,
 } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
@@ -11,8 +11,10 @@ import StarRating from '../components/StarRating'
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', color: 'bg-green-100 text-green-800' },
   { id: 'cursor', name: 'Cursor', color: 'bg-purple-100 text-purple-800' },
+  { id: 'vscode-copilot', name: 'VS Code Copilot', color: 'bg-sky-100 text-sky-800' },
   { id: 'codex', name: 'Codex', color: 'bg-blue-100 text-blue-800' },
   { id: 'trae', name: 'Trae', color: 'bg-orange-100 text-orange-800' },
+  { id: 'windsurf', name: 'Windsurf', color: 'bg-cyan-100 text-cyan-800' },
   { id: 'generic', name: '通用 mcp.json', color: 'bg-gray-100 text-gray-800' },
 ]
 
@@ -60,22 +62,34 @@ export default function ServerDetail() {
   const [reviewRating, setReviewRating] = useState(5)
   const [submittingReview, setSubmittingReview] = useState(false)
   const [replyTo, setReplyTo] = useState<any>(null)
-  const currentUser = localStorage.getItem('mcp_hub_user') || 'anonymous'
+  const { token, userId } = getAuthState()
+  const currentUser = userId || ''
 
-  // 检查此 Server 是否已被用户追踪（上传配置/市场添加）
+  // 追踪状态来自当前账户的服务端记录，不使用浏览器缓存作为账户数据。
   const [isTracked, setIsTracked] = useState(false)
   useEffect(() => {
     if (!id) return
     const sid = decodeURIComponent(id)
-    try {
-      const myServers = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-      const found = myServers.some((x: any) => x.name === sid || x.hub_id === sid)
-      setIsTracked(found)
-      // 检查是否已收藏
-      const favs = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
-      setIsFavorited(favs.includes(sid))
-    } catch { setIsTracked(false) }
-  }, [id])
+    if (token) {
+      apiGet<any[]>('/config/user-servers')
+        .then(result => {
+          const found = (result.data || []).some((server: any) => (
+            server.name === sid || server.hub_id === sid
+          ))
+          setIsTracked(found)
+        })
+        .catch(() => setIsTracked(false))
+    } else {
+      setIsTracked(false)
+    }
+    if (token) {
+      getFavoriteServers()
+        .then(result => setIsFavorited((result.data || []).some(server => server.id === sid)))
+        .catch(() => setIsFavorited(false))
+    } else {
+      setIsFavorited(false)
+    }
+  }, [id, token])
 
   useEffect(() => {
     if (!id) return
@@ -129,21 +143,13 @@ export default function ServerDetail() {
     if (!id) return
     const sid = decodeURIComponent(id)
     try {
-      const r = await apiGet<any>(`/config/generate?server=${encodeURIComponent(sid)}&agent=${encodeURIComponent(agent)}`)
-      setGeneratedConfig((r as any).data?.config || JSON.stringify((r as any).data, null, 2))
+      const r = await apiGet<any>(
+        `/servers/${encodeURIComponent(sid)}/config?agent=${encodeURIComponent(agent)}`
+      )
+      setGeneratedConfig(JSON.stringify(r.data?.config_content || {}, null, 2))
     } catch {
-      // 如果 API 不存在，生成简单配置
-      const cmd = (server as any)?.install_command || ''
-      const parts = cmd.split(' ')
-      const config = {
-        mcpServers: {
-          [(server?.id || 'server').split('/').pop() || 'server']: {
-            command: parts[0] || 'npx',
-            args: parts.slice(1),
-          },
-        },
-      }
-      setGeneratedConfig(JSON.stringify(config, null, 2))
+      setGeneratedConfig('')
+      setMessage('生成配置失败，请稍后重试')
     }
   }
 
@@ -161,12 +167,7 @@ export default function ServerDetail() {
       }
       setMessage(`✅ 已添加到配置！本地运行: ${r.data?.install_command || r.message || ''}`)
       setServer({ ...server, status: 'stopped' } as ServerInfo)
-      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-      if (!existing.find((x: any) => x.name === server.id)) {
-        existing.push({ name: server.id, command: (server as any).install_command || '', matched: true, hub_id: server.id })
-        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(existing))
-      }
-      setIsTracked(true)  // 安装后标记为已追踪
+      setIsTracked(true)
       if (r.data?.configs) {
         const agentCfg = r.data.configs.find((c: any) =>
           c.agent === AGENTS.find(a => a.id === selectedAgent)?.name
@@ -201,21 +202,15 @@ export default function ServerDetail() {
     }
   }
 
-  const handleUninstall = async () => {
-    if (!window.confirm('确定要卸载吗？')) return
+  const handleUntrack = async () => {
+    if (!window.confirm('确定要停止追踪此 Server 吗？这不会卸载你本地已经安装的依赖。')) return
     try {
-      const r = await apiPost<any>(`/servers/${encodeURIComponent(server.id)}/uninstall`)
-      setMessage(r.message || '已卸载')
-      if (r.success) {
-        setServer({ ...server, status: 'not_installed' })
-        setIsTracked(false)
-        setShowConfig(false)
-        // 同步清理 localStorage
-        const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-        const filtered = existing.filter((x: any) => x.name !== server.id && x.hub_id !== server.id)
-        localStorage.setItem('mcp_hub_my_servers', JSON.stringify(filtered))
-      }
-    } catch { setMessage('卸载失败') }
+      await apiDelete(`/config/user-servers/${encodeURIComponent(server.id)}`)
+      setIsTracked(false)
+      setMessage('已停止追踪此 Server')
+    } catch {
+      setMessage('停止追踪失败，请稍后重试')
+    }
   }
 
   const handleRate = async (rating: number) => {
@@ -237,11 +232,6 @@ export default function ServerDetail() {
       const r = await favoriteServer(server.id)
       const favd = r.favorited
       setIsFavorited(favd)
-      // 同步 localStorage
-      const favs = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
-      if (favd) { if (!favs.includes(server.id)) favs.push(server.id) }
-      else { const idx = favs.indexOf(server.id); if (idx >= 0) favs.splice(idx, 1) }
-      localStorage.setItem('mcp_hub_favorites', JSON.stringify(favs))
       setMessage(favd ? '⭐ 已收藏' : '已取消收藏')
     } catch (e: any) {
       setMessage(`收藏操作失败: ${e.message || '未知错误'}`)
@@ -347,28 +337,28 @@ export default function ServerDetail() {
           {server.status === 'not_installed' && !isTracked && (
             <button onClick={handleInstall} disabled={installing}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-              {installing ? '⏳ 安装中...' : '📥 一键安装'}
+              {installing ? '⏳ 添加中...' : '📥 添加到我的配置'}
             </button>
           )}
           {server.status === 'not_installed' && isTracked && (
             <button onClick={handleInstall} disabled={installing}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-              {installing ? '⏳ 安装中...' : '📥 安装到本地'}
+              {installing ? '⏳ 添加中...' : '📥 重新添加到我的配置'}
             </button>
           )}
-          {server.status === 'stopped' && (
+          {isTracked && server.status === 'stopped' && (
             <button onClick={handleStart} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
-              ▶️ 启动
+              ▶️ 启动 Hub 主机实例
             </button>
           )}
-          {server.status === 'running' && (
+          {isTracked && server.status === 'running' && (
             <button onClick={handleStop} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
-              ⏹ 停止
+              ⏹ 停止 Hub 主机实例
             </button>
           )}
-          {(server.status === 'stopped' || server.status === 'running') && (
-            <button onClick={handleUninstall} className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-              🗑 卸载
+          {isTracked && (
+            <button onClick={handleUntrack} className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+              停止追踪
             </button>
           )}
           <button onClick={handleFavorite} className={`px-4 py-2 border rounded-lg transition-colors ${isFavorited ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'border-gray-300 hover:bg-gray-50'}`}>
@@ -419,17 +409,17 @@ export default function ServerDetail() {
           {/* Agent 选择器 + 配置预览 */}
           <div className="text-sm text-gray-500 mb-2">选择你的 Agent 查看配置:</div>
           <div className="flex gap-2 mb-3 flex-wrap">
-            {['Claude Code', 'Cursor', 'VS Code Copilot', 'Codex', 'Trae', 'Windsurf'].map(agent => (
+            {AGENTS.filter(agent => agent.id !== 'generic').map(agent => (
               <button
-                key={agent}
-                onClick={() => { setSelectedAgent(agent); fetchInstallConfig(agent) }}
+                key={agent.id}
+                onClick={() => { setSelectedAgent(agent.id); fetchInstallConfig(agent.id) }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedAgent === agent
+                  selectedAgent === agent.id
                     ? 'bg-blue-600 text-white'
                     : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:border-blue-400'
                 }`}
               >
-                {agent}
+                {agent.name}
               </button>
             ))}
           </div>

@@ -27,7 +27,7 @@ RUN groupadd -r mcp-hub && useradd -r -g mcp-hub -d /app -s /sbin/nologin mcp-hu
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /app/src /app/src
-COPY --from=web-builder /app/static /app/src/mcp_hub/web/static
+COPY --from=web-builder /app/static /usr/local/lib/python3.12/site-packages/mcp_hub/web/static
 
 # 切换到非 root 用户
 RUN chown -R mcp-hub:mcp-hub /app
@@ -37,4 +37,4 @@ EXPOSE 3987
 ENV MCP_HUB_HOST=0.0.0.0
 ENV MCP_HUB_PORT=3987
 
-CMD ["python3", "-m", "uvicorn", "mcp_hub.api.app:create_app", "--host", "0.0.0.0", "--port", "3987"]
+CMD ["python3", "-m", "uvicorn", "mcp_hub.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "3987"]

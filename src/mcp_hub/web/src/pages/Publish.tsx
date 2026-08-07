@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { ApiRequestError, apiGet, apiPost, getAuthState } from '../api/client'
 
 interface PublishForm {
   name: string
@@ -59,7 +60,8 @@ export default function Publish() {
   const [message, setMessage] = useState('')
   const [published, setPublished] = useState<PublishedServer[]>([])
   const [publishedLoading, setPublishedLoading] = useState(true)
-  const userId = localStorage.getItem('mcp_hub_user') || ''
+  const [publishedError, setPublishedError] = useState('')
+  const { userId, token } = getAuthState()
 
   const saveForm = (data: PublishForm) => {
     try { sessionStorage.setItem('mcp_hub_publish_form', JSON.stringify(data)) } catch {}
@@ -67,15 +69,27 @@ export default function Publish() {
 
   // 加载已发布的 Server
   const loadPublished = async () => {
-    if (!userId) { setPublishedLoading(false); return }
+    if (!token || !userId) {
+      setPublished([])
+      setPublishedError('')
+      setPublishedLoading(false)
+      return
+    }
+    setPublishedLoading(true)
+    setPublishedError('')
     try {
-      const res = await fetch('/api/v1/publish/mine', {
-        headers: { 'x-user-id': userId },
-      })
-      const r = await res.json()
-      if (r.data) setPublished(r.data)
-    } catch {}
-    finally { setPublishedLoading(false) }
+      const result = await apiGet<PublishedServer[]>('/publish/mine')
+      setPublished(result.data || [])
+    } catch (error) {
+      setPublished([])
+      setPublishedError(
+        error instanceof ApiRequestError && error.status === 401
+          ? '登录状态已失效，请重新登录'
+          : '已发布列表加载失败，请稍后重试'
+      )
+    } finally {
+      setPublishedLoading(false)
+    }
   }
 
   useEffect(() => { loadPublished() }, [])
@@ -87,6 +101,11 @@ export default function Publish() {
   }
 
   const handleSubmit = async () => {
+    if (!token || !userId) {
+      setStatus('error')
+      setMessage('请先登录后再发布 Server')
+      return
+    }
     if (!form.name.trim()) { setStatus('error'); setMessage('请输入 Server 名称'); return }
     if (!form.installCommand.trim()) { setStatus('error'); setMessage('请输入安装命令'); return }
 
@@ -101,44 +120,39 @@ export default function Publish() {
         homepage: form.homepage.trim(),
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
       }
-      const res = await fetch('/api/v1/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': userId || 'anonymous' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
+      const data: any = await apiPost('/publish', body)
       if (data.success) {
         setStatus('success')
-        setMessage(`✅ Server "${form.name}" 发布成功！`)
+        const score = data.security?.score
+        setMessage(`Server "${form.name}" 发布成功${typeof score === 'number' ? `，安全评分 ${score}/100` : ''}`)
         const empty = { name: '', description: '', category: 'tools', installType: 'npx', installCommand: '', homepage: '', tags: '' }
         setForm(empty); saveForm(empty)
-        loadPublished() // 刷新已发布列表
+        await loadPublished()
       } else {
         setStatus('error')
-        setMessage(data.error?.message || data.message || '发布失败')
+        setMessage(typeof data.error === 'string' ? data.error : data.error?.message || data.message || '发布失败')
       }
-    } catch {
+    } catch (error) {
       setStatus('error')
-      setMessage('网络错误，请稍后重试')
+      setMessage(error instanceof ApiRequestError && error.status === 401 ? '登录状态已失效，请重新登录' : '网络错误，请稍后重试')
     }
   }
 
   const handleUnpublish = async (serverId: string) => {
     if (!window.confirm(`确定要下架 "${serverId}" 吗？`)) return
     try {
-      const res = await fetch(`/api/v1/publish/unpublish/${encodeURIComponent(serverId)}`, {
-        method: 'POST',
-        headers: { 'x-user-id': userId },
-      })
-      const r = await res.json()
+      const r: any = await apiPost(`/publish/unpublish/${encodeURIComponent(serverId)}`)
       if (r.success) {
         setPublished(prev => prev.filter(s => s.id !== serverId))
-        setMessage(`✅ ${serverId} 已下架`)
+        setStatus('success')
+        setMessage(`${serverId} 已下架`)
       } else {
-        setMessage('❌ ' + (r.error || '下架失败'))
+        setStatus('error')
+        setMessage(typeof r.error === 'string' ? r.error : '下架失败')
       }
-    } catch {
-      setMessage('❌ 网络错误')
+    } catch (error) {
+      setStatus('error')
+      setMessage(error instanceof ApiRequestError && error.status === 401 ? '登录状态已失效，请重新登录' : '下架失败，请稍后重试')
     }
     setTimeout(() => setMessage(''), 3000)
   }
@@ -147,13 +161,13 @@ export default function Publish() {
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-8">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">发布 MCP Server</h1>
       <p className="text-sm text-gray-500 mb-8">
-        将你的 MCP Server 提交到 Hub 市场，让更多开发者发现和使用
+        将你的 MCP Server 提交到 Hub 市场。提交时会自动执行安全扫描，安全评分低于 50 的安装命令会被拒绝。
       </p>
 
       {status === 'success' && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm space-y-1">
           <p>{message}</p>
-          <Link to="/my-config" className="inline-block text-sm text-green-600 underline hover:text-green-800">去「我的配置」查看</Link>
+          <a href="#my-published" className="inline-block text-sm text-green-600 underline hover:text-green-800">查看我发布的 Server</a>
         </div>
       )}
       {status === 'error' && (
@@ -216,19 +230,30 @@ export default function Publish() {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
+        {!token || !userId ? (
+          <Link to="/login" className="block w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium text-center">
+            登录后发布 Server
+          </Link>
+        ) : (
         <button onClick={handleSubmit} disabled={status === 'submitting'}
           className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium disabled:opacity-50">
           {status === 'submitting' ? '提交中...' : '发布 Server'}
         </button>
+        )}
       </div>
 
       {/* 已发布列表 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div id="my-published" className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-4">📦 我发布的 Server</h2>
         {!userId ? (
           <p className="text-sm text-gray-400">请先 <Link to="/login" className="text-blue-600 underline">登录</Link> 后查看已发布的 Server</p>
         ) : publishedLoading ? (
           <p className="text-sm text-gray-400">加载中...</p>
+        ) : publishedError ? (
+          <div className="text-sm text-red-600">
+            <p>{publishedError}</p>
+            <button onClick={loadPublished} className="mt-2 text-blue-600 hover:text-blue-800 underline">重试</button>
+          </div>
         ) : published.length === 0 ? (
           <div className="text-center py-6 text-gray-400 text-sm">
             <p>还没有发布过 Server</p>

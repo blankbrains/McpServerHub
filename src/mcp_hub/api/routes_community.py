@@ -57,3 +57,12 @@ async def favorite_server(req: FavoriteRequest, user_id: str = Depends(get_curre
         repo = UserRepository(session)
         is_fav = await repo.favorite(user_id, req.server_id)
     return {"success": True, "favorited": is_fav}
+
+
+@router.get("/community/favorites")
+async def list_favorite_servers(user_id: str = Depends(get_current_user)):
+    """获取当前用户收藏的 Server。"""
+    async with get_session() as session:
+        repo = UserRepository(session)
+        servers = await repo.get_favorites(user_id)
+    return {"success": True, "data": servers}

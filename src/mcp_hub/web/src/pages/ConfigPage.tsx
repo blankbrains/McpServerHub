@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { uploadConfig, downloadConfig } from '../api/client'
+import { getAuthHeaders, getAuthState, uploadConfig, downloadConfig } from '../api/client'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', path: '~/.config/Claude/claude_desktop_config.json', icon: '🤖' },
   { id: 'cursor', name: 'Cursor', path: '~/.cursor/mcp.json', icon: '📝' },
+  { id: 'vscode-copilot', name: 'VS Code Copilot', path: '~/.copilot/mcp-config.json', icon: '💻' },
   { id: 'codex', name: 'Codex', path: '~/.codex/mcp.json', icon: '🔧' },
   { id: 'trae', name: 'Trae', path: '~/.trae/mcp.json', icon: '🚀' },
+  { id: 'windsurf', name: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json', icon: '🌊' },
   { id: 'generic', name: '通用 mcp.json', path: '~/.config/mcp-hub/mcp.json', icon: '📄' },
 ]
 
@@ -49,15 +51,18 @@ export default function ConfigPage() {
   // Step 2: 确认上传到服务器（匹配市场）
   const handleConfirmUpload = async () => {
     if (!pendingFile) return
+    if (!getAuthState().token) {
+      setMessage('❌ 请先登录后检查配置')
+      return
+    }
     setUploading(true)
     setMessage('')
     try {
       const r = await uploadConfig(pendingFile, selectedAgent)
       setUploadResult(r)
       setPreviewData(null)
-      setPendingFile(null)
       if (r.success) {
-        setMessage(`✅ 上传成功！检测到 ${r.data?.server_count || 0} 个 Server，请选择是否上传到 Hub 进行监控`)
+        setMessage(`✅ 检查完成！检测到 ${r.data?.server_count || 0} 个 Server，请确认是否追踪`)
         setTrackingDecision('idle')
       }
     } catch (err: any) {
@@ -71,14 +76,20 @@ export default function ConfigPage() {
     setMessage('')
   }
 
-  // Step 3: 用户决定是否上传到 Hub
-  // 注意：upload_config 已经在后端将全部 Server（含 matched + unmatched）写入 user_servers
-  // 这里只是确认决策状态，不需要再重写
+  // Step 3: Only this confirmation request creates tracked Server records.
   const handleUploadToHub = async () => {
+    if (!pendingFile) {
+      setMessage('❌ 找不到待确认的配置文件，请重新检查')
+      return
+    }
     try {
+      const result = await uploadConfig(pendingFile, selectedAgent, true)
+      if (!result.success) throw new Error(result.message || '追踪配置失败')
+      setUploadResult(result)
+      setPendingFile(null)
       setTrackingDecision('uploaded')
-      localStorage.setItem('mcp_hub_upload_result', JSON.stringify(uploadResult))
-      setMessage('✅ 已上传到 Hub！你的 MCP Server 将受到持续监控')
+      localStorage.setItem('mcp_hub_upload_result', JSON.stringify(result))
+      setMessage('✅ 已保存到我的 Server。配置状态和服务端监控数据现可在监控页查看。')
     } catch {
       setMessage('❌ 操作失败')
     }
@@ -86,32 +97,40 @@ export default function ConfigPage() {
   }
 
   const handleCancelTracking = async () => {
+    if (trackingDecision !== 'uploaded') {
+      setTrackingDecision('cancelled')
+      setPendingFile(null)
+      setMessage('已取消，配置检查结果不会写入 Hub')
+      return
+    }
     // 从服务端清除所有已上传的 server 记录
-    const userId = localStorage.getItem('mcp_hub_user') || 'anonymous'
     const allSids = [
       ...(uploadResult?.data?.matched?.map((m: any) => m.hub_id || m.local_name) || []),
-      ...(uploadResult?.data?.unmatched?.map((u: any) => u.local_name) || []),
+      ...(uploadResult?.data?.unmatched?.map((u: any) => u.registered_id || u.local_name) || []),
     ]
     for (const sid of allSids) {
       try {
         await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
           method: 'DELETE',
-          headers: { 'x-user-id': userId },
+          headers: getAuthHeaders(),
         })
       } catch {}
     }
     setTrackingDecision('cancelled')
     localStorage.removeItem('mcp_hub_upload_result')
-    setMessage('已取消上传，Hub 不会追踪你的 MCP 配置')
+    setMessage('已取消追踪，Hub 不再保留这批 Server 的个人追踪记录')
     setTimeout(() => setMessage(''), 4000)
   }
 
   const handleDownload = async () => {
+    if (!getAuthState().token) {
+      setMessage('❌ 请先登录后下载自己的配置')
+      return
+    }
     setDownloading(true)
     try {
-      const userId = localStorage.getItem('mcp_hub_user') || 'anonymous'
       const res = await fetch(`/api/v1/config/download?agent=${selectedAgent}`, {
-        headers: { 'x-user-id': userId },
+        headers: getAuthHeaders(),
       })
       if (!res.ok) throw new Error(`下载失败: ${res.status}`)
       const blob = await res.blob()
@@ -131,11 +150,11 @@ export default function ConfigPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">⚙️ 配置中心</h1>
-      <p className="text-gray-500 text-sm">上传你的 MCP 配置文件 → 检查匹配 → 决定是否上传到 Hub → 选择 Agent → 启用监控</p>
+      <p className="text-gray-500 text-sm">选择配置文件 → 检查市场匹配 → 确认追踪 → 下载 Agent 配置 → 按需配置本地遥测</p>
 
       {/* ── 步骤 1：上传配置 ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">📤 步骤 1：上传你的 MCP 配置</h2>
+        <h2 className="font-semibold text-gray-900 mb-1">📤 步骤 1：检查你的 MCP 配置</h2>
         <p className="text-sm text-gray-500 mb-4">
           上传你本地的 <code className="px-1 bg-gray-100 rounded text-xs">claude_desktop_config.json</code> 或 <code className="px-1 bg-gray-100 rounded text-xs">mcp.json</code>
         </p>
@@ -166,7 +185,7 @@ export default function ConfigPage() {
               ))}
             </div>
             <p className="text-xs text-blue-600 mb-3">
-              系统将检查这些 Server 是否在 Hub 市场中，并展示匹配结果
+              系统会检查这些 Server 是否在 Hub 市场中；检查本身不会保存追踪记录或修改 Server 状态
             </p>
             <div className="flex gap-2">
               <button onClick={handleConfirmUpload} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
@@ -202,7 +221,7 @@ export default function ConfigPage() {
             )}
             {uploadResult.data?.unmatched?.length > 0 && (
               <div className="mt-2 text-xs space-y-0.5">
-                <p className="font-medium text-yellow-700">⚠️ <strong>{uploadResult.data.unmatched.length}</strong> 个已注册为自定义：</p>
+                <p className="font-medium text-yellow-700">⚠️ <strong>{uploadResult.data.unmatched.length}</strong> 个待作为自定义 Server 处理：</p>
                 {uploadResult.data.unmatched.slice(0, 5).map((m: any) => (
                   <p key={m.local_name} className="ml-2">• {m.local_name}</p>
                 ))}
@@ -212,45 +231,45 @@ export default function ConfigPage() {
         )}
       </div>
 
-      {/* ── 步骤 2：决定是否上传到 Hub ── */}
+      {/* ── 步骤 2：确认追踪 ── */}
       {uploadResult && uploadResult.success !== false && (
         <div className={`rounded-xl border-2 p-6 ${
           trackingDecision === 'uploaded' ? 'bg-green-50 border-green-300' :
           trackingDecision === 'cancelled' ? 'bg-gray-50 border-gray-300' :
           'bg-amber-50 border-amber-300'
         }`}>
-          <h2 className="font-semibold text-gray-900 mb-2">⚡ 步骤 2：是否上传到 Hub 进行监控？</h2>
+          <h2 className="font-semibold text-gray-900 mb-2">⚡ 步骤 2：是否保存到我的 Server？</h2>
 
           {trackingDecision === 'uploaded' ? (
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-full text-sm font-medium">✅ 已上传到 Hub</span>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-full text-sm font-medium">✅ 已开始追踪</span>
               <p className="text-sm text-green-700">
-                你的 MCP Server 配置已上传到 Hub。当你的 Agent 通过 Hub 网关调用 MCP 时，调用数据将自动记录到监控大屏。
+                这些 Server 已保存到你的个人追踪列表。服务端状态、健康检查和已上报的调用统计可在监控页查看。
               </p>
               <button onClick={handleCancelTracking}
                 className="px-4 py-1.5 bg-white text-red-600 border border-red-300 rounded-lg text-xs font-medium hover:bg-red-50">
-                撤销上传
+                取消追踪
               </button>
             </div>
           ) : trackingDecision === 'cancelled' ? (
             <div className="space-y-2">
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-400 text-white rounded-full text-sm font-medium">已取消上传</span>
-              <p className="text-sm text-gray-500">Hub 不会追踪你的 MCP 配置和调用数据。你可以随时重新上传。</p>
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-400 text-white rounded-full text-sm font-medium">未开始追踪</span>
+              <p className="text-sm text-gray-500">本次检查结果没有保存。你可以重新选择同一文件进行检查。</p>
               <button onClick={handleUploadToHub}
                 className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
-                ✅ 重新上传到 Hub
+                ✅ 重新开始追踪
               </button>
             </div>
           ) : (
             <div className="space-y-2">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-full text-sm font-medium">⚠️ 待确认</span>
               <p className="text-sm text-amber-700">
-                匹配完成。请选择是否将你的 Server 配置上传到 Hub。上传后，Hub 将记录你的 Server 信息并持续监控调用数据。
+                匹配完成。确认后会保存你的 Server 列表；本地调用数据需要通过已授权的遥测设备或网关主动上报。
               </p>
               <div className="flex gap-3 mt-3">
                 <button onClick={handleUploadToHub}
                   className="px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-                  ✅ 上传到 Hub
+                  ✅ 确认追踪
                 </button>
                 <button onClick={handleCancelTracking}
                   className="px-6 py-2.5 bg-white text-gray-600 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
@@ -266,7 +285,7 @@ export default function ConfigPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">🎯 步骤 3：选择你的 AI Agent 工具</h2>
         <p className="text-sm text-gray-500 mb-4">
-          选择你正在使用的 AI Agent 工具。Hub 会根据你选择的 Agent 生成对应的配置文件格式，确保 MCP 调用能被正确路由和监控。
+          选择你正在使用的 AI Agent 工具。下载的配置只包含你个人追踪的 Server，并使用该 Agent 对应的配置根键与命令参数格式。
         </p>
         <div className="flex gap-2 mb-4 flex-wrap">
           {AGENTS.map(a => (
@@ -296,10 +315,9 @@ export default function ConfigPage() {
 
       {/* ── 步骤 4：启用监控 ── */}
       <div className="bg-white rounded-xl border border-green-200 bg-green-50 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：启用调用监控</h2>
+        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：配置本地遥测（可选）</h2>
         <p className="text-sm text-gray-600 mb-4">
-          要将 Agent 中的 MCP 调用数据上报到 Hub，需要在你的本地 Agent 配置文件中添加 Hub 网关。
-          网关会透明代理所有 MCP 调用，并自动将调用次数、响应时长等数据记录到 Hub 监控大屏。
+          追踪 Server 不会自动产生本地调用数据。需要在监控页创建本地 Agent 设备，再将设备密钥配置到本地 Gateway 后，调用、延迟和 Token 统计才会上报。
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
@@ -310,7 +328,7 @@ export default function ConfigPage() {
           </pre>
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          添加后，所有 MCP 工具调用都会经过 Hub 网关，数据自动记录到监控大屏
+          请在监控页创建设备后使用“复制 Gateway 配置”；其中会包含设备遥测令牌。
         </p>
         <div className="flex gap-2">
           <button onClick={() => { navigator.clipboard.writeText('"mcp-hub-gateway": {\n  "command": "mcp",\n  "args": ["serve"]\n}'); setMessage('✅ 已复制到剪贴板') }}
@@ -336,7 +354,7 @@ export default function ConfigPage() {
             try {
               const r = await fetch('/api/v1/config/backup', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-user-id': localStorage.getItem('mcp_hub_user') || 'anonymous' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ label: '' }),
               }).then(r => r.json())
               setMessage(r.success ? '✅ 配置已备份' : `❌ ${r.message}`)
@@ -348,7 +366,7 @@ export default function ConfigPage() {
           <button onClick={async () => {
             try {
               const r = await fetch('/api/v1/config/diff', {
-                headers: { 'x-user-id': localStorage.getItem('mcp_hub_user') || 'anonymous' },
+                headers: getAuthHeaders(),
               }).then(r => r.json())
               if (r.data) {
                 const d = r.data

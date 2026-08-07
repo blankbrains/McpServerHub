@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getAuthState } from '../../api/client'
+import { apiGet } from '../../api/client'
 
 function fmtNum(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
@@ -11,18 +11,29 @@ function fmtNum(n: number): string {
 export default function AdminOverview() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const uid = getAuthState().userId || 'anonymous'
-
+  const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
-    fetch('/api/v1/admin/overview', { headers: { 'x-user-id': uid } })
-      .then(r => r.json()).then(r => { if (r.data) setData(r.data) })
-      .catch(() => {}).finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    setError('')
+    apiGet<any>('/admin/overview')
+      .then(result => setData(result.data || null))
+      .catch(() => {
+        setData(null)
+        setError('平台概览加载失败，请检查管理员权限后重试')
+      })
+      .finally(() => setLoading(false))
+  }, [reloadKey])
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
-  if (!data) return <div className="text-center py-16 text-gray-400">无法加载数据</div>
+  if (error || !data) return (
+    <div className="text-center py-16 text-red-600">
+      <p>{error || '无法加载平台概览'}</p>
+      <button onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
+    </div>
+  )
 
-  const { stats, daily_trend, top_servers, top_users } = data
+  const { stats = {}, daily_trend = [], top_servers = [], top_users = [] } = data
   const maxCalls = Math.max(...daily_trend.map((d: any) => d.calls), 1)
 
   return (

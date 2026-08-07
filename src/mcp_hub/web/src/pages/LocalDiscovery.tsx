@@ -62,7 +62,7 @@ export default function LocalDiscovery() {
     return (
       <div className="text-center py-16 text-red-500 space-y-3">
         <p>{error}</p>
-        <p className="text-xs text-gray-400">本功能需要 Hub 在本地运行才能扫描 Agent 配置文件</p>
+        <p className="text-xs text-gray-400">本功能扫描 Hub 所在主机的 Agent 配置文件；远程访问时不会读取浏览器所在电脑的文件。</p>
       </div>
     )
   }
@@ -72,7 +72,7 @@ export default function LocalDiscovery() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">🔍 本地 Agent 发现</h1>
         <p className="text-sm text-gray-500">
-          发现 {discover?.total_agents_found || 0}/{discover?.total_agents_known || 0} 个 Agent ·
+          已在 Hub 主机发现 {discover?.total_agents_found || 0}/{discover?.total_agents_known || 0} 个 Agent ·
           {discover?.total_unique_servers || 0} 个 MCP Server
         </p>
       </div>

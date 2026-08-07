@@ -1,36 +1,53 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getAuthState } from '../../api/client'
+import { apiGet, apiPatch } from '../../api/client'
 
 export default function AdminUserDetail() {
   const { userId } = useParams<{ userId: string }>()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
-  const uid = getAuthState().userId || 'anonymous'
+  const [error, setError] = useState('')
+  const [savingRole, setSavingRole] = useState(false)
+
+  const load = async () => {
+    if (!userId) return
+    setLoading(true)
+    setError('')
+    try {
+      const result = await apiGet<any>(`/admin/users/${encodeURIComponent(userId)}`)
+      setData(result.data || null)
+    } catch {
+      setData(null)
+      setError('用户详情加载失败，请检查管理员权限后重试')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    if (!userId) return
-    fetch(`/api/v1/admin/users/${encodeURIComponent(userId)}`, { headers: { 'x-user-id': uid } })
-      .then(r => r.json()).then(r => { if (r.data) setData(r.data) })
-      .catch(() => {}).finally(() => setLoading(false))
+    load()
   }, [userId])
 
   const changeRole = async (newRole: string) => {
     if (!window.confirm(`确定将角色修改为 ${newRole}？`)) return
+    setSavingRole(true)
     try {
-      const r = await fetch(`/api/v1/admin/users/${encodeURIComponent(userId!)}/role`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-        body: JSON.stringify({ role: newRole }),
-      }).then(r => r.json())
+      const r: any = await apiPatch(`/admin/users/${encodeURIComponent(userId!)}/role`, { role: newRole })
       setMsg(r.success ? `✅ ${r.message}` : `❌ ${r.error || r.message}`)
       if (r.success && data) setData({ ...data, profile: { ...data.profile, role: newRole } })
     } catch { setMsg('❌ 操作失败') }
+    finally { setSavingRole(false) }
     setTimeout(() => setMsg(''), 3000)
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
-  if (!data) return <div className="text-center py-16 text-gray-400">用户不存在</div>
+  if (error || !data) return (
+    <div className="text-center py-16 text-red-600">
+      <p>{error || '用户不存在'}</p>
+      <button onClick={load} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
+    </div>
+  )
 
   const { profile, stats, servers, daily_trend, top_tools } = data
   const maxCalls = Math.max(...daily_trend.map((d: any) => d.calls), 1)
@@ -50,9 +67,9 @@ export default function AdminUserDetail() {
             <div className="flex items-center gap-2 mt-2">
               <span className={`text-xs px-2 py-0.5 rounded-full ${profile.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>{profile.role === 'admin' ? '🛡️ 管理员' : '👤 用户'}</span>
               {profile.role !== 'admin' ? (
-                <button onClick={() => changeRole('admin')} className="text-xs text-blue-600 hover:text-blue-800">提升为管理员</button>
+                <button onClick={() => changeRole('admin')} disabled={savingRole} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50">提升为管理员</button>
               ) : (
-                <button onClick={() => changeRole('user')} className="text-xs text-red-500 hover:text-red-700">降级为用户</button>
+                <button onClick={() => changeRole('user')} disabled={savingRole} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">降级为用户</button>
               )}
             </div>
           </div>

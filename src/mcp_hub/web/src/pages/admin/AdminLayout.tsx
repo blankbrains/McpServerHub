@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getAuthState } from '../../api/client'
+import { getAuthState, getMe } from '../../api/client'
 
 const adminNav = [
   { path: '/admin', label: '概览', icon: '📊', end: true },
@@ -21,8 +21,7 @@ export default function AdminLayout() {
   useEffect(() => {
     const { userId, token } = getAuthState()
     if (!token || !userId) { navigate('/'); return }
-    fetch('/api/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+    getMe()
       .then(d => {
         if ((d.data?.role || d.role) === 'admin') { setAuthorized(true) }
         else { navigate('/') }

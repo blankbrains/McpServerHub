@@ -111,7 +111,7 @@ MCP_HUB_WORKERS=2
             cron_job = (
                 f"@reboot sleep 5 && cd {os.getcwd()}"
                 f" && {sys.executable} -m uvicorn mcp_hub.api.app:create_app"
-                f" --host 0.0.0.0 --port {mcp_port}"
+                f" --factory --host 0.0.0.0 --port {mcp_port}"
                 f" --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
             )
             import subprocess as _sp

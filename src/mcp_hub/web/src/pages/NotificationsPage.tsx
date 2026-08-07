@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getAuthState } from '../api/client'
+import { apiGet, apiPost, getAuthState } from '../api/client'
 
 interface NotifItem {
   id: number
@@ -26,13 +26,20 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const userId = getAuthState().userId || 'anonymous'
+  const { token } = getAuthState()
 
   const load = async () => {
+    if (!token) {
+      setItems([])
+      setUnreadCount(0)
+      setError('请先登录后查看通知')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError('')
     try {
-      const r = await fetch(`/api/v1/notifications?page_size=50`, {
-        headers: { 'x-user-id': userId },
-      }).then(r => r.json())
+      const r = await apiGet<any>('/notifications?page_size=50')
       if (r.data) {
         setItems(r.data.items)
         setUnreadCount(r.data.unread_count)
@@ -49,9 +56,7 @@ export default function NotificationsPage() {
     setItems(prev => prev.map(i => i.id === id ? { ...i, is_read: true } : i))
     setUnreadCount(c => Math.max(0, c - 1))
     try {
-      await fetch(`/api/v1/notifications/${id}/read`, {
-        method: 'POST', headers: { 'x-user-id': userId },
-      })
+      await apiPost(`/notifications/${id}/read`)
     } catch {
       setItems(prevItems)
       setUnreadCount(prevCount)
@@ -64,9 +69,7 @@ export default function NotificationsPage() {
     setItems(prev => prev.map(i => ({ ...i, is_read: true })))
     setUnreadCount(0)
     try {
-      await fetch('/api/v1/notifications/read-all', {
-        method: 'POST', headers: { 'x-user-id': userId },
-      })
+      await apiPost('/notifications/read-all')
     } catch {
       setItems(prevItems)
       setUnreadCount(prevItems.filter(i => !i.is_read).length)
@@ -75,6 +78,18 @@ export default function NotificationsPage() {
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
+
+  if (!token) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-4">
+        <h1 className="text-2xl font-bold text-gray-900">🔔 通知中心</h1>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-gray-700 font-medium">登录后查看属于你的告警、更新和回复通知</p>
+          <Link to="/login" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
@@ -90,7 +105,11 @@ export default function NotificationsPage() {
       {error && (
         <div className="p-2 bg-red-50 text-red-700 rounded-lg text-sm flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => { setError(''); load() }} className="text-red-400 hover:text-red-600 ml-2">重试</button>
+          {token ? (
+            <button onClick={() => { setError(''); load() }} className="text-red-400 hover:text-red-600 ml-2">重试</button>
+          ) : (
+            <Link to="/login" className="text-red-600 hover:text-red-800 ml-2">登录</Link>
+          )}
         </div>
       )}
 

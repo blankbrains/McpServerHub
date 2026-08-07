@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mcp_hub.core.registry import Registry
+from mcp_hub.core.telemetry import TelemetryReporter, estimate_payload_tokens
 from mcp_hub.exceptions import GatewayError
 from mcp_hub.logging_config import get_logger
 
@@ -73,7 +74,7 @@ async def _drain_stderr(server_id: str, stderr_stream) -> None:
 
 # 远程上报 URL（环境变量配置，用于用户本地的 mcp serve 上报到远程 Hub）
 _REPORT_URL = os.environ.get("MCP_HUB_REPORT_URL", "").rstrip("/")
-_REPORT_USER_ID = os.environ.get("MCP_HUB_USER_ID", "anonymous")
+_REPORT_TOKEN = os.environ.get("MCP_HUB_TOKEN", "")
 
 # ── 调用记录 ────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
     1. 本地 DB 直接写入（始终执行）
     2. HTTP 远程上报到 Hub（当 MCP_HUB_REPORT_URL 设置时）
     """
-    caller_user_id = user_id or _REPORT_USER_ID
+    caller_user_id = user_id or os.environ.get("MCP_HUB_USER_ID", "anonymous")
     # 模式 1: 直接写本地 DB
     try:
         from sqlalchemy import text
@@ -107,7 +108,7 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
         logger.warning("gateway.record_call_failed", server_id=server_id, error=str(e))
 
     # 模式 2: HTTP 上报到远程 Hub
-    if _REPORT_URL:
+    if _REPORT_URL and _REPORT_TOKEN:
         try:
             import httpx
             async with httpx.AsyncClient(timeout=5) as client:
@@ -118,8 +119,9 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
                         "tool_name": tool_name,
                         "status": status,
                         "duration_ms": duration_ms,
+                        "token_count": token_count,
                     },
-                    headers={"x-user-id": _REPORT_USER_ID},
+                    headers={"Authorization": f"Bearer {_REPORT_TOKEN}"},
                 )
         except Exception:
             pass  # 远程上报失败不影响本地网关运行
@@ -277,6 +279,72 @@ class McpGateway:
 
     def __init__(self):
         self._servers: dict[str, ManagedMCP] = {}
+        self._telemetry = TelemetryReporter.from_environment()
+        self._heartbeat_task: asyncio.Task | None = None
+
+    async def _record_telemetry(
+        self,
+        event_type: str,
+        *,
+        server_id: str = "",
+        tool_name: str = "",
+        status: str = "ok",
+        duration_ms: int = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cpu_percent: float | None = None,
+        memory_bytes: int | None = None,
+    ) -> None:
+        """记录最小化遥测，任意故障都不得影响网关协议处理。"""
+        if self._telemetry is None:
+            return
+        try:
+            await self._telemetry.record(
+                event_type,
+                server_id=server_id,
+                tool_name=tool_name,
+                status=status,
+                duration_ms=duration_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cpu_percent=cpu_percent,
+                memory_bytes=memory_bytes,
+            )
+        except Exception as exc:
+            logger.debug("gateway.telemetry_record_failed", error=str(exc))
+
+    def _start_telemetry_heartbeat(self) -> None:
+        """定期采样子进程资源，采样失败不影响 MCP Server。"""
+        if self._telemetry is None or self._heartbeat_task is not None:
+            return
+
+        async def _heartbeat() -> None:
+            while True:
+                try:
+                    await asyncio.sleep(60)
+                    await self._record_telemetry("heartbeat")
+                    import psutil
+
+                    for server_id, server in list(self._servers.items()):
+                        pid = server.process.pid if server.process else None
+                        if pid is None:
+                            continue
+                        try:
+                            process = psutil.Process(pid)
+                            await self._record_telemetry(
+                                "resource_sample",
+                                server_id=server_id,
+                                cpu_percent=process.cpu_percent(interval=None),
+                                memory_bytes=process.memory_info().rss,
+                            )
+                        except (psutil.Error, OSError):
+                            continue
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.debug("gateway.telemetry_heartbeat_failed", error=str(exc))
+
+        self._heartbeat_task = asyncio.create_task(_heartbeat())
 
     async def start_all_managed(self) -> list[str]:
         """启动所有已安装且已启用的 MCP Server 并初始化。
@@ -342,12 +410,24 @@ class McpGateway:
                     started.append(sid)
                     await registry.update_status(sid, "running")
                     logger.info("gateway.server_started", server_id=sid, tools=len(mcp.tools))
+                    await self._record_telemetry("server_lifecycle", server_id=sid)
                 else:
                     logger.warning("gateway.server_init_failed", server_id=sid)
+                    await self._record_telemetry(
+                        "server_lifecycle",
+                        server_id=sid,
+                        status="error",
+                    )
                     await mcp.close()
             except Exception as e:
                 logger.warning("gateway.spawn_failed", server_id=sid, error=str(e))
+                await self._record_telemetry(
+                    "server_lifecycle",
+                    server_id=sid,
+                    status="error",
+                )
 
+        self._start_telemetry_heartbeat()
         return started
 
     async def handle_stdio(self):
@@ -477,23 +557,78 @@ class McpGateway:
 
         # 执行调用 + 计时
         t0 = _time.time()
+        input_tokens = estimate_payload_tokens(arguments)
         try:
             result = await server.call_tool(tool_name, arguments)
             dur_ms = int((_time.time() - t0) * 1000)
-            await _record_call_safe(server_id, tool_name, dur_ms, "ok")
             if result is None:
+                await _record_call_safe(
+                    server_id,
+                    tool_name,
+                    dur_ms,
+                    "error",
+                    token_count=input_tokens,
+                )
+                await self._record_telemetry(
+                    "tool_call",
+                    server_id=server_id,
+                    tool_name=tool_name,
+                    status="error",
+                    duration_ms=dur_ms,
+                    input_tokens=input_tokens,
+                )
                 return self._error(req_id, -32603, f"{server_id}: 无响应")
+            output_tokens = estimate_payload_tokens(result)
+            await _record_call_safe(
+                server_id,
+                tool_name,
+                dur_ms,
+                "ok",
+                token_count=input_tokens + output_tokens,
+            )
+            await self._record_telemetry(
+                "tool_call",
+                server_id=server_id,
+                tool_name=tool_name,
+                duration_ms=dur_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
             return self._respond(req_id, result)
         except Exception as e:
             dur_ms = int((_time.time() - t0) * 1000)
-            await _record_call_safe(server_id, tool_name, dur_ms, "error")
+            await _record_call_safe(
+                server_id,
+                tool_name,
+                dur_ms,
+                "error",
+                token_count=input_tokens,
+            )
+            await self._record_telemetry(
+                "tool_call",
+                server_id=server_id,
+                tool_name=tool_name,
+                status="error",
+                duration_ms=dur_ms,
+                input_tokens=input_tokens,
+            )
             return self._error(req_id, -32603, f"{server_id}: {e}")
 
     async def shutdown(self):
         """关闭所有子 Server。"""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
         for _sid, server in list(self._servers.items()):
+            await self._record_telemetry("server_lifecycle", server_id=_sid, status="warning")
             await server.close()
         self._servers.clear()
+        if self._telemetry:
+            await self._telemetry.close()
 
     @staticmethod
     def _respond(req_id, result: dict) -> dict:

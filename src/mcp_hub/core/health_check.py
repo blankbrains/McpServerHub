@@ -8,10 +8,11 @@ L3 (每 5min): 功能级检查 — 确认 keepalive 仍在正常工作
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+import psutil
 
 from mcp_hub.logging_config import get_logger
 
@@ -52,11 +53,10 @@ class HealthChecker:
     async def check_l1(self, server_id: str, pid: int) -> HealthResult:
         """进程级检查 — 只查进程是否存在（最轻量）。"""
         start = time.monotonic()
-        try:
-            os.kill(pid, 0)  # 不发送信号，只检查进程权限
+        if psutil.pid_exists(pid):
             passed = True
             msg = "进程存活"
-        except (OSError, ProcessLookupError):
+        else:
             passed = False
             msg = "进程不存在"
         elapsed_ms = int((time.monotonic() - start) * 1000)

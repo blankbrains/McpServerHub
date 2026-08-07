@@ -11,15 +11,15 @@ const STEPS = [
       { agent: 'Cursor', path: '~/.cursor/mcp.json' },
       { agent: 'Codex', path: '~/.codex/mcp.json' },
       { agent: 'Trae', path: '~/.trae/mcp.json' },
-      { agent: 'Windsurf', path: '~/.windsurf/mcp.json' },
-      { agent: 'VS Code Copilot', path: '~/.vscode/mcp.json' },
+      { agent: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json' },
+      { agent: 'VS Code Copilot', path: '~/.copilot/mcp-config.json' },
     ],
   },
   {
     num: 2,
-    title: '上传配置到 Hub',
+    title: '检查本地配置',
     icon: '📤',
-    description: '在「配置中心」页面拖拽或点击上传你的 JSON 配置文件，Hub 会自动解析其中的 MCP Server 列表并展示预览。',
+    description: '在「配置中心」选择 JSON 配置文件后，Hub 会解析其中的 MCP Server 并展示匹配结果。检查阶段不会保存追踪记录，也不会改变 Server 状态。',
     action: { text: '前往配置中心 →', to: '/config' },
   },
   {
@@ -29,17 +29,17 @@ const STEPS = [
     description: 'Hub 会自动在市场数据库中搜索你配置里的每个 MCP Server，并显示匹配/未匹配的结果：',
     highlights: [
       { label: '已匹配', desc: '在 Hub 市场中找到对应的 Server，自动关联版本、评分、安全等级等信息', color: 'green' },
-      { label: '未匹配', desc: '未在市场找到的 Server 会被注册为自定义 Server，你仍可选择追踪', color: 'yellow' },
+      { label: '未匹配', desc: '未在市场找到的 Server 会标记为待处理；仅在确认追踪后才会注册为自定义 Server。', color: 'yellow' },
     ],
   },
   {
     num: 4,
-    title: '决定是否上传到 Hub 进行监控',
+    title: '确认是否追踪',
     icon: '⚡',
-    description: '这是关键步骤。Hub 提供两个选项：',
+    description: '检查完成后，由你决定是否将这份配置保存到个人追踪列表：',
     highlights: [
-      { label: '✅ 上传到 Hub', desc: '同意将你的 MCP Server 配置上传到 Hub。Hub 会持续追踪你的 Server 状态，并在监控大屏中展示调用次数、响应时长、Token 消耗等数据。', color: 'blue' },
-      { label: '❌ 取消', desc: '不上传配置。Hub 不会记录或追踪你的任何 MCP 调用数据。你可以随时回来重新上传。', color: 'gray' },
+      { label: '✅ 确认追踪', desc: '将匹配到的 Server 保存到你的个人追踪列表。监控页会显示这些 Server 的服务端状态、健康检查和已上报的调用统计。', color: 'blue' },
+      { label: '❌ 取消', desc: '丢弃本次检查结果，不会创建追踪记录或注册自定义 Server。你可以随时重新检查。', color: 'gray' },
     ],
   },
   {
@@ -188,10 +188,10 @@ export default function Guide() {
             </p>
           </div>
           <div>
-            <p className="font-medium text-gray-800">Q: 「上传到 Hub」和「取消」有什么区别？</p>
+            <p className="font-medium text-gray-800">Q: 「确认追踪」和「取消」有什么区别？</p>
             <p className="text-gray-600 mt-0.5">
-              A: 选择「上传到 Hub」后，你的 MCP Server 列表和调用数据会被 Hub 追踪记录，
-              你可以在监控大屏中查看统计。选择「取消」则不会记录任何数据，你的配置仅保存在本地。
+              A: 选择「确认追踪」后，Server 会保存到你的个人追踪列表。选择「取消」不会保存本次检查结果。
+              MCP 调用统计仅在你部署并使用遥测或网关能力后才会产生。
             </p>
           </div>
           <div>
@@ -204,8 +204,8 @@ export default function Guide() {
           <div>
             <p className="font-medium text-gray-800">Q: Hub 网关会影响 MCP Server 的性能吗？</p>
             <p className="text-gray-600 mt-0.5">
-              A: Hub 网关以 stdio 方式运行在你的本地机器上，作为轻量代理转发请求。
-              额外延迟通常 &lt; 5ms，对正常使用几乎没有影响。
+              A: Hub 网关以 stdio 方式运行并转发请求。实际开销取决于 Server、网络、工具调用和本机资源，
+              部署后应通过监控页的真实调用数据评估。
             </p>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, getAuthState } from '../api/client'
+import { apiGet, getAuthHeaders, getAuthState, getFavoriteServers } from '../api/client'
+import TelemetryPanel from '../components/TelemetryPanel'
 
 interface ServerMetric {
   server_id: string
@@ -113,13 +114,12 @@ export default function MonitorDashboard() {
         setTrackedServerIds(new Set(r.data.map((s: any) => String(s.name || s.hub_id || ''))))
       }
     }).catch(() => {})
-    // 已收藏数量
-    const favs = localStorage.getItem('mcp_hub_favorites')
-    if (favs) {
-      try { const arr = JSON.parse(favs); if (Array.isArray(arr)) setFavCount(arr.length) } catch { /* ignore */ }
-    }
+    // 已收藏数量由当前账户的服务端记录决定。
+    getFavoriteServers()
+      .then(r => setFavCount((r.data || []).length))
+      .catch(() => setFavCount(0))
     // 有更新的 Server 数量
-    fetch('/api/v1/servers/check-updates', { headers: { 'x-user-id': userId } })
+    fetch('/api/v1/servers/check-updates', { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(r => { if (r.data?.updates) setUpdateCount(r.data.updates.length) })
       .catch(() => {})
@@ -129,7 +129,7 @@ export default function MonitorDashboard() {
     if (!data || trackedServerIds.size === 0) return 0
     return data.servers.filter(s =>
       trackedServerIds.has(s.server_id) &&
-      s.security_level && s.security_level !== 'high'
+      ['unreviewed', 'blocked'].includes(s.security_level)
     ).length
   }, [data, trackedServerIds])
 
@@ -158,6 +158,8 @@ export default function MonitorDashboard() {
       {/* === SaaS 概览（新增）=== */}
       {userId && (
         <div className="mb-8">
+          <TelemetryPanel />
+          <hr className="my-6 border-gray-200 dark:border-gray-700" />
           <h2 className="text-xl font-bold mb-4">📊 我的概览</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {[

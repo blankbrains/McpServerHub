@@ -145,6 +145,8 @@ class Tokenizer:
         使用 tiktoken cl100k_base 精确计数，不可用时用字符估算。
         """
         global _TOKENIZER_WARNING_SHOWN
+        if not text:
+            return 0
         if _TOKENIZER is not None:
             return len(_TOKENIZER.encode(text))
         # 字符估算：中文约 1.2 chars/token，英文约 1.7 chars/token

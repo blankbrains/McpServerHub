@@ -1,11 +1,18 @@
 const API_BASE = '/api/v1'
 
-function getAuthHeaders(): Record<string, string> {
+export class ApiRequestError extends Error {
+  constructor(public readonly status: number, message?: string) {
+    super(message || `API error: ${status}`)
+    this.name = 'ApiRequestError'
+  }
+}
+
+export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('mcp_hub_token')
   if (token) {
     return { 'Authorization': `Bearer ${token}` }
   }
-  return { 'x-user-id': getUserId() }
+  return {}
 }
 
 export interface ServerInfo {
@@ -31,12 +38,8 @@ export async function apiGet<T>(path: string): Promise<{ success: boolean; data:
   const res = await fetch(`${API_BASE}${path}`, {
     headers: getAuthHeaders(),
   })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  if (!res.ok) throw new ApiRequestError(res.status)
   return res.json()
-}
-
-function getUserId(): string {
-  try { return localStorage.getItem('mcp_hub_user') || 'anonymous' } catch { return 'anonymous' }
 }
 
 export async function apiPost<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
@@ -45,7 +48,26 @@ export async function apiPost<T>(path: string, body?: any): Promise<{ success: b
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  if (!res.ok) throw new ApiRequestError(res.status)
+  return res.json()
+}
+
+export async function apiDelete<T>(path: string): Promise<{ success: boolean; data?: T; message?: string }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new ApiRequestError(res.status)
+  return res.json()
+}
+
+export async function apiPatch<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new ApiRequestError(res.status)
   return res.json()
 }
 
@@ -104,6 +126,10 @@ export async function favoriteServer(serverId: string): Promise<any> {
   return apiPost('/community/favorite', { server_id: serverId })
 }
 
+export async function getFavoriteServers(): Promise<{ success: boolean; data: ServerInfo[] }> {
+  return apiGet<ServerInfo[]>('/community/favorites')
+}
+
 // === Auth ===
 
 export interface AuthState {
@@ -113,7 +139,7 @@ export interface AuthState {
 
 export function getAuthState(): AuthState {
   const token = localStorage.getItem('mcp_hub_token')
-  const userId = localStorage.getItem('mcp_hub_user')
+  const userId = token ? localStorage.getItem('mcp_hub_user') : null
   return { token, userId }
 }
 
@@ -169,11 +195,16 @@ export function connectStatusSSE(onStatus: (data: any) => void): EventSource {
   return es
 }
 
-export async function uploadConfig(file: File, agentId: string = ''): Promise<any> {
+export async function uploadConfig(
+  file: File,
+  agentId: string = '',
+  trackServers: boolean = false,
+): Promise<any> {
   const form = new FormData()
   form.append('file', file)
-  const headers: Record<string, string> = { 'x-user-id': getUserId() }
+  const headers: Record<string, string> = getAuthHeaders()
   if (agentId) headers['x-agent-id'] = agentId
+  headers['x-track-servers'] = String(trackServers)
   const res = await fetch(`${API_BASE}/config/upload`, {
     method: 'POST',
     body: form,
@@ -185,7 +216,7 @@ export async function uploadConfig(file: File, agentId: string = ''): Promise<an
 
 export async function downloadConfig(): Promise<Blob> {
   const res = await fetch(`${API_BASE}/config/download`, {
-    headers: { 'x-user-id': getUserId() },
+    headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error(`Download config failed: ${res.status}`)
   return res.blob()
@@ -193,7 +224,7 @@ export async function downloadConfig(): Promise<Blob> {
 
 export async function exportConfig(share: boolean): Promise<Blob> {
   const res = await fetch(`${API_BASE}/export/config?share=${share}`, {
-    headers: { 'x-user-id': getUserId() },
+    headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error(`Export config failed: ${res.status}`)
   return res.blob()
@@ -215,7 +246,7 @@ export async function searchAdvanced(params: {
   if (params.page) qs.set('page', String(params.page))
   qs.set('page_size', '9')
   const res = await fetch(`${API_BASE}/search/advanced?${qs}`, {
-    headers: { 'x-user-id': getUserId() },
+    headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error(`Search failed: ${res.status}`)
   return res.json()

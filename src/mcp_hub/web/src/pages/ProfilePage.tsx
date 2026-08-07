@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getAuthState, apiGet } from '../api/client'
+import { ApiRequestError, getAuthState, apiGet } from '../api/client'
 
 interface UserProfile {
   id: string
@@ -32,7 +32,9 @@ export default function ProfilePage() {
   const [servers, setServers] = useState<ServerStat[]>([])
   const [usageSummary, setUsageSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState('')
+  const [configError, setConfigError] = useState('')
+  const [monitorWarning, setMonitorWarning] = useState('')
+  const [usageWarning, setUsageWarning] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -59,23 +61,49 @@ export default function ProfilePage() {
           })
         }
 
-        // 加载用户的 Server 列表
-        const sr = await apiGet<any>('/monitor/dashboard')
-        if (sr.data?.servers) {
-          const userServers = sr.data.servers.filter((s: any) =>
-            s.status !== 'not_installed' || s.enabled !== false
-          )
-          setServers(userServers.slice(0, 20))
-        }
-
-        // 加载使用统计
-        if (userId) {
+        if (userId && token) {
+          // 用户配置定义“我的 Server”；监控接口仅补齐服务端状态与指标。
           try {
-            const us = await fetch(`/api/v1/usage/stats?user_id=${encodeURIComponent(userId)}&days=30`, {
-              headers: { 'x-user-id': userId },
-            }).then(r => r.json())
-            if (us.data) setUsageSummary(us.data)
-          } catch {}
+            const configResult = await apiGet<any[]>('/config/user-servers')
+            const [monitorResult, usageResult] = await Promise.allSettled([
+              apiGet<any>('/monitor/dashboard'),
+              apiGet<any>('/usage/stats?days=30'),
+            ])
+            const monitorData = monitorResult.status === 'fulfilled' ? monitorResult.value.data : null
+            const usageData = usageResult.status === 'fulfilled' ? usageResult.value.data : null
+            if (monitorResult.status === 'rejected') {
+              setMonitorWarning('监控数据暂时不可用，当前仅显示已追踪配置')
+            }
+            if (usageResult.status === 'rejected') {
+              setUsageWarning('调用与 Token 数据暂时不可用')
+            }
+            const monitorById = new Map(
+              (monitorData?.servers || []).map((server: any) => [server.server_id, server])
+            )
+            setServers((configResult.data || []).slice(0, 20).map((config: any) => {
+              const serverId = config.hub_id || config.name
+              const monitor: any = monitorById.get(serverId) || {}
+              return {
+                server_id: serverId,
+                name: monitor.name || config.name || serverId,
+                status: monitor.status || 'not_installed',
+                call_count_7d: monitor.call_count_7d || 0,
+                token_consumption: monitor.token_consumption || 0,
+              }
+            }))
+            setUsageSummary(usageData || null)
+          } catch (error) {
+            setServers([])
+            setUsageSummary(null)
+            setConfigError(
+              error instanceof ApiRequestError && error.status === 401
+                ? '登录状态已失效，请重新登录'
+                : '个人配置加载失败，请稍后重试'
+            )
+          }
+        } else {
+          setServers([])
+          setUsageSummary(null)
         }
       } finally {
         setLoading(false)
@@ -86,11 +114,26 @@ export default function ProfilePage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
 
+  if (!userId || !token) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900">👤 个人中心</h1>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-gray-700 font-medium">登录后查看你的追踪 Server、调用和 Token 使用数据</p>
+          <div className="mt-4 flex justify-center gap-4 text-sm">
+            <Link to="/login" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
+            <Link to="/market" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">浏览市场</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // 计算汇总
   const totalCalls = usageSummary?.stats?.reduce((sum: number, s: any) => sum + (s.total_calls || 0), 0) || 0
   const totalTokens = usageSummary?.stats?.reduce((sum: number, s: any) => sum + (s.total_tokens || 0), 0) || 0
   const totalErrors = usageSummary?.stats?.reduce((sum: number, s: any) => sum + (s.error_count || 0), 0) || 0
-  const successRate = totalCalls > 0 ? Math.round((totalCalls - totalErrors) / totalCalls * 100) : 100
+  const successRate = totalCalls > 0 ? Math.round((totalCalls - totalErrors) / totalCalls * 100) : null
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -132,8 +175,22 @@ export default function ProfilePage() {
         <StatCard icon="📦" label="我的 Server" value={String(servers.length)} color="blue" />
         <StatCard icon="📞" label="30 日调用" value={fmtNum(totalCalls)} color="green" />
         <StatCard icon="🔤" label="30 日 Token" value={fmtNum(totalTokens)} color="purple" />
-        <StatCard icon="✅" label="成功率" value={`${successRate}%`} color={successRate >= 95 ? 'green' : 'yellow'} />
+        <StatCard icon="✅" label="成功率" value={successRate === null ? '-' : `${successRate}%`} color={successRate !== null && successRate >= 95 ? 'green' : 'yellow'} />
       </div>
+
+      {(configError || monitorWarning || usageWarning) && (
+        <div className="space-y-2">
+          {configError && <p className="p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">{configError}</p>}
+          {monitorWarning && <p className="p-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">{monitorWarning}</p>}
+          {usageWarning && <p className="p-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">{usageWarning}</p>}
+        </div>
+      )}
+
+      {!usageSummary?.stats?.length && (
+        <p className="text-sm text-gray-500">
+          调用次数、Token 和成功率仅在已授权的本地网关或遥测设备上报真实调用后显示。
+        </p>
+      )}
 
       {/* 使用趋势概览 */}
       {usageSummary?.stats && usageSummary.stats.length > 0 && (
@@ -176,7 +233,7 @@ export default function ProfilePage() {
           <Link to="/my-servers" className="text-sm text-blue-600 hover:text-blue-800">管理 →</Link>
         </div>
         {servers.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">还没有安装任何 Server，去市场看看吧</p>
+          <p className="text-sm text-gray-400 text-center py-8">还没有追踪任何 Server，可从市场添加或在配置中心上传并确认追踪。</p>
         ) : (
           <div className="space-y-2">
             {servers.slice(0, 8).map(s => (

@@ -12,7 +12,8 @@ export default function Login() {
 
   const handleLogin = () => {
     setLoggingIn(true)
-    window.open(getLoginUrl(), 'github-oauth', 'width=600,height=700')
+    const popup = window.open(getLoginUrl(), 'github-oauth', 'width=600,height=700')
+    if (!popup) setLoggingIn(false)
   }
 
   const handleLogout = () => {
@@ -24,7 +25,14 @@ export default function Login() {
   // 获取用户详细信息
   useEffect(() => {
     if (!auth.token || !auth.userId) { setUserInfoLoading(false); return }
-    getMe().then(r => setUserInfo(r.data || r)).catch(() => {}).finally(() => setUserInfoLoading(false))
+    setUserInfoLoading(true)
+    getMe()
+      .then(r => setUserInfo(r.data || r))
+      .catch(() => {
+        clearAuth()
+        setAuth({ token: null, userId: null })
+      })
+      .finally(() => setUserInfoLoading(false))
   }, [auth.token, auth.userId])
 
   // 自动轮询检测登录状态（OAuth 回调写入 localStorage）
@@ -39,7 +47,11 @@ export default function Login() {
         navigate('/')
       }
     }, 500)
-    return () => clearInterval(timer)
+    const timeout = setTimeout(() => setLoggingIn(false), 120_000)
+    return () => {
+      clearInterval(timer)
+      clearTimeout(timeout)
+    }
   }, [loggingIn, navigate])
 
   // 页面打开时也检测一次
@@ -113,7 +125,7 @@ export default function Login() {
           {loggingIn ? '正在打开 GitHub 授权...' : 'GitHub 登录'}
         </button>
         {loggingIn && (
-          <p className="text-xs text-blue-500">等待 GitHub 授权完成，如果弹窗被拦截请允许弹出窗口</p>
+          <p className="text-xs text-blue-500">等待 GitHub 授权完成；若未弹出授权窗口，请允许此站点打开弹窗后重试</p>
         )}
         <p className="text-xs text-gray-400">
           登录即表示同意服务条款。我们仅获取您的公开信息。

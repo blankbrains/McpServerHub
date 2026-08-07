@@ -10,7 +10,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, select, text
 
 from mcp_hub.api.dependencies import get_current_user
@@ -111,27 +111,39 @@ async def _resolve_package_online(pkg_name: str) -> dict | None:
 
 
 @router.get("/config/download")
-async def download_config():
-    """下载当前完整配置 (mcp.json)，用于导入本地 Agent。"""
+async def download_config(
+    agent: str = "generic",
+    user_id: str = Depends(get_current_user),
+):
+    """下载当前用户追踪 Server 的配置 (mcp.json)。"""
     registry = Registry()
-    installed = await registry.get_installed()
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(UserServerModel.server_id)
+            .where(UserServerModel.user_id == user_id)
+            .order_by(UserServerModel.created_at)
+        )
+        server_ids = [row[0] for row in result.fetchall()]
 
-    config = {"mcpServers": {}}
-    for s in installed:
+    from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+
+    config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
+    server_key = config_spec["server_key"]
+    config = {server_key: {}}
+    for server_id in server_ids:
+        s = await registry.get_by_id(server_id)
+        if not s:
+            continue
         cmd = s.get("install_command", "")
         name = s["id"].split("/")[-1]
         if cmd:
-            config["mcpServers"][name] = {"command": cmd}
+            fragment = get_config_for_agent(name, cmd, agent)
+            config[server_key][name] = fragment["config_content"][server_key][name]
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(config, tmp, indent=2, ensure_ascii=False)
-
-    return FileResponse(
-        tmp.name,
+    return Response(
+        content=json.dumps(config, indent=2, ensure_ascii=False),
         media_type="application/json",
-        filename="mcp-hub-config.json",
+        headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
     )
 
 
@@ -226,7 +238,12 @@ async def remove_user_server(server_id: str, user_id: str = Depends(get_current_
 
 
 @router.post("/config/upload")
-async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = Depends(get_current_user), x_agent_id: str = Header("")):
+async def upload_config(
+    file: Annotated[UploadFile, File(...)],
+    user_id: str = Depends(get_current_user),
+    x_agent_id: str = Header(""),
+    x_track_servers: str = Header("false"),
+):
     """上传本地的 claude_desktop_config.json，匹配市场中的 Server。
 
     返回上传配置中每个 Server 在 Hub 市场中的匹配情况，
@@ -262,7 +279,8 @@ async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = D
     matched = []
     unmatched = []
     not_in_hub = []
-    all_tracked = []  # 所有需要追踪的 server 列表
+    all_tracked = []
+    track_servers = x_track_servers.lower() == "true"
 
     for name, cfg in servers_map.items():
         cmd = cfg.get("command", "") + " " + " ".join(cfg.get("args", []))
@@ -312,8 +330,9 @@ async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = D
                     entry["resolved_source"] = resolved["source"]
                     matched.append(entry)
                     all_tracked.append({"server_id": sid, "matched": True})
-                    try:
-                        await registry.register_server({
+                    if track_servers:
+                        try:
+                            await registry.register_server({
                             "id": sid,
                             "name": resolved["name"],
                             "description": resolved.get("description",
@@ -326,15 +345,16 @@ async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = D
                             "author": resolved["source"],
                             "security_level": "reviewed",
                         })
-                    except Exception:
-                        logger.warning("config.register_discovered_failed", name=name, source=resolved.get("source"))
+                        except Exception:
+                            logger.warning("config.register_discovered_failed", name=name, source=resolved.get("source"))
                 else:
                     # 线上也查不到，才标为自定义
                     unmatched.append(entry)
                     sid = f"@custom/{name}"
                     all_tracked.append({"server_id": sid, "matched": False})
-                    try:
-                        await registry.register_server({
+                    if track_servers:
+                        try:
+                            await registry.register_server({
                             "id": sid,
                             "name": name,
                             "description": f"自定义 Server: {name}",
@@ -344,35 +364,34 @@ async def upload_config(file: Annotated[UploadFile, File(...)], user_id: str = D
                             "tags": json.dumps(["user-uploaded"]),
                             "author": "user",
                         })
-                        entry["registered_id"] = sid
-                    except Exception:
-                        logger.warning("config.register_custom_failed", name=name)
+                            entry["registered_id"] = sid
+                        except Exception:
+                            logger.warning("config.register_custom_failed", name=name)
             else:
                 entry["matched"] = False
                 not_in_hub.append(entry)
 
-    # 同步所有 server 到 user_servers 表，同时标记为已安装（stopped）
-    async with async_session_factory() as session:
+    if track_servers:
+        async with async_session_factory() as session:
         # 先清理当前用户的旧记录
-        await session.execute(
-            delete(UserServerModel).where(UserServerModel.user_id == user_id)
-        )
+            await session.execute(
+                delete(UserServerModel).where(UserServerModel.user_id == user_id)
+            )
         # 写入新记录
-        for ts in all_tracked:
-            session.add(UserServerModel(
+            for ts in all_tracked:
+                session.add(UserServerModel(
                 user_id=user_id,
                 server_id=ts["server_id"],
                 matched=ts["matched"],
                 agent=x_agent_id if x_agent_id else "",
-            ))
-        await session.commit()
+                ))
+            await session.commit()
 
-    # 将所有匹配到的 Server 状态改为 stopped（视为已安装）
-    for ts in all_tracked:
-        try:
-            await registry.update_status(ts["server_id"], "stopped")
-        except Exception:
-            pass
+        for ts in all_tracked:
+            try:
+                await registry.update_status(ts["server_id"], "stopped")
+            except Exception:
+                pass
 
     return {
         "success": True,

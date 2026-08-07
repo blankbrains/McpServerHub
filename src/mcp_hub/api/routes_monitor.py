@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
+from mcp_hub.api.dependencies import get_optional_user
 from mcp_hub.core.monitor import Monitor
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.logging_config import get_logger
@@ -14,13 +15,13 @@ logger = get_logger(__name__)
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.token_analyzer import TokenAnalyzer
 from mcp_hub.db.database import async_session_factory
-from mcp_hub.db.models import HealthLogModel, UsageStatsModel
+from mcp_hub.db.models import UsageStatsModel, UserServerModel
 
 router = APIRouter(tags=["monitor"])
 
 
 @router.get("/monitor/dashboard")
-async def monitor_dashboard():
+async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
     """聚合所有 Server 的监控数据，供可视化大屏使用。"""
     registry = Registry()
     pm = get_process_manager()
@@ -30,32 +31,32 @@ async def monitor_dashboard():
     # 1. 获取所有 Server（包含已安装、未安装、用户自定义的）
     servers = await registry.get_all()
 
-    # 2. 从 user_servers 表读取用户追踪的 Server ID 和启用状态
+    # 2. 已登录用户仅加载自己的追踪记录。匿名访问只能查看服务端已安装项，
+    #    避免将其他用户的配置关系或自定义 Server 暴露到公共接口。
     tracked_info: dict[str, bool] = {}  # server_id → enabled
-    try:
+    if user_id:
         async with async_session_factory() as session:
-            from mcp_hub.db.models import UserServerModel
             result = await session.execute(
                 select(UserServerModel.server_id, UserServerModel.enabled)
+                .where(UserServerModel.user_id == user_id)
             )
             for row in result.fetchall():
                 tracked_info[row[0]] = row[1] if row[1] is not None else True
-    except Exception:
-        logger.warning("获取 user_servers 追踪信息失败", exc_info=True)
 
-    # 3. 过滤：展示用户相关的 Server
-    #    - 已安装/运行中的
-    #    - 自定义的（@custom/）
-    #    - 在 user_servers 追踪列表中的（无论启用与否都展示，方便重新启用）
-    relevant = [
-        s for s in servers
-        if s.get("status") != "not_installed"
-        or s["id"].startswith("@custom/")
-        or s["id"] in tracked_info  # 只要追踪了就展示，enabled 字段由前端控制
-    ]
-    # 如果没有任何相关 Server，展示最近添加的 10 个（新用户引导）
-    if not relevant:
-        relevant = servers[:10]
+    server_by_id = {server["id"]: server for server in servers}
+    if user_id:
+        relevant = [
+            server_by_id[server_id]
+            for server_id in tracked_info
+            if server_id in server_by_id
+        ]
+    else:
+        relevant = [
+            server
+            for server in servers
+            if server.get("status") != "not_installed"
+            and not server["id"].startswith("@custom/")
+        ]
 
     # 3. 构建每个 Server 的详情
     items = []
@@ -94,13 +95,16 @@ async def monitor_dashboard():
         # 调用次数（基于 usage_stats 真实调用计数）
         calls = 0
         try:
+            filters = [
+                UsageStatsModel.server_id == sid,
+                UsageStatsModel.created_at >= datetime.utcnow() - timedelta(days=7),
+            ]
+            if user_id:
+                filters.append(UsageStatsModel.user_id == user_id)
             async with async_session_factory() as session:
                 result = await session.execute(
                     select(func.count(UsageStatsModel.id))
-                    .where(
-                        UsageStatsModel.server_id == sid,
-                        UsageStatsModel.created_at >= datetime.utcnow() - timedelta(days=7),
-                    )
+                    .where(*filters)
                 )
                 calls = result.scalar() or 0
         except Exception:
@@ -125,10 +129,11 @@ async def monitor_dashboard():
             "rating": s.get("rating", 0),
             "version": s.get("version", "?"),
             "security_level": s.get("security_level", "unreviewed"),
+            "install_command": s.get("install_command", ""),
         })
 
     # 3. 聚合统计
-    running_count = len(pm.list_running())
+    running_count = sum(1 for item in items if item["running"])
     error_count = sum(1 for i in items if i["status"] == "error")
     stopped_count = sum(1 for i in items if i["status"] == "stopped")
     healthy_count = sum(1 for i in items if i["last_check_status"] == "ok")

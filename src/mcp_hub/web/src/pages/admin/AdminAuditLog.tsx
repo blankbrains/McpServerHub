@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAuthState } from '../../api/client'
+import { apiGet } from '../../api/client'
 
 export default function AdminAuditLog() {
   const [logs, setLogs] = useState<any[]>([])
@@ -7,16 +7,25 @@ export default function AdminAuditLog() {
   const [page, setPage] = useState(1)
   const [actionFilter, setActionFilter] = useState('')
   const [loading, setLoading] = useState(true)
-  const uid = getAuthState().userId || 'anonymous'
-
+  const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     setLoading(true)
+    setError('')
     const qs = new URLSearchParams({ page: String(page), page_size: '50' })
     if (actionFilter) qs.set('action_type', actionFilter)
-    fetch(`/api/v1/admin/audit?${qs}`, { headers: { 'x-user-id': uid } })
-      .then(r => r.json()).then(r => { setLogs(r.data || []); setTotal(r.meta?.total || 0) })
-      .catch(() => {}).finally(() => setLoading(false))
-  }, [page, actionFilter])
+    apiGet<any[]>(`/admin/audit?${qs}`)
+      .then(result => {
+        setLogs(result.data || [])
+        setTotal(result.meta?.total || 0)
+      })
+      .catch(() => {
+        setLogs([])
+        setTotal(0)
+        setError('审计日志加载失败，请检查管理员权限后重试')
+      })
+      .finally(() => setLoading(false))
+  }, [page, actionFilter, reloadKey])
 
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
 
@@ -30,7 +39,13 @@ export default function AdminAuditLog() {
         </select>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
+      {error ? (
+        <div className="text-center py-12 text-red-600">
+          <p>{error}</p>
+          <button onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
+        </div>
+      ) : <>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
             <th className="px-4 py-2 w-32">时间</th><th className="px-4 py-2">操作人</th><th className="px-4 py-2">操作</th><th className="px-4 py-2">详情</th>
@@ -48,8 +63,10 @@ export default function AdminAuditLog() {
             ))}
           </tbody>
         </table>
-      </div>
-      <div className="text-xs text-gray-400">共 {total} 条</div>
+        </div>
+        <div className="text-xs text-gray-400">共 {total} 条</div>
+      </>
+      }
     </div>
   )
 }

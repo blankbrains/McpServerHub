@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
 from mcp_hub.api.dependencies import get_current_user
-from mcp_hub.core.config_manager import get_config_for_agent
+from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
 from mcp_hub.core.installer import Installer
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
@@ -77,7 +77,7 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
 
     # 3. 生成各 Agent 配置片段
     configs = []
-    for agent_key in ["claude-code", "cursor", "codex", "trae", "generic"]:
+    for agent_key in AGENT_CONFIGS:
         cfg = get_config_for_agent(display_name, command, agent_key)
         configs.append(cfg)
 
@@ -184,7 +184,10 @@ async def start_server(server_id: str, user_id: str = Depends(get_current_user))
 
 
 @router.post("/servers/{server_id:path}/stop")
-async def stop_server(server_id: str):
+async def stop_server(
+    server_id: str,
+    _user_id: str = Depends(get_current_user),
+):
     """停止 Server。"""
     registry = Registry()
     pm = get_process_manager()

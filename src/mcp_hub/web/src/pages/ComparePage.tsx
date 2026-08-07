@@ -17,16 +17,33 @@ export default function ComparePage() {
   const [selected, setSelected] = useState<ServerInfo[]>([])
   const [searching, setSearching] = useState(false)
   const [reliabilities, setReliabilities] = useState<Record<string, any>>({})
+  const [reliabilityState, setReliabilityState] = useState<Record<string, 'loading' | 'no-checks' | 'unavailable'>>({})
+  const [searchMessage, setSearchMessage] = useState('')
 
   const maxSlots = 4
 
   const handleSearch = async () => {
-    if (!query.trim()) return
+    const keyword = query.trim()
+    if (!keyword) {
+      setSearchResults([])
+      setSearchMessage('请输入 Server 名称后再搜索')
+      return
+    }
     setSearching(true)
+    setSearchMessage('')
     try {
-      const r = await searchServers({ q: query, page: 1 })
-      setSearchResults(r.data.filter(s => !selected.find(sel => sel.id === s.id)))
-    } catch {} finally { setSearching(false) }
+      const r = await searchServers({ q: keyword, page: 1 })
+      const results = r.data.filter(s => !selected.find(sel => sel.id === s.id))
+      setSearchResults(results)
+      if (results.length === 0) {
+        setSearchMessage('没有找到可添加的 Server')
+      }
+    } catch {
+      setSearchResults([])
+      setSearchMessage('搜索失败，请稍后重试')
+    } finally {
+      setSearching(false)
+    }
   }
 
   const addServer = async (s: ServerInfo) => {
@@ -35,16 +52,31 @@ export default function ComparePage() {
     setSelected(prev => [...prev, s])
     setSearchResults(prev => prev.filter(x => x.id !== s.id))
     setQuery('')
-    // 加载可靠性数据
+    setSearchMessage('')
+    setReliabilityState(prev => ({ ...prev, [s.id]: 'loading' }))
+
+    // 可靠性只基于已记录的健康检查；没有检查记录时不能将 0 分解释为不可靠。
     try {
       const rel = await getServerReliability(s.id)
-      if (rel.data) setReliabilities(prev => ({ ...prev, [s.id]: rel.data }))
-    } catch {}
+      if (rel.data?.total_checks > 0) {
+        setReliabilities(prev => ({ ...prev, [s.id]: rel.data }))
+        setReliabilityState(prev => {
+          const next = { ...prev }
+          delete next[s.id]
+          return next
+        })
+      } else {
+        setReliabilityState(prev => ({ ...prev, [s.id]: 'no-checks' }))
+      }
+    } catch {
+      setReliabilityState(prev => ({ ...prev, [s.id]: 'unavailable' }))
+    }
   }
 
   const removeServer = (id: string) => {
     setSelected(prev => prev.filter(s => s.id !== id))
     setReliabilities(prev => { const n = { ...prev }; delete n[id]; return n })
+    setReliabilityState(prev => { const n = { ...prev }; delete n[id]; return n })
   }
 
   const securityLabel: Record<string, string> = {
@@ -56,7 +88,7 @@ export default function ComparePage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">⚖️ Server 对比</h1>
-        <p className="text-sm text-gray-500 mt-1">选择 2-4 个 MCP Server 进行并排对比</p>
+        <p className="text-sm text-gray-500 mt-1">选择 2-4 个 MCP Server 并排比较。可靠性仅在存在健康检查记录时显示。</p>
       </div>
 
       {/* 搜索添加 */}
@@ -81,6 +113,9 @@ export default function ComparePage() {
               </button>
             ))}
           </div>
+        )}
+        {searchMessage && (
+          <p className="mt-3 text-sm text-gray-500" role="status">{searchMessage}</p>
         )}
       </div>
 
@@ -155,7 +190,15 @@ export default function ComparePage() {
                       }`}>
                         {reliabilities[s.id].reliability_score}/100
                       </span>
-                    ) : '-'}
+                    ) : reliabilityState[s.id] === 'loading' ? (
+                      <span className="text-xs text-gray-400">加载中...</span>
+                    ) : reliabilityState[s.id] === 'no-checks' ? (
+                      <span className="text-xs text-gray-400">暂无检查记录</span>
+                    ) : reliabilityState[s.id] === 'unavailable' ? (
+                      <span className="text-xs text-amber-600">数据暂不可用</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">未加载</span>
+                    )}
                   </td>
                 ))}
               </tr>

@@ -100,7 +100,7 @@ export default function Builder() {
         <span className="text-3xl">🛠️</span>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">MCP Server Builder</h1>
-          <p className="text-sm text-gray-500">在线生成 MCP Server 项目，下载 ZIP 直接使用</p>
+          <p className="text-sm text-gray-500">生成可编辑的 MCP Server 项目脚手架，并下载为 ZIP</p>
         </div>
       </div>
 
@@ -192,7 +192,7 @@ export default function Builder() {
         </button>
 
         <p className="text-xs text-gray-400 text-center">
-          生成的项目包含完整的 MCP Server 代码、README、配置文件，可直接发布到 PyPI/npm
+          生成的项目包含代码、README 和配置文件；发布前请补充实现、依赖声明、测试与版本信息。
         </p>
       </div>
     </div>

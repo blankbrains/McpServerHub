@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -11,6 +12,16 @@ from rich.console import Console
 from mcp_hub.core.config_manager import ConfigManager
 
 _console = Console()
+
+
+def _get_saved_auth_headers() -> dict[str, str]:
+    """读取 CLI 登录令牌，用于访问用户隔离的 Hub 配置接口。"""
+    token_file = Path.home() / ".config" / "mcp-hub" / "token.json"
+    try:
+        token = json.loads(token_file.read_text(encoding="utf-8")).get("token", "")
+    except (OSError, json.JSONDecodeError):
+        token = ""
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 @click.group("config")
@@ -116,20 +127,28 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
         import httpx
 
         api_base = hub_url.rstrip("/") + "/api/v1"
+        auth_headers = _get_saved_auth_headers()
         _console.print(f"[dim]🔗 连接 Hub: {api_base}[/dim]")
 
         try:
             if server_ids:
                 ids = [s.strip() for s in server_ids.split(",")]
                 async with httpx.AsyncClient(timeout=15) as client:
-                    resp = await client.post(f"{api_base}/config/build", json={"servers": ids})
+                    resp = await client.post(
+                        f"{api_base}/config/build",
+                        json={"servers": ids},
+                        headers=auth_headers,
+                    )
                     if resp.status_code != 200:
                         _console.print(f"[red]❌ Hub 返回错误: {resp.status_code}[/red]")
                         return
                     config = resp.json()
             else:
                 async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.get(f"{api_base}/config/download")
+                    resp = await client.get(f"{api_base}/config/download", headers=auth_headers)
+                    if resp.status_code == 401:
+                        _console.print("[red]❌ 请先使用 mcp login 登录后再同步个人配置[/red]")
+                        return
                     if resp.status_code != 200:
                         _console.print(f"[red]❌ Hub 返回错误: {resp.status_code}[/red]")
                         return

@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  ApiRequestError,
+  apiDelete,
+  apiGet,
+  apiPost,
+  getAuthHeaders,
+  getAuthState,
+  uploadConfig,
+} from '../api/client'
 
 interface ConfigServer {
   name: string
-  command: string
+  command?: string
   hub_id?: string
   hub_install_command?: string
   matched?: boolean
+  enabled?: boolean
+  agent?: string
+  group_name?: string
 }
 
 export default function MyConfig() {
@@ -15,186 +27,175 @@ export default function MyConfig() {
   const [downloading, setDownloading] = useState(false)
   const [message, setMessage] = useState('')
   const [trackingStatus, setTrackingStatus] = useState<'idle' | 'uploaded' | 'cancelled'>('idle')
-  const userId = localStorage.getItem('mcp_hub_user')
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const { token, userId } = getAuthState()
 
-  // 加载：优先从服务端，回退到 localStorage
+  const toPreviewServers = (result: any): ConfigServer[] => [
+    ...(result.data?.matched || []).map((server: any) => ({
+      name: server.hub_id || server.local_name,
+      command: server.hub_install_command || server.local_command,
+      hub_id: server.hub_id,
+      matched: true,
+    })),
+    ...(result.data?.unmatched || []).map((server: any) => ({
+      name: `@custom/${server.local_name}`,
+      command: server.local_command,
+      hub_id: `@custom/${server.local_name}`,
+      matched: false,
+    })),
+  ]
+
+  // 账户中的追踪记录是唯一权威来源；浏览器草稿不会替代账户数据。
   useEffect(() => {
     async function load() {
+      if (!token || !userId) {
+        setServers([])
+        setMessage('请先登录后查看和管理自己的追踪配置')
+        setLoading(false)
+        return
+      }
       try {
-        const res = await fetch('/api/v1/config/user-servers', {
-          headers: { 'x-user-id': userId || 'anonymous' }
-        })
-        const r = await res.json()
-        if (r.success && r.data && r.data.length > 0) {
-          setServers(r.data)
-          setTrackingStatus('uploaded')
-          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(r.data))
-          setLoading(false)
-          return
-        }
-      } catch {}
-      // 回退到 localStorage
-      try {
-        const local = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-        if (local.length > 0) {
-          setServers(local)
-          setTrackingStatus('uploaded')
-        }
-      } catch {}
-      finally { setLoading(false) }
+        const result = await apiGet<ConfigServer[]>('/config/user-servers')
+        const currentServers = result.data || []
+        setServers(currentServers)
+        setTrackingStatus(currentServers.length > 0 ? 'uploaded' : 'idle')
+      } catch (error) {
+        setServers([])
+        setMessage(
+          error instanceof ApiRequestError && error.status === 401
+            ? '登录状态已失效，请重新登录'
+            : '加载追踪配置失败，请稍后重试'
+        )
+      } finally {
+        setLoading(false)
+      }
     }
     load()
-  }, [])
+  }, [token, userId])
 
-  // 保存：同时写入 localStorage + 服务端
   const saveToServer = async (srvList: ConfigServer[]) => {
-    try {
-      await fetch('/api/v1/config/user-servers/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': userId || 'anonymous' },
-        body: JSON.stringify({ servers: srvList }),
-      })
-    } catch {}
+    const result: any = await apiPost('/config/user-servers/save', { servers: srvList })
+    if (!result.success) {
+      throw new Error(typeof result.error === 'string' ? result.error : '保存追踪配置失败')
+    }
   }
 
   const removeServer = async (name: string) => {
     if (!window.confirm(`确定要移除 "${name}" 吗？`)) return
-    setServers(prev => prev.filter(s => s.name !== name))
-    // 同步删除服务器上的记录
+    const serverId = servers.find(server => server.name === name)?.hub_id || name
     try {
-      const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
-      await fetch(`/api/v1/config/user-servers/${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-        headers: { 'x-user-id': uid },
-      })
-    } catch {}
-    setMessage(`已移除 ${name}`)
+      await apiDelete(`/config/user-servers/${encodeURIComponent(serverId)}`)
+      setServers(prev => prev.filter(s => (s.hub_id || s.name) !== serverId))
+      setMessage(`已停止追踪 ${name}`)
+    } catch {
+      setMessage(`移除 ${name} 失败，请稍后重试`)
+    }
     setTimeout(() => setMessage(''), 3000)
   }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!token || !userId) {
+      setMessage('请先登录后检查配置')
+      e.target.value = ''
+      return
+    }
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/v1/config/upload', {
-        method: 'POST',
-        body: form,
-        headers: { 'x-user-id': localStorage.getItem('mcp_hub_user') || 'anonymous' },
-      })
-      const result = await res.json()
+      const result = await uploadConfig(file)
       if (result.success && result.data) {
-        const { matched, unmatched } = result.data
-        const seen = new Set(servers.map(s => s.name))
-        const newServers: ConfigServer[] = []
-        for (const m of (matched || [])) {
-          if (!seen.has(m.local_name)) {
-            seen.add(m.local_name)
-            newServers.push({
-              name: m.hub_id || m.local_name,
-              command: m.hub_install_command || m.local_command,
-              hub_id: m.hub_id,
-              matched: true,
-            })
-          }
-        }
-        for (const u of (unmatched || [])) {
-          if (!seen.has(u.local_name)) {
-            seen.add(u.local_name)
-            newServers.push({
-              name: u.local_name,
-              command: u.local_command,
-              matched: false,
-            })
-          }
-        }
-        if (newServers.length > 0) {
-          const merged = [...servers, ...newServers]
-          setServers(merged)
-          localStorage.setItem('mcp_hub_my_servers', JSON.stringify(merged))
-          setMessage(`已检测到 ${newServers.length} 个 Server，请选择是否上传到 Hub 进行监控`)
-          // 重置为 idle，让用户主动选择上传或取消
+        const previewServers = toPreviewServers(result)
+        if (previewServers.length > 0) {
+          setServers(previewServers)
+          setPendingFile(file)
+          setMessage(`已检测到 ${previewServers.length} 个可追踪 Server；确认后将以此文件替换当前追踪列表`)
           setTrackingStatus('idle')
         } else {
-          setMessage('所有 Server 已在列表中')
+          setPendingFile(null)
+          setMessage('配置中没有可追踪的 Server')
         }
       } else {
-        setMessage(result.error || '上传失败')
+        setMessage(typeof result.error === 'string' ? result.error : '检查配置失败')
       }
     } catch {
-      setMessage('上传失败')
+      setMessage('检查配置失败，请确认文件为有效 JSON 后重试')
     }
+    e.target.value = ''
     setTimeout(() => setMessage(''), 5000)
   }
 
-  // === 上传到 Hub：确认追踪 ===
+  // 确认时才请求后端写入记录，并允许后端注册已发现或自定义的 Server。
   const handleUploadToHub = async () => {
     if (servers.length === 0) return
-    await saveToServer(servers)
-    setTrackingStatus('uploaded')
-    setMessage('✅ 已上传到 Hub！你的 MCP Server 将被持续监控')
+    if (!token || !userId) {
+      setMessage('请先登录后开始追踪')
+      return
+    }
+    try {
+      if (pendingFile) {
+        const result = await uploadConfig(pendingFile, '', true)
+        if (!result.success) throw new Error(typeof result.error === 'string' ? result.error : '开始追踪失败')
+        setServers(toPreviewServers(result))
+        setPendingFile(null)
+      } else {
+        await saveToServer(servers)
+      }
+      setTrackingStatus('uploaded')
+      setMessage('已保存到你的追踪列表。健康检查和已上报的调用数据可在监控页查看。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '开始追踪失败，请稍后重试')
+    }
     setTimeout(() => setMessage(''), 4000)
   }
 
-  // === 取消上传：从 Hub 移除所有追踪 ===
+  // 该操作会清空当前账户的个人追踪记录，不影响市场条目或其他用户。
   const handleCancelTracking = async () => {
-    if (!window.confirm('确定要取消上传吗？Hub 将不再追踪你的 MCP Server 配置和调用数据。')) return
-    // 从服务端清除
-    try {
-      for (const s of servers) {
-        const sid = s.hub_id || s.name
-        await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
-          method: 'DELETE',
-          headers: { 'x-user-id': userId || 'anonymous' },
-        })
+    if (trackingStatus !== 'uploaded') {
+      try {
+        const result = await apiGet<ConfigServer[]>('/config/user-servers')
+        const currentServers = result.data || []
+        setServers(currentServers)
+        setPendingFile(null)
+        setTrackingStatus(currentServers.length > 0 ? 'uploaded' : 'cancelled')
+        setMessage('已取消本次待确认的配置，原有追踪列表未修改')
+      } catch {
+        setMessage('取消待确认配置失败，请刷新后重试')
       }
-    } catch {}
-    setServers([])
-    localStorage.removeItem('mcp_hub_my_servers')
-    setTrackingStatus('cancelled')
-    setMessage('已取消上传，你的配置信息已从 Hub 中移除')
+      setTimeout(() => setMessage(''), 4000)
+      return
+    }
+
+    if (!window.confirm('确定要停止追踪并清空当前账户的 Server 列表吗？Hub 将不再保留这些个人追踪记录。')) return
+    try {
+      await saveToServer([])
+      setServers([])
+      setPendingFile(null)
+      setTrackingStatus('cancelled')
+      setMessage('已停止追踪，个人追踪记录已从 Hub 中移除')
+    } catch {
+      setMessage('停止追踪失败，请稍后重试')
+    }
     setTimeout(() => setMessage(''), 4000)
   }
 
   const handleDownload = async () => {
     if (servers.length === 0) return
+    if (!token || !userId) {
+      setMessage('请先登录后下载自己的配置')
+      return
+    }
     setDownloading(true)
     try {
-      const hubIds = servers
-        .filter(s => s.matched && s.hub_id)
-        .map(s => s.hub_id as string)
-
-      if (hubIds.length === 0) {
-        const config: any = { mcpServers: {} }
-        for (const s of servers) {
-          if (s.command) {
-            const parts = s.command.split(' ')
-            config.mcpServers[s.name.split('/').pop() || s.name] = {
-              command: parts[0],
-              args: parts.slice(1),
-            }
-          }
-        }
-        config.mcpServers['mcp-hub-gateway'] = { command: 'mcp', args: ['serve'] }
-        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url; a.download = 'mcp-hub-config.json'; a.click()
-        URL.revokeObjectURL(url)
-      } else {
-        const res = await fetch('/api/v1/config/build', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ servers: hubIds }),
-        })
-        if (!res.ok) throw new Error(`服务器错误: ${res.status}`)
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url; a.download = 'mcp-hub-config.json'; a.click()
-        URL.revokeObjectURL(url)
-      }
+      const res = await fetch('/api/v1/config/download?agent=generic', {
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) throw new Error(`下载失败: ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'mcp-hub-config.json'; a.click()
+      URL.revokeObjectURL(url)
+      setMessage('配置文件已下载')
     } catch (e) { setMessage('❌ 下载失败: ' + (e instanceof Error ? e.message : '')) }
     finally { setDownloading(false) }
   }
@@ -203,12 +204,24 @@ export default function MyConfig() {
     return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载配置中...</div></div>
   }
 
+  if (!token || !userId) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-gray-700 font-medium">登录后检查、追踪和下载属于你自己的 MCP 配置</p>
+          <Link to="/login" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
-          <p className="text-sm text-gray-500 mt-1">上传你的 MCP 配置文件，选择是否上传到 Hub 进行监控</p>
+          <p className="text-sm text-gray-500 mt-1">检查本地 MCP 配置，确认后保存为你的 Hub 追踪列表</p>
         </div>
         <Link to="/market" className="text-sm text-blue-600 hover:text-blue-800">去市场添加 →</Link>
       </div>
@@ -224,8 +237,8 @@ export default function MyConfig() {
           </div>
           <div className="bg-white rounded-lg p-3 border border-blue-100">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">2</span>
-            <p className="font-medium text-gray-800">上传 / 取消</p>
-            <p className="text-xs text-gray-500 mt-0.5">选择是否将配置上传到 Hub 以启用监控追踪</p>
+            <p className="font-medium text-gray-800">确认追踪</p>
+            <p className="text-xs text-gray-500 mt-0.5">确认后才会更新 Hub 中属于你的追踪列表</p>
           </div>
           <div className="bg-white rounded-lg p-3 border border-blue-100">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">3</span>
@@ -235,7 +248,7 @@ export default function MyConfig() {
         </div>
         <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
           <p className="font-medium">💡 说明</p>
-          <p>选择「上传到 Hub」后，Hub 会记录你的 MCP Server 列表。当你通过 Hub 网关调用 MCP 时，调用次数、响应时长等数据会自动记录到监控大屏。选择「取消」则不会被追踪。</p>
+          <p>确认追踪只保存 Server 列表。调用次数、响应时长和 Token 数据需要已授权的本地网关或遥测设备主动上报；取消追踪不会删除市场条目或影响其他用户。</p>
         </div>
       </div>
 
@@ -269,12 +282,12 @@ export default function MyConfig() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-full text-sm font-medium">
-                  ✅ 已上传到 Hub
+                  ✅ 已保存到 Hub
                 </span>
-                <span className="text-sm text-green-700">你的 {servers.length} 个 MCP Server 正在被 Hub 追踪监控</span>
+                <span className="text-sm text-green-700">你的 {servers.length} 个 MCP Server 已在个人追踪列表中</span>
               </div>
               <p className="text-sm text-green-700">
-                当你的 Agent 通过 Hub 网关调用 MCP 时，调用数据（次数、响应时长、Token 消耗）会自动记录。
+                已保存的 Server 可显示服务端状态和健康检查；本地调用数据仅在网关或遥测设备上报后出现。
               </p>
               <button
                 onClick={handleCancelTracking}
@@ -292,7 +305,7 @@ export default function MyConfig() {
                 <span className="text-sm text-gray-500">Hub 不会追踪你的 MCP 配置和调用数据</span>
               </div>
               <p className="text-sm text-gray-500">
-                你的 {servers.length} 个 Server 仍在本地列表中。你可以随时重新上传到 Hub。
+                已停止追踪。重新检查配置并确认后可再次建立追踪记录。
               </p>
               <button
                 onClick={handleUploadToHub}
@@ -307,10 +320,10 @@ export default function MyConfig() {
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-full text-sm font-medium">
                   ⚠️ 待确认
                 </span>
-                <span className="text-sm text-amber-700">检测到 {servers.length} 个 MCP Server，请选择</span>
+                <span className="text-sm text-amber-700">检测到 {servers.length} 个 MCP Server，请确认是否替换当前追踪列表</span>
               </div>
               <p className="text-sm text-amber-700">
-                上传后，Hub 会记录你的 Server 列表并监控调用数据。你也可以随时取消。
+                确认后，Hub 才会保存这份配置；此操作会替换当前账户的追踪 Server 列表。
               </p>
               <div className="flex gap-3">
                 <button
@@ -335,14 +348,14 @@ export default function MyConfig() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-gray-900">
-            已跟踪的 Server <span className="text-gray-400 font-normal">({servers.length})</span>
+            {trackingStatus === 'idle' ? '待确认的 Server' : '已追踪的 Server'} <span className="text-gray-400 font-normal">({servers.length})</span>
           </h2>
           <div className="flex gap-2">
             <button
-              onClick={() => { if (window.confirm('确定要清空所有配置吗？此操作不可撤销。')) { setServers([]); localStorage.removeItem('mcp_hub_my_servers'); setTrackingStatus('cancelled'); setMessage('已清空') } }}
+              onClick={handleCancelTracking}
               className="text-xs text-red-500 hover:text-red-700"
             >
-              清空
+              停止追踪并清空
             </button>
           </div>
         </div>
@@ -377,23 +390,25 @@ export default function MyConfig() {
                     )}
                     <input
                       type="text"
-                      defaultValue={(s as any).group_name || ''}
+                      defaultValue={s.group_name || ''}
                       placeholder="分组..."
                       onBlur={async (e) => {
                         const gname = e.target.value.trim()
-                        if (!gname && !(s as any).group_name) return
-                        const uid = localStorage.getItem('mcp_hub_user')
-                        if (!uid) return
+                        if (!gname && !s.group_name) return
                         try {
-                          const gr = await fetch('/api/v1/config/groups/set', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-                            body: JSON.stringify({ server_id: s.hub_id || s.name, group_name: gname }),
+                          const result: any = await apiPost('/config/groups/set', {
+                            server_id: s.hub_id || s.name,
+                            group_name: gname,
                           })
-                          if (!gr.ok) throw new Error('save failed')
-                          setMessage('✅ 分组已更新')
+                          if (!result.success) throw new Error('保存失败')
+                          setServers(prev => prev.map(server => (
+                            (server.hub_id || server.name) === (s.hub_id || s.name)
+                              ? { ...server, group_name: gname }
+                              : server
+                          )))
+                          setMessage('分组已更新')
                           setTimeout(() => setMessage(''), 2000)
-                        } catch { setMessage('⚠️ 分组保存失败') }
+                        } catch { setMessage('分组保存失败') }
                       }}
                       className="px-1.5 py-0.5 text-xs border border-gray-200 rounded w-20 bg-white focus:ring-1 focus:ring-blue-400 outline-none"
                     />
@@ -415,15 +430,15 @@ export default function MyConfig() {
               {downloading ? '生成中...' : '📥 下载配置文件（用于替换本地 Agent 配置）'}
             </button>
             <p className="text-xs text-gray-400 text-center">
-              下载的配置包含你选择的所有 Server + Hub 网关入口，替换本地 Agent 配置文件并重启后生效
+              下载结果只包含你当前追踪且可生成配置的 Server；替换本地 Agent 配置文件并重启后生效
             </p>
             <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
-              <p className="font-medium mb-1">替换后 Agent 将自动连接以下 Server：</p>
+              <p className="font-medium mb-1">当前追踪列表：</p>
               <ul className="list-disc list-inside space-y-0.5">
                 {servers.map(s => (
                   <li key={s.name}>{s.name}</li>
                 ))}
-                <li className="text-blue-600">mcp-hub-gateway（Hub 网关，用于自动监控）</li>
+                <li className="text-blue-600">mcp-hub-gateway（需配置设备令牌后才会上报本地遥测）</li>
               </ul>
             </div>
           </div>
@@ -454,7 +469,13 @@ export default function MyConfig() {
       </div>
 
       {/* 配置草稿 */}
-      <ConfigDrafts servers={servers} onLoad={(s) => { setServers(s); localStorage.setItem('mcp_hub_my_servers', JSON.stringify(s)); setMessage('✅ 已加载草稿'); setTimeout(() => setMessage(''), 2000) }} />
+      <ConfigDrafts servers={servers} onLoad={(s) => {
+        setServers(s)
+        setPendingFile(null)
+        setTrackingStatus('idle')
+        setMessage('草稿已载入，确认后会替换当前追踪列表')
+        setTimeout(() => setMessage(''), 2000)
+      }} />
     </div>
   )
 }

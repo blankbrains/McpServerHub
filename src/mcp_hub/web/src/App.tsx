@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
@@ -16,8 +16,17 @@ import ProfilePage from './pages/ProfilePage'
 import ComparePage from './pages/ComparePage'
 import NotificationsPage from './pages/NotificationsPage'
 import PresetMarket from './pages/PresetMarket'
+import AdminLayout from './pages/admin/AdminLayout'
+import AdminOverview from './pages/admin/AdminOverview'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminUserDetail from './pages/admin/AdminUserDetail'
+import AdminServers from './pages/admin/AdminServers'
+import AdminServerDetail from './pages/admin/AdminServerDetail'
+import AdminAnalytics from './pages/admin/AdminAnalytics'
+import AdminReviews from './pages/admin/AdminReviews'
+import AdminAuditLog from './pages/admin/AdminAuditLog'
 
-export default function App() {
+function HubRoutes() {
   return (
     <Layout>
       <Routes>
@@ -40,5 +49,23 @@ export default function App() {
         <Route path="/presets" element={<PresetMarket />} />
       </Routes>
     </Layout>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<AdminOverview />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="users/:userId" element={<AdminUserDetail />} />
+        <Route path="servers" element={<AdminServers />} />
+        <Route path="servers/:serverId" element={<AdminServerDetail />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="reviews" element={<AdminReviews />} />
+        <Route path="audit" element={<AdminAuditLog />} />
+      </Route>
+      <Route path="*" element={<HubRoutes />} />
+    </Routes>
   )
 }

@@ -18,7 +18,7 @@ Environment=MCP_HUB_LOG_DIR=/var/log/mcp-hub
 Environment=MCP_HUB_HOST=0.0.0.0
 Environment=MCP_HUB_PORT=3987
 
-ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --host 0.0.0.0 --port 3987 --workers 2 --log-level info
+ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --factory --host 0.0.0.0 --port 3987 --workers 2 --log-level info
 ExecReload=/bin/kill -HUP $MAINPID
 ExecStop=/bin/kill -TERM $MAINPID
 

@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, apiPost, getAuthState, installServer } from '../api/client'
+import {
+  ApiRequestError,
+  apiDelete,
+  apiGet,
+  apiPost,
+  favoriteServer,
+  getFavoriteServers,
+  getAuthState,
+  installServer,
+} from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 
 interface TrackedServer {
@@ -17,6 +26,7 @@ interface TrackedServer {
   call_count_7d: number
   token_consumption: number
   security_level: string
+  install_command: string
 }
 
 type TabId = 'installed' | 'tracked' | 'favorites'
@@ -45,9 +55,7 @@ function fmtUptime(s: number): string {
 
 export default function MyServers() {
   const [servers, setServers] = useState<TrackedServer[]>([])
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
-  })
+  const [favorites, setFavorites] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabId>('installed')
   const [installing, setInstalling] = useState<Set<string>>(new Set())
@@ -55,27 +63,75 @@ export default function MyServers() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [batchActing, setBatchActing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [warningMsg, setWarningMsg] = useState('')
   const [updates, setUpdates] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'track' | 'manage'>('track')
   const [msg, setMsg] = useState('')
 
   const load = async () => {
+    if (!getAuthState().token) {
+      setServers([])
+      setErrorMsg('请先登录后查看和管理自己的 Server')
+      setLoading(false)
+      return
+    }
+
+    setErrorMsg('')
+    setWarningMsg('')
     try {
-      const r = await apiGet<any>('/monitor/dashboard')
-      if (r.data?.servers) setServers(r.data.servers)
-    } catch { setErrorMsg('加载 Server 列表失败') }
+      const configResult = await apiGet<any[]>('/config/user-servers')
+      getFavoriteServers()
+        .then(result => setFavorites((result.data || []).map(server => server.id)))
+        .catch(() => setFavorites([]))
+      let monitorServers: any[] = []
+      try {
+        const monitorResult = await apiGet<any>('/monitor/dashboard')
+        monitorServers = monitorResult.data?.servers || []
+      } catch {
+        setWarningMsg('监控数据暂时不可用，正在显示已保存的追踪配置')
+      }
+      const monitorById = new Map(
+        monitorServers.map((server: any) => [server.server_id, server])
+      )
+      const userServers = (configResult.data || []).map((config: any) => {
+        const serverId = config.hub_id || config.name
+        const monitor: any = monitorById.get(serverId) || {}
+        return {
+          server_id: serverId,
+          name: monitor.name || config.name || serverId,
+          description: monitor.description || '',
+          status: monitor.status || 'not_installed',
+          running: monitor.running || false,
+          enabled: config.enabled !== false,
+          pid: monitor.pid || null,
+          location: monitor.location || 'N/A',
+          uptime_seconds: monitor.uptime_seconds || 0,
+          reliability_score: monitor.reliability_score || 0,
+          call_count_7d: monitor.call_count_7d || 0,
+          token_consumption: monitor.token_consumption || 0,
+          security_level: monitor.security_level || 'unreviewed',
+          install_command: monitor.install_command || '',
+        }
+      })
+      setServers(userServers)
+    } catch (error) {
+      setServers([])
+      setErrorMsg(
+        error instanceof ApiRequestError && error.status === 401
+          ? '登录状态已失效，请重新登录'
+          : '加载 Server 列表失败'
+      )
+    }
     finally { setLoading(false) }
   }
 
   useEffect(() => {
     load()
-    // 检查版本更新
-    const uid = getAuthState().userId || 'anonymous'
-    fetch('/api/v1/servers/check-updates', { headers: { 'x-user-id': uid } })
-      .then(r => r.json())
+    if (!getAuthState().token) return
+    apiGet<{ updates: Array<{ server_id: string }> }>('/servers/check-updates')
       .then(r => {
         if (r.data?.updates) {
-          setUpdates(new Set(r.data.updates.map((u: any) => u.server_id)))
+          setUpdates(new Set(r.data.updates.map(update => update.server_id)))
         }
       })
       .catch(() => {})
@@ -103,19 +159,18 @@ export default function MyServers() {
   }
 
   const toggleEnabled = async (sid: string, current: boolean) => {
-    const { userId: uid } = getAuthState()
-    if (!uid) return
+    if (!getAuthState().token) return
     // 先乐观更新 UI
     const prevEnabled = current
     setServers(prev => prev.map(s =>
       (s.server_id === sid) ? { ...s, enabled: !current } : s
     ))
     try {
-      await fetch('/api/v1/config/user-servers/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': uid },
-        body: JSON.stringify({ server_id: sid, enabled: !current }),
+      const result = await apiPost('/config/user-servers/toggle', {
+        server_id: sid,
+        enabled: !current,
       })
+      if (!result.success) throw new Error('Toggle request was rejected')
     } catch {
       // 回滚乐观更新
       setServers(prev => prev.map(s =>
@@ -130,42 +185,45 @@ export default function MyServers() {
     try {
       await installServer(sid)
       load()
-    } catch {} finally {
+    } catch {
+      setErrorMsg(`安装 ${sid} 失败`)
+    } finally {
       setInstalling(prev => { const n = new Set(prev); n.delete(sid); return n })
+    }
+  }
+
+  const persistFavoriteState = (sid: string, favorited: boolean) => {
+    setFavorites(prev => {
+      return favorited
+        ? [...new Set([...prev, sid])]
+        : prev.filter(favoriteId => favoriteId !== sid)
+    })
+  }
+
+  const toggleFavorite = async (sid: string): Promise<boolean | null> => {
+    try {
+      const result = await favoriteServer(sid)
+      const favorited = Boolean(result.favorited)
+      persistFavoriteState(sid, favorited)
+      return favorited
+    } catch {
+      setErrorMsg('收藏操作失败，请检查登录状态后重试')
+      return null
     }
   }
 
   const handleRemove = async (sid: string) => {
     if (tab === 'favorites') {
       if (!window.confirm(`确定要取消收藏 "${sid}" 吗？`)) return
-      const prevFavorites = [...favorites]
-      const next = favorites.filter(f => f !== sid)
-      setFavorites(next)
-      try {
-        await fetch('/api/v1/community/favorite', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-user-id': getAuthState().userId || 'anonymous' },
-          body: JSON.stringify({ server_id: sid }),
-        })
-        // API 成功后才持久化
-        localStorage.setItem('mcp_hub_favorites', JSON.stringify(next))
-      } catch {
-        setFavorites(prevFavorites)
-        setErrorMsg('取消收藏失败')
+      const favorited = await toggleFavorite(sid)
+      if (favorited) {
+        setErrorMsg('取消收藏未成功，收藏状态已刷新')
       }
       return
     }
     if (!window.confirm(`确定要移除 "${sid}" 吗？`)) return
-    const { userId: uid } = getAuthState()
     try {
-      await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
-        method: 'DELETE',
-        headers: { 'x-user-id': uid || 'anonymous' },
-      })
-      // API 成功后才清理 localStorage
-      const local = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-      const updated = local.filter((x: any) => (x.hub_id || x.name) !== sid)
-      localStorage.setItem('mcp_hub_my_servers', JSON.stringify(updated))
+      await apiDelete(`/config/user-servers/${encodeURIComponent(sid)}`)
       load()
     } catch { setErrorMsg(`移除 ${sid} 失败`) }
   }
@@ -192,30 +250,30 @@ export default function MyServers() {
     if (selected.size === 0) return
     if (action === 'delete' && !window.confirm(`确定要删除选中的 ${selected.size} 个 Server 吗？`)) return
     setBatchActing(true)
-    const { userId: uid } = getAuthState()
     const ids = [...selected]
     let failed = 0
     for (const sid of ids) {
       try {
         if (action === 'enable' || action === 'disable') {
           const enabled = action === 'enable'
-          await fetch('/api/v1/config/user-servers/toggle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-user-id': uid || 'anonymous' },
-            body: JSON.stringify({ server_id: sid, enabled }),
+          const result = await apiPost('/config/user-servers/toggle', {
+            server_id: sid,
+            enabled,
           })
+          if (!result.success) throw new Error('Toggle request was rejected')
         } else if (action === 'start' || action === 'stop') {
           await apiPost(`/servers/${encodeURIComponent(sid)}/${action}`)
         } else if (action === 'delete') {
-          await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
-            method: 'DELETE', headers: { 'x-user-id': uid || 'anonymous' },
-          })
+          await apiDelete(`/config/user-servers/${encodeURIComponent(sid)}`)
         }
       } catch { failed++ }
     }
     setSelected(new Set())
     setBatchActing(false)
-    if (ids.length > 0) load()  // 批量完成后只刷新一次
+    if (ids.length > 0) await load()
+    if (failed > 0) {
+      setErrorMsg(`批量操作完成，但 ${failed}/${ids.length} 个 Server 操作失败`)
+    }
   }
 
   const installed = servers.filter(s => s.status !== 'not_installed')
@@ -320,6 +378,12 @@ export default function MyServers() {
         <div className="p-2 bg-red-50 text-red-700 rounded-lg text-sm flex items-center justify-between">
           <span>{errorMsg}</span>
           <button onClick={() => setErrorMsg('')} className="text-red-400 hover:text-red-600 ml-2">✕</button>
+        </div>
+      )}
+      {warningMsg && (
+        <div className="p-2 bg-yellow-50 text-yellow-800 rounded-lg text-sm flex items-center justify-between">
+          <span>{warningMsg}</span>
+          <button onClick={() => setWarningMsg('')} className="text-yellow-600 hover:text-yellow-800 ml-2">×</button>
         </div>
       )}
 
@@ -443,19 +507,7 @@ export default function MyServers() {
                 </button>
                 <button
                   onClick={async () => {
-                    const isFav = favorites.includes(s.server_id)
-                    const next = isFav ? favorites.filter(f => f !== s.server_id) : [...favorites, s.server_id]
-                    setFavorites(next)
-                    localStorage.setItem('mcp_hub_favorites', JSON.stringify(next))
-                    try {
-                      await fetch('/api/v1/community/favorite', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-user-id': getAuthState().userId || 'anonymous' },
-                        body: JSON.stringify({ server_id: s.server_id }),
-                      })
-                    } catch {
-                      setFavorites(isFav ? [...favorites, s.server_id] : favorites.filter(f => f !== s.server_id))
-                    }
+                    await toggleFavorite(s.server_id)
                   }}
                   className={`text-xs px-2 py-1 rounded font-medium ${
                     favorites.includes(s.server_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 # 各 Agent 配置文件路径
@@ -29,6 +30,17 @@ AGENT_CONFIGS = {
         "paths": [Path.home() / ".trae" / "mcp.json"],
         "server_key": "mcpServers",
     },
+    "vscode-copilot": {
+        "name": "VS Code Copilot",
+        "paths": [Path.home() / ".copilot" / "mcp-config.json"],
+        "server_key": "servers",
+        "requires_stdio_type": True,
+    },
+    "windsurf": {
+        "name": "Windsurf",
+        "paths": [Path.home() / ".codeium" / "windsurf" / "mcp_config.json"],
+        "server_key": "mcpServers",
+    },
     "generic": {
         "name": "通用 mcp.json",
         "paths": [Path.home() / ".config" / "mcp-hub" / "mcp.json"],
@@ -37,15 +49,35 @@ AGENT_CONFIGS = {
 }
 
 
+def _command_config(command: str) -> dict[str, object]:
+    """Convert a shell command into the MCP command/args representation."""
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        parts = []
+
+    if not parts:
+        return {"command": command.strip()}
+
+    config: dict[str, object] = {"command": parts[0]}
+    if len(parts) > 1:
+        config["args"] = parts[1:]
+    return config
+
+
 def get_config_for_agent(
     server_name: str, command: str, agent: str = "generic"
 ) -> dict:
     """生成指定 Agent 的配置片段。"""
     cfg = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
+    server_config = _command_config(command)
+    if cfg.get("requires_stdio_type"):
+        server_config = {"type": "stdio", **server_config}
+
     return {
         "agent": cfg["name"],
         "config_path": str(cfg["paths"][0]),
-        "config_content": {cfg["server_key"]: {server_name: {"command": command}}},
+        "config_content": {cfg["server_key"]: {server_name: server_config}},
     }
 
 

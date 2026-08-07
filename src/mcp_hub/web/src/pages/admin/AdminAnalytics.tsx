@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAuthState, apiGet } from '../../api/client'
+import { apiGet } from '../../api/client'
 
 export default function AdminAnalytics() {
   const [days, setDays] = useState(7)
@@ -8,11 +8,11 @@ export default function AdminAnalytics() {
   const [topUsers, setTopUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    const uid = getAuthState().userId || 'anonymous'
     Promise.all([
       apiGet<any[]>(`/admin/analytics/daily?days=${days}`),
       apiGet<any[]>(`/admin/analytics/top-servers?days=${days}`),
@@ -21,11 +21,10 @@ export default function AdminAnalytics() {
       setTrend(t?.data || [])
       setTopServers(s?.data || [])
       setTopUsers(u?.data || [])
-    }).catch((e) => {
-      console.error('Analytics load failed:', e)
+    }).catch(() => {
       setError('加载分析数据失败')
     }).finally(() => setLoading(false))
-  }, [days])
+  }, [days, reloadKey])
 
   const maxCalls = Math.max(...trend.map((d: any) => d.calls), 1)
 
@@ -34,7 +33,7 @@ export default function AdminAnalytics() {
   if (error) return (
     <div className="text-center py-16">
       <p className="text-red-500 mb-4">{error}</p>
-      <button onClick={() => setDays(days)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">重试</button>
+      <button onClick={() => setReloadKey(value => value + 1)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">重试</button>
     </div>
   )
 

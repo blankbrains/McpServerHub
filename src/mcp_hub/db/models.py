@@ -200,3 +200,43 @@ class PresetModel(Base):
     rating = Column(Float, default=0.0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class TelemetryDeviceModel(Base):
+    """可撤销的本地 Agent 遥测设备凭证。"""
+
+    __tablename__ = "telemetry_devices"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+    last_seen_at = Column(DateTime, nullable=True, index=True)
+    revoked_at = Column(DateTime, nullable=True, index=True)
+
+
+class TelemetryEventModel(Base):
+    """本地 Agent 上报的最小化遥测事件，不保存请求或响应正文。"""
+
+    __tablename__ = "telemetry_events"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    device_id = Column(
+        String(64),
+        ForeignKey("telemetry_devices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(32), nullable=False, index=True)
+    server_id = Column(String(255), default="", index=True)
+    tool_name = Column(String(255), default="")
+    status = Column(String(32), default="ok", index=True)
+    duration_ms = Column(Integer, default=0)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cpu_percent = Column(Float, nullable=True)
+    memory_bytes = Column(Integer, nullable=True)
+    occurred_at = Column(DateTime, nullable=False, index=True)
+    received_at = Column(DateTime, server_default=func.now(), index=True)

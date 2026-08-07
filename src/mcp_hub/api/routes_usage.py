@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Query
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
@@ -58,7 +58,7 @@ async def record_usage(
                     continue
                 session.add(UsageStatsModel(
                     server_id=sid,
-                    user_id=rec.get("user_id", user_id),
+                    user_id=user_id,
                     tool_name=rec.get("tool_name", ""),
                     status=rec.get("status", "ok"),
                     duration_ms=rec.get("duration_ms", 0),
@@ -83,7 +83,10 @@ async def record_usage(
                         user_id=user_id,
                         notif_type="alert",
                         title=f"Server 调用异常: {sid.split('/')[-1]}",
-                        message=f"工具 {rec.get('tool_name', 'unknown')} 调用失败，耗时 {rec.get('duration_ms', 0)}ms",
+                        message=(
+                            f"工具 {rec.get('tool_name', 'unknown')} 调用失败，"
+                            f"耗时 {rec.get('duration_ms', 0)}ms"
+                        ),
                         server_id=sid,
                         link=f"/servers/{sid}",
                     )
@@ -101,29 +104,26 @@ async def record_usage(
 @router.get("/usage/stats")
 async def get_usage_stats(
     server_id: str = "",
-    filter_user_id: str = "",
     user_id: str = Depends(get_current_user),
-    days: int = 7,
+    days: int = Query(7, ge=1, le=365),
 ):
-    """查询使用统计（支持按 server_id 或 user_id 过滤）。
+    """查询当前用户的使用统计。
 
     Query params:
     - server_id: 可选，不传则返回所有 Server 的统计
-    - filter_user_id: 可选，不传则返回所有用户的统计
     - days: 统计天数 (default 7)
     """
-    from sqlalchemy import func, select, text
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import case, func, select
 
     async with async_session_factory() as session:
-        time_filter = text(f"created_at >= datetime('now', '-{days} days')")
-        if "postgresql" in str(session.get_bind().url):
-            time_filter = text(f"created_at >= NOW() - INTERVAL '{days} days'")
-
-        filters = [time_filter]
+        filters = [
+            UsageStatsModel.created_at >= datetime.utcnow() - timedelta(days=days),
+            UsageStatsModel.user_id == user_id,
+        ]
         if server_id:
             filters.append(UsageStatsModel.server_id == server_id)
-        if filter_user_id:
-            filters.append(UsageStatsModel.user_id == filter_user_id)
 
         result = await session.execute(
             select(
@@ -132,10 +132,10 @@ async def get_usage_stats(
                 func.avg(UsageStatsModel.duration_ms).label("avg_duration_ms"),
                 func.sum(UsageStatsModel.token_count).label("total_tokens"),
                 func.sum(
-                    func.case((UsageStatsModel.status == "ok", 1), else_=0)
+                    case((UsageStatsModel.status == "ok", 1), else_=0)
                 ).label("ok_count"),
                 func.sum(
-                    func.case((UsageStatsModel.status == "error", 1), else_=0)
+                    case((UsageStatsModel.status == "error", 1), else_=0)
                 ).label("error_count"),
             )
             .where(*filters)

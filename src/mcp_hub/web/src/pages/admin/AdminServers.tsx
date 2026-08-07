@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getAuthState } from '../../api/client'
+import { apiGet } from '../../api/client'
 
 export default function AdminServers() {
   const [servers, setServers] = useState<any[]>([])
@@ -8,17 +8,32 @@ export default function AdminServers() {
   const [page, setPage] = useState(1)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState('installs')
+  const [securityLevel, setSecurityLevel] = useState('')
   const [loading, setLoading] = useState(true)
-  const uid = getAuthState().userId || 'anonymous'
-
-  const load = () => {
+  const [error, setError] = useState('')
+  const load = async () => {
     setLoading(true)
-    fetch(`/api/v1/admin/servers?q=${encodeURIComponent(q)}&sort=${sort}&page=${page}&page_size=20`, { headers: { 'x-user-id': uid } })
-      .then(r => r.json()).then(r => { setServers(r.data || []); setTotal(r.meta?.total || 0) })
-      .catch(() => {}).finally(() => setLoading(false))
+    setError('')
+    try {
+      const params = new URLSearchParams({
+        q,
+        sort,
+        page: String(page),
+        page_size: '20',
+      })
+      if (securityLevel) params.set('security_level', securityLevel)
+      const result = await apiGet<any[]>(`/admin/servers?${params}`)
+      setServers(result.data || [])
+      setTotal(result.meta?.total || 0)
+    } catch {
+      setServers([])
+      setTotal(0)
+      setError('Server 列表加载失败，请检查管理员权限后重试')
+    } finally {
+      setLoading(false)
+    }
   }
-  useEffect(() => { load() }, [page, sort])
-  useEffect(() => { setPage(1); load() }, [q])
+  useEffect(() => { load() }, [page, sort, q, securityLevel])
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
   const secLabels: Record<string, string> = { verified: '🟢', reviewed: '🟡', unreviewed: '🟠', blocked: '🔴' }
@@ -33,7 +48,7 @@ export default function AdminServers() {
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="installs">按安装数</option><option value="calls">按调用量</option><option value="rating">按评分</option>
         </select>
-        <select onChange={e => { setQ(e.target.value); setPage(1) }}
+        <select value={securityLevel} onChange={e => { setSecurityLevel(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="">全部安全等级</option>
           <option value="verified">🟢 安全认证</option><option value="reviewed">🟡 已审查</option>
@@ -41,7 +56,12 @@ export default function AdminServers() {
         </select>
       </div>
 
-      {loading ? <div className="text-center py-8 text-gray-400">加载中...</div> : (
+      {error ? (
+        <div className="text-center py-12 text-red-600">
+          <p>{error}</p>
+          <button onClick={load} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
+        </div>
+      ) : loading ? <div className="text-center py-8 text-gray-400">加载中...</div> : (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
@@ -50,7 +70,9 @@ export default function AdminServers() {
               <th className="px-4 py-2 text-right">评分</th><th className="px-4 py-2">安全</th>
             </tr></thead>
             <tbody>
-              {servers.map(s => (
+              {servers.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">没有符合筛选条件的 Server</td></tr>
+              ) : servers.map(s => (
                 <tr key={s.server_id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                   onClick={() => window.location.href = `/admin/servers/${encodeURIComponent(s.server_id)}`}>
                   <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-gray-200">{s.name || s.server_id}</td>

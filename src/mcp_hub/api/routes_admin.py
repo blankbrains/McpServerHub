@@ -141,12 +141,15 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
 async def admin_users(
     admin_user: str = Depends(get_admin_user),
     q: str = "",
+    role: str = "",
     sort: str = "calls",
     page: int = 1,
     page_size: int = Query(20, le=100),
 ):
 
     async with async_session_factory() as session:
+        if role not in ("", "user", "admin"):
+            return {"success": False, "error": "role 必须是 user 或 admin"}
         is_pg = "postgresql" in str(session.get_bind().url)
         days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
 
@@ -166,6 +169,8 @@ async def admin_users(
             count_stmt = count_stmt.where(
                 (UserModel.id.ilike(f"%{q}%")) | (UserModel.display_name.ilike(f"%{q}%"))
             )
+        if role:
+            count_stmt = count_stmt.where(UserModel.role == role)
         total = (await session.execute(count_stmt)).scalar() or 0
 
         # 主查询
@@ -186,6 +191,8 @@ async def admin_users(
             main_stmt = main_stmt.where(
                 (UserModel.id.ilike(f"%{q}%")) | (UserModel.display_name.ilike(f"%{q}%"))
             )
+        if role:
+            main_stmt = main_stmt.where(UserModel.role == role)
         main_stmt = main_stmt.group_by(
             UserModel.id, stats_sub.c.calls_7d, stats_sub.c.tokens_7d, stats_sub.c.last_active
         )
@@ -386,13 +393,25 @@ async def admin_update_role(user_id: str, data: dict = Body(...), admin_user: st
 async def admin_servers(
     admin_user: str = Depends(get_admin_user),
     q: str = "", category: str = "",
+    security_level: str = "",
     sort: str = "installs",
     page: int = 1, page_size: int = Query(20, le=100),
 ):
 
     async with async_session_factory() as session:
+        if security_level not in ("", "verified", "reviewed", "unreviewed", "blocked"):
+            return {"success": False, "error": "无效的安全等级"}
         is_pg = "postgresql" in str(session.get_bind().url)
         days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
+        calls_subquery = (
+            select(
+                UsageStatsModel.server_id.label("server_id"),
+                func.count().label("calls_7d"),
+            )
+            .where(days7)
+            .group_by(UsageStatsModel.server_id)
+            .subquery()
+        )
 
         count_stmt = select(func.count()).select_from(ServerModel)
         if q:
@@ -401,18 +420,24 @@ async def admin_servers(
             )
         if category:
             count_stmt = count_stmt.where(ServerModel.categories.ilike(f"%{category}%"))
+        if security_level:
+            count_stmt = count_stmt.where(ServerModel.security_level == security_level)
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        stmt = select(ServerModel)
+        stmt = select(ServerModel).outerjoin(
+            calls_subquery, calls_subquery.c.server_id == ServerModel.id
+        )
         if q:
             stmt = stmt.where((ServerModel.id.ilike(f"%{q}%")) | (ServerModel.name.ilike(f"%{q}%")))
         if category:
             stmt = stmt.where(ServerModel.categories.ilike(f"%{category}%"))
+        if security_level:
+            stmt = stmt.where(ServerModel.security_level == security_level)
 
         if sort == "rating":
             stmt = stmt.order_by(ServerModel.rating.desc())
         elif sort == "calls":
-            stmt = stmt.order_by(ServerModel.download_count.desc())
+            stmt = stmt.order_by(func.coalesce(calls_subquery.c.calls_7d, 0).desc())
         else:
             stmt = stmt.order_by(ServerModel.download_count.desc())
 

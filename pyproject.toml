@@ -23,6 +23,7 @@ dependencies = [
     "psutil>=5.9.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
+    "python-multipart>=0.0.20",
     "rich>=13.0.0",
     "sqlalchemy>=2.0.0",
     "asyncpg>=0.29.0",
@@ -56,6 +57,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_hub"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/mcp_hub/web/static" = "mcp_hub/web/static"
 
 [tool.ruff]
 line-length = 100

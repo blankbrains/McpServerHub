@@ -1,28 +1,25 @@
 """FastAPI 认证/鉴权依赖"""
-from typing import Optional
-from fastapi import Header, HTTPException, Depends
+
+from fastapi import Depends, Header, HTTPException
+
 from mcp_hub.core.auth import AuthService
-from mcp_hub.config import get_settings
 
 
 async def get_current_user(
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
+    authorization: str | None = Header(None),
+    x_user_id: str | None = Header(None, alias="x-user-id"),
 ) -> str:
     """
     验证用户身份，返回 user_id.
-    优先级: Authorization: Bearer <token> > x-user-id header (deprecated)
     """
+    _ = x_user_id  # Legacy header is accepted by FastAPI but never trusted.
     auth_service = AuthService()
 
     if authorization and authorization.startswith("Bearer "):
         token = authorization[7:]
-        payload = auth_service.verify_token(token)
+        payload = await auth_service.verify_token(token)
         if payload:
             return payload["sub"]
-
-    if x_user_id and x_user_id not in ("anonymous", "api-user", ""):
-        return x_user_id
 
     raise HTTPException(status_code=401, detail="需要登录")
 
@@ -31,8 +28,8 @@ async def get_admin_user(
     user_id: str = Depends(get_current_user),
 ) -> str:
     """要求管理员权限"""
-    from mcp_hub.db.repositories import UserRepository
     from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.repositories import UserRepository
 
     async with async_session_factory() as session:
         repo = UserRepository(session)
@@ -43,9 +40,9 @@ async def get_admin_user(
 
 
 async def get_optional_user(
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None, alias="x-user-id"),
-) -> Optional[str]:
+    authorization: str | None = Header(None),
+    x_user_id: str | None = Header(None, alias="x-user-id"),
+) -> str | None:
     """返回 user_id 或 None（允许匿名访问的市场/搜索端点）"""
     try:
         return await get_current_user(authorization=authorization, x_user_id=x_user_id)

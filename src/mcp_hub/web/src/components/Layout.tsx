@@ -76,16 +76,23 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   // 轮询未读通知数
   useEffect(() => {
+    if (!auth.token) {
+      setUnreadNotif(0)
+      return
+    }
+
     const poll = async () => {
       try {
         const r = await apiGet<{ count: number }>('/notifications/unread-count')
         if (r.data) setUnreadNotif(r.data.count || 0)
-      } catch (e) { console.error('Notification poll failed:', e) }
+      } catch {
+        // Keep the last known count while the optional notification request is unavailable.
+      }
     }
     poll()
     const t = setInterval(poll, 30000)
     return () => clearInterval(t)
-  }, [auth.userId])
+  }, [auth.token])
 
   useEffect(() => {
     setAuthState(getAuthState())

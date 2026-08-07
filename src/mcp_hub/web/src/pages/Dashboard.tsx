@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE,
-  ServerInfo, downloadConfig, uploadConfig, getMonitorSummary, getTopReliable,
+  ServerInfo, downloadConfig, getAuthHeaders, getAuthState, getFavoriteServers, uploadConfig, getMonitorSummary, getTopReliable,
 } from '../api/client'
 import ServerCard from '../components/ServerCard'
 import LogViewer from '../components/LogViewer'
 
 export default function Dashboard() {
+  const auth = getAuthState()
+  const isAuthenticated = Boolean(auth.token)
+  const userId = auth.userId
   const [health, setHealth] = useState<any>(null)
   const [trending, setTrending] = useState<ServerInfo[]>([])
   const [topRated, setTopRated] = useState<ServerInfo[]>([])
@@ -22,9 +25,7 @@ export default function Dashboard() {
   const [logSearchQuery, setLogSearchQuery] = useState('')
   const [logSearching, setLogSearching] = useState(false)
   const [logResults, setLogResults] = useState<any[]>([])
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]') } catch { return [] }
-  })
+  const [favorites, setFavorites] = useState<string[]>([])
   const [recent, setRecent] = useState<ServerInfo[]>(() => {
     try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
   })
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const [monitorSummary, setMonitorSummary] = useState<any>(null)
   const [topReliable, setTopReliable] = useState<any[]>([])
   const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
+  const [updateServerIds, setUpdateServerIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     async function load() {
@@ -74,9 +76,8 @@ export default function Dashboard() {
     getMonitorSummary().then(r => setMonitorSummary(r.data)).catch(() => {})
     getTopReliable(5).then(r => setTopReliable(r.data || [])).catch(() => {})
     // 加载个性化推荐
-    const uid = localStorage.getItem('mcp_hub_user')
-    if (uid) {
-      apiGet<ServerInfo[]>(`/market/recommendations?user_id=${encodeURIComponent(uid)}&limit=6`)
+    if (userId) {
+      apiGet<ServerInfo[]>(`/market/recommendations?user_id=${encodeURIComponent(userId)}&limit=6`)
         .then(r => setRecommendations(r.data || [])).catch(() => setRecommendations([]))
     }
 
@@ -86,12 +87,10 @@ export default function Dashboard() {
     return () => es.close()
   }, [])
 
-  // Listen for storage changes (favorites from other tabs)
+  // Recent items are local UI history. Favorites are account data and load from the API below.
   useEffect(() => {
     const handler = () => {
       try {
-        const fav = JSON.parse(localStorage.getItem('mcp_hub_favorites') || '[]')
-        setFavorites(fav)
         const rec = JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]')
         setRecent(rec)
       } catch {}
@@ -102,15 +101,26 @@ export default function Dashboard() {
 
   // 加载用户追踪的 Server（SaaS 概览数据源）
   useEffect(() => {
-    const uid = localStorage.getItem('mcp_hub_user')
-    if (uid) {
+    if (isAuthenticated) {
       apiGet<any[]>('/config/user-servers')
         .then(r => setUserServers(r.data || []))
         .catch(() => {})
+      getFavoriteServers()
+        .then(r => setFavorites((r.data || []).map(server => server.id)))
+        .catch(() => setFavorites([]))
+      apiGet<{ updates: Array<{ server_id: string }> }>('/servers/check-updates')
+        .then(r => setUpdateServerIds(new Set((r.data?.updates || []).map(update => update.server_id))))
+        .catch(() => setUpdateServerIds(new Set()))
+    } else {
+      setFavorites([])
     }
-  }, [])
+  }, [isAuthenticated, userId])
 
   const handleDownloadConfig = async () => {
+    if (!isAuthenticated) {
+      setError('请先登录后下载自己的配置')
+      return
+    }
     try {
       const blob = await downloadConfig()
       const url = URL.createObjectURL(blob)
@@ -123,6 +133,10 @@ export default function Dashboard() {
   const handleUploadConfig = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!isAuthenticated) {
+      setUploadResult({ success: false, message: '请先登录后上传配置' })
+      return
+    }
     try {
       const r = await uploadConfig(file)
       setUploadResult(r)
@@ -149,8 +163,23 @@ export default function Dashboard() {
   }
 
   // === SaaS 概览数据 ===
-  const userId = localStorage.getItem('mcp_hub_user')
-  const saasServers = userServers.length > 0 ? userServers : trackedServers
+  const monitorById = new Map(
+    trackedServers.map((server: any) => [server.server_id, server])
+  )
+  const saasServers = isAuthenticated
+    ? userServers.map((config: any) => {
+      const serverId = config.hub_id || config.name
+      const monitor: any = monitorById.get(serverId) || {}
+      return {
+        ...monitor,
+        id: serverId,
+        server_id: serverId,
+        name: monitor.name || config.name || serverId,
+        security_level: monitor.security_level || 'unreviewed',
+        has_update: updateServerIds.has(serverId),
+      }
+    })
+    : []
   const trackedCount = saasServers.length
   const updateCount = saasServers.filter((s: any) => s.has_update).length
   const riskCount = saasServers.filter((s: any) => {
@@ -429,11 +458,10 @@ export default function Dashboard() {
               if (!logSearchQuery.trim()) return
               setLogSearching(true); setLogResults([])
               try {
-                const uid = localStorage.getItem('mcp_hub_user') || 'anonymous'
-              const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`, {
-                headers: { 'x-user-id': uid },
-              })
-              const d = await r.json()
+                const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`, {
+                  headers: getAuthHeaders(),
+                })
+                const d = await r.json()
                 setLogResults(d.data || [])
               } catch { setLogResults([]) }
               finally { setLogSearching(false) }
