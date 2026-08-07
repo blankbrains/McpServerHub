@@ -11,7 +11,7 @@ from mcp_hub.logging_config import configure_logging
 
 configure_logging()
 
-from mcp_hub.api.app import create_app
+from mcp_hub.api.app import create_app  # noqa: E402
 
 app = create_app(dev=True)
 

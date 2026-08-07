@@ -34,13 +34,16 @@ def rate(server_id: str, rating: int):
 def review(server_id: str, content: str | None):
     """写/看评价。"""
     if content:
+
         async def _run():
             async with async_session_factory() as session:
                 repo = ReviewRepository(session)
                 await repo.rate(server_id, "local-user", 5, content)
             click.echo("✅ 评价已提交")
+
         asyncio.run(_run())
     else:
+
         async def _run():
             async with async_session_factory() as session:
                 repo = ReviewRepository(session)
@@ -52,6 +55,7 @@ def review(server_id: str, content: str | None):
             for r in reviews:
                 stars = "⭐" * r["rating"] + "☆" * (5 - r["rating"])
                 click.echo(f"  {stars} {r.get('content', '')[:100]}")
+
         asyncio.run(_run())
 
 
@@ -59,6 +63,7 @@ def review(server_id: str, content: str | None):
 @click.argument("server_id", required=True)
 def favorite(server_id: str):
     """收藏 Server。"""
+
     async def _run():
         async with async_session_factory() as session:
             repo = UserRepository(session)
@@ -67,12 +72,14 @@ def favorite(server_id: str):
             click.echo(f"✅ {server_id} 已收藏")
         else:
             click.echo(f"✅ {server_id} 已取消收藏")
+
     asyncio.run(_run())
 
 
 @click.command("favorites")
 def favorites():
     """查看收藏列表。"""
+
     async def _run():
         async with async_session_factory() as session:
             repo = UserRepository(session)
@@ -83,4 +90,5 @@ def favorites():
         click.echo(f"\n⭐ 收藏 ({len(favs)}):\n")
         for s in favs:
             click.echo(f"  ⭐ {s['id']} — {s.get('description', '')[:60]}")
+
     asyncio.run(_run())

@@ -16,6 +16,7 @@ from mcp_hub.core.auth import AuthService
 @click.command("login")
 def login():
     """使用 GitHub 登录。"""
+
     async def _run():
         auth = AuthService()
         url = auth.get_github_login_url()
@@ -37,10 +38,14 @@ def login():
             if result.get("success"):
                 token_file = Path.home() / ".config" / "mcp-hub" / "token.json"
                 token_file.parent.mkdir(parents=True, exist_ok=True)
-                token_file.write_text(json.dumps({
-                    "token": result["token"],
-                    "user_id": result["user_id"],
-                }))
+                token_file.write_text(
+                    json.dumps(
+                        {
+                            "token": result["token"],
+                            "user_id": result["user_id"],
+                        }
+                    )
+                )
                 click.echo(f"✅ 登录成功！欢迎 {result['user_id']}")
             else:
                 click.echo(f"❌ 登录失败: {result.get('error', '未知错误')}")

@@ -18,14 +18,15 @@ async def _prepare_notifications() -> tuple[int, int]:
 
     async with async_session_factory() as session:
         await session.execute(delete(NotificationModel))
-        session.add_all([
-            NotificationModel(user_id="alice", type="alert", title="Alice alert"),
-            NotificationModel(user_id="bob", type="alert", title="Bob alert"),
-        ])
+        session.add_all(
+            [
+                NotificationModel(user_id="alice", type="alert", title="Alice alert"),
+                NotificationModel(user_id="bob", type="alert", title="Bob alert"),
+            ]
+        )
         await session.commit()
         result = await session.execute(
-            select(NotificationModel.id, NotificationModel.user_id)
-            .order_by(NotificationModel.id)
+            select(NotificationModel.id, NotificationModel.user_id).order_by(NotificationModel.id)
         )
         ids = {user_id: notification_id for notification_id, user_id in result.fetchall()}
     return ids["alice"], ids["bob"]
@@ -38,9 +39,7 @@ async def test_delete_notification_is_scoped_to_current_user() -> None:
 
     assert result["success"] is True
     async with async_session_factory() as session:
-        remaining_users = set(
-            (await session.execute(select(NotificationModel.user_id))).scalars()
-        )
+        remaining_users = set((await session.execute(select(NotificationModel.user_id))).scalars())
     assert remaining_users == {"bob"}
 
     with pytest.raises(HTTPException, match="通知不存在"):

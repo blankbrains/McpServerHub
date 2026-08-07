@@ -21,14 +21,16 @@ async def list_tools():
     for name in builder.available_tools():
         t = builder.get_tool(name)
         if t:
-            tools.append({
-                "name": name,
-                "description": t.description,
-                "params": [
-                    {"name": p["name"], "type": p["type"], "description": p["description"]}
-                    for p in t.params
-                ],
-            })
+            tools.append(
+                {
+                    "name": name,
+                    "description": t.description,
+                    "params": [
+                        {"name": p["name"], "type": p["type"], "description": p["description"]}
+                        for p in t.params
+                    ],
+                }
+            )
     return {"success": True, "data": tools}
 
 

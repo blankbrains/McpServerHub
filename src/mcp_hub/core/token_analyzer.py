@@ -30,6 +30,7 @@ _TOKENIZER_WARNING_SHOWN = False
 
 try:
     import tiktoken
+
     _TOKENIZER = tiktoken.get_encoding("cl100k_base")
 except ImportError:
     pass
@@ -41,23 +42,34 @@ except ImportError:
 CONTEXT_WINDOW_SIZE = 100_000
 
 # 行业基准数据（来自 2026 年 MCP 生态调研）
-AVG_TOOL_DESC_TOKENS = 85        # 平均每个工具描述的 token 数
+AVG_TOOL_DESC_TOKENS = 85  # 平均每个工具描述的 token 数
 AVG_TOOL_PARAM_SCHEMA_TOKENS = 120  # 平均每个工具参数 Schema 的 token 数
-AVG_TOOLS_PER_SERVER = 5         # 平均每个 Server 的工具数
-AVG_SERVER_TOTAL_TOKENS = 1025   # 平均每个 Server 的完整工具定义 token 数
-MAX_SAFE_TOOL_PCT = 16           # 所有工具定义不应超过上下文的 16%
+AVG_TOOLS_PER_SERVER = 5  # 平均每个 Server 的工具数
+AVG_SERVER_TOTAL_TOKENS = 1025  # 平均每个 Server 的完整工具定义 token 数
+MAX_SAFE_TOOL_PCT = 16  # 所有工具定义不应超过上下文的 16%
 
 # 优化策略
 NAME_REDUNDANT_PREFIXES = [
-    r"^mcp[-_]server[-_]", r"^server[-_]", r"^tool[-_]",
-    r"^mcp[-_]", r"^ai[-_]",
+    r"^mcp[-_]server[-_]",
+    r"^server[-_]",
+    r"^tool[-_]",
+    r"^mcp[-_]",
+    r"^ai[-_]",
 ]
 
 DESC_REDUNDANT_PREFIXES = [
-    "A tool that ", "A function that ", "A utility that ",
-    "A helper that ", "This tool ", "This function ",
-    "Tool for ", "Function for ", "Utility for ",
-    "用来", "一个用于", "这是一个",
+    "A tool that ",
+    "A function that ",
+    "A utility that ",
+    "A helper that ",
+    "This tool ",
+    "This function ",
+    "Tool for ",
+    "Function for ",
+    "Utility for ",
+    "用来",
+    "一个用于",
+    "这是一个",
 ]
 
 DESC_OPTIMAL_MAX_LENGTH = 200
@@ -69,6 +81,7 @@ PARAM_DESC_OPTIMAL_MAX_LENGTH = 100
 
 class OptimizationStrategy(Enum):
     """优化策略类型。"""
+
     SHORTEN_DESCRIPTION = "shorten_description"
     REMOVE_REDUNDANT_PREFIX = "remove_redundant_prefix"
     SHORTEN_PARAM_DESC = "shorten_param_desc"
@@ -79,6 +92,7 @@ class OptimizationStrategy(Enum):
 @dataclass
 class TokenBreakdown:
     """单个字段的 Token 明细。"""
+
     field_name: str
     raw_text: str
     char_count: int
@@ -89,6 +103,7 @@ class TokenBreakdown:
 @dataclass
 class ToolTokenDetail:
     """单个工具的 Token 消耗详情。"""
+
     tool_name: str
     total_tokens: int
     breakdown: list[TokenBreakdown] = field(default_factory=list)
@@ -98,6 +113,7 @@ class ToolTokenDetail:
 @dataclass
 class AnalysisReport:
     """完整分析报告。"""
+
     server_id: str
     total_tokens: int
     context_usage_pct: float  # 占上下文窗口百分比
@@ -112,6 +128,7 @@ class AnalysisReport:
 @dataclass
 class OptimizationSuggestion:
     """单条优化建议。"""
+
     strategy: OptimizationStrategy
     tool_name: str
     field: str
@@ -123,6 +140,7 @@ class OptimizationSuggestion:
 @dataclass
 class OptimizationResult:
     """优化结果。"""
+
     server_id: str
     original_tokens: int
     optimized_tokens: int
@@ -152,10 +170,11 @@ class Tokenizer:
         # 字符估算：中文约 1.2 chars/token，英文约 1.7 chars/token
         char_count = len(text)
         # 简单启发：中文比例越高，chars/token 越低
-        chinese_chars = sum(1 for c in text if '一' <= c <= '鿿')
+        chinese_chars = sum(1 for c in text if "一" <= c <= "鿿")
         ratio = 1.2 if chinese_chars > len(text) * 0.3 else 1.7
         if not _TOKENIZER_WARNING_SHOWN:
             import warnings
+
             warnings.warn("tiktoken 未安装，使用字符估算模式（精度较低）", stacklevel=2)
             _TOKENIZER_WARNING_SHOWN = True
         return max(1, int(char_count / ratio))
@@ -199,10 +218,10 @@ class Optimizer:
         truncated = desc[:max_length]
         last_period = truncated.rfind("。")
         if last_period > max_length * 0.5:
-            return truncated[:last_period + 1]
+            return truncated[: last_period + 1]
         last_dot = truncated.rfind(". ")
         if last_dot > max_length * 0.5:
-            return truncated[:last_dot + 1]
+            return truncated[: last_dot + 1]
         return truncated + "..."
 
     @staticmethod
@@ -211,7 +230,7 @@ class Optimizer:
         for prefix in DESC_REDUNDANT_PREFIXES:
             if desc.startswith(prefix):
                 # 首字母小写（英文）
-                rest = desc[len(prefix):]
+                rest = desc[len(prefix) :]
                 if rest and rest[0].isupper():
                     rest = rest[0].lower() + rest[1:]
                 return rest
@@ -241,15 +260,16 @@ class Optimizer:
                 compressed[key] = Optimizer.compress_schema(value)
             elif isinstance(value, list):
                 compressed[key] = [
-                    Optimizer.compress_schema(v) if isinstance(v, dict) else v
-                    for v in value
+                    Optimizer.compress_schema(v) if isinstance(v, dict) else v for v in value
                 ]
             else:
                 compressed[key] = value
         return compressed
 
     @staticmethod
-    def optimize_tool(name: str, description: str, input_schema: dict | None) -> tuple[str, str, dict | None, list[OptimizationSuggestion]]:  # noqa: E501
+    def optimize_tool(
+        name: str, description: str, input_schema: dict | None
+    ) -> tuple[str, str, dict | None, list[OptimizationSuggestion]]:  # noqa: E501
         """优化单个工具定义，返回 (优化后的name, 优化后的description, 优化后的schema, 建议列表)。"""
         suggestions: list[OptimizationSuggestion] = []
         old_name = name
@@ -259,40 +279,48 @@ class Optimizer:
         new_name = Optimizer.shorten_name(name)
         if new_name != old_name:
             saved = Tokenizer.count(old_name) - Tokenizer.count(new_name)
-            suggestions.append(OptimizationSuggestion(
-                strategy=OptimizationStrategy.REMOVE_REDUNDANT_PREFIX,
-                tool_name=name,
-                field="name",
-                original=old_name,
-                optimized=new_name,
-                tokens_saved=max(1, saved),
-            ))
+            suggestions.append(
+                OptimizationSuggestion(
+                    strategy=OptimizationStrategy.REMOVE_REDUNDANT_PREFIX,
+                    tool_name=name,
+                    field="name",
+                    original=old_name,
+                    optimized=new_name,
+                    tokens_saved=max(1, saved),
+                )
+            )
 
         # 2. 移除冗余前缀
         new_desc = Optimizer.remove_redundant_prefix(description)
         if new_desc != old_desc:
             saved = Tokenizer.count(old_desc) - Tokenizer.count(new_desc)
-            suggestions.append(OptimizationSuggestion(
-                strategy=OptimizationStrategy.REMOVE_REDUNDANT_PREFIX,
-                tool_name=name,
-                field="description",
-                original=old_desc[:100] + "..." if len(old_desc) > 100 else old_desc,
-                optimized=new_desc[:100] + "..." if len(new_desc) > 100 else new_desc,
-                tokens_saved=max(1, saved),
-            ))
+            suggestions.append(
+                OptimizationSuggestion(
+                    strategy=OptimizationStrategy.REMOVE_REDUNDANT_PREFIX,
+                    tool_name=name,
+                    field="description",
+                    original=old_desc[:100] + "..." if len(old_desc) > 100 else old_desc,
+                    optimized=new_desc[:100] + "..." if len(new_desc) > 100 else new_desc,
+                    tokens_saved=max(1, saved),
+                )
+            )
 
         # 3. 缩短过长描述
         shorter_desc = Optimizer.shorten_description(new_desc)
         if shorter_desc != new_desc:
             saved = Tokenizer.count(new_desc) - Tokenizer.count(shorter_desc)
-            suggestions.append(OptimizationSuggestion(
-                strategy=OptimizationStrategy.SHORTEN_DESCRIPTION,
-                tool_name=name,
-                field="description",
-                original=new_desc[:100] + "..." if len(new_desc) > 100 else new_desc,
-                optimized=shorter_desc[:100] + "..." if len(shorter_desc) > 100 else shorter_desc,
-                tokens_saved=max(1, saved),
-            ))
+            suggestions.append(
+                OptimizationSuggestion(
+                    strategy=OptimizationStrategy.SHORTEN_DESCRIPTION,
+                    tool_name=name,
+                    field="description",
+                    original=new_desc[:100] + "..." if len(new_desc) > 100 else new_desc,
+                    optimized=shorter_desc[:100] + "..."
+                    if len(shorter_desc) > 100
+                    else shorter_desc,
+                    tokens_saved=max(1, saved),
+                )
+            )
             new_desc = shorter_desc
 
         # 4. 压缩 Schema
@@ -304,14 +332,16 @@ class Optimizer:
             if new_schema_str != old_schema_str:
                 saved = Tokenizer.count(old_schema_str) - Tokenizer.count(new_schema_str)
                 if saved > 0:
-                    suggestions.append(OptimizationSuggestion(
-                        strategy=OptimizationStrategy.COMPRESS_SCHEMA,
-                        tool_name=name,
-                        field="input_schema",
-                        original=f"schema ({Tokenizer.count(old_schema_str)} tokens)",
-                        optimized=f"schema ({Tokenizer.count(new_schema_str)} tokens)",
-                        tokens_saved=saved,
-                    ))
+                    suggestions.append(
+                        OptimizationSuggestion(
+                            strategy=OptimizationStrategy.COMPRESS_SCHEMA,
+                            tool_name=name,
+                            field="input_schema",
+                            original=f"schema ({Tokenizer.count(old_schema_str)} tokens)",
+                            optimized=f"schema ({Tokenizer.count(new_schema_str)} tokens)",
+                            tokens_saved=saved,
+                        )
+                    )
                     new_schema = compressed
                 else:
                     new_schema = input_schema
@@ -385,16 +415,22 @@ class TokenAnalyzer:
             input_schema = tool.get("inputSchema") or tool.get("input_schema", {})
 
             # 原始 token 数
-            original_tool_str = json.dumps({
-                "name": name,
-                "description": description,
-                "input_schema": input_schema,
-            }, ensure_ascii=False, separators=(",", ":"))
+            original_tool_str = json.dumps(
+                {
+                    "name": name,
+                    "description": description,
+                    "input_schema": input_schema,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
             original_total += Tokenizer.count(original_tool_str)
 
             # 优化
             new_name, new_desc, new_schema, suggestions = self.optimizer.optimize_tool(
-                name, description, input_schema,
+                name,
+                description,
+                input_schema,
             )
             all_suggestions.extend(suggestions)
 
@@ -419,9 +455,13 @@ class TokenAnalyzer:
             tokens_saved=max(0, tokens_saved),
             savings_pct=max(0, savings_pct),
             suggestions=all_suggestions,
-            optimized_definition=json.dumps({
-                "mcpServers": {server_id: {"tools": optimized_tools}},
-            }, ensure_ascii=False, indent=2),
+            optimized_definition=json.dumps(
+                {
+                    "mcpServers": {server_id: {"tools": optimized_tools}},
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
 
     # ── 内部方法 ──────────────────────────────────────────
@@ -461,19 +501,21 @@ class TokenAnalyzer:
 
             # description
             desc_tokens = Tokenizer.count(description)
-            breakdown.append(TokenBreakdown("description", description, len(description), desc_tokens))  # noqa: E501
+            breakdown.append(
+                TokenBreakdown("description", description, len(description), desc_tokens)
+            )  # noqa: E501
 
             # input_schema
             schema_str = json.dumps(input_schema, ensure_ascii=False) if input_schema else "{}"
             schema_tokens = Tokenizer.count(schema_str)
-            breakdown.append(TokenBreakdown("input_schema", schema_str, len(schema_str), schema_tokens))  # noqa: E501
+            breakdown.append(
+                TokenBreakdown("input_schema", schema_str, len(schema_str), schema_tokens)
+            )  # noqa: E501
 
             # 检查描述是否可优化
             tool_opt = 0
             if len(description) > DESC_OPTIMAL_MAX_LENGTH:
-                extra = desc_tokens - Tokenizer.count(
-                    Optimizer.shorten_description(description)
-                )
+                extra = desc_tokens - Tokenizer.count(Optimizer.shorten_description(description))
                 tool_opt += max(0, extra)
             if any(description.startswith(p) for p in DESC_REDUNDANT_PREFIXES):
                 tool_opt += desc_tokens // 4  # 估计可省 25%
@@ -495,16 +537,24 @@ class TokenAnalyzer:
 
         # 生成建议
         suggestions = self._generate_suggestions(
-            server_id, total_tokens, context_pct, tools_detail, server_data,
+            server_id,
+            total_tokens,
+            context_pct,
+            tools_detail,
+            server_data,
         )
 
         # 与行业平均对比
         avg_tokens = AVG_TOOLS_PER_SERVER * (AVG_TOOL_DESC_TOKENS + AVG_TOOL_PARAM_SCHEMA_TOKENS)
         comparison = ""
         if total_tokens > avg_tokens * 1.5:
-            comparison = f"🔺 高于同类 Server 平均（{Tokenizer.format_tokens(avg_tokens)}），建议优化"  # noqa: E501
+            comparison = (
+                f"🔺 高于同类 Server 平均（{Tokenizer.format_tokens(avg_tokens)}），建议优化"  # noqa: E501
+            )
         elif total_tokens < avg_tokens * 0.5:
-            comparison = f"✅ 低于同类 Server 平均（{Tokenizer.format_tokens(avg_tokens)}），工具定义精简"  # noqa: E501
+            comparison = (
+                f"✅ 低于同类 Server 平均（{Tokenizer.format_tokens(avg_tokens)}），工具定义精简"  # noqa: E501
+            )
         else:
             comparison = f"📊 与同类 Server 平均水平相当（{Tokenizer.format_tokens(avg_tokens)}）"
 
@@ -537,26 +587,46 @@ class TokenAnalyzer:
         tool_count = max(1, int(estimated_tools + desc_complexity))
 
         # 估算每个工具的 token 消耗
-        per_tool_desc_tokens = Tokenizer.count(description[:200]) if description else AVG_TOOL_DESC_TOKENS  # noqa: E501
+        per_tool_desc_tokens = (
+            Tokenizer.count(description[:200]) if description else AVG_TOOL_DESC_TOKENS
+        )  # noqa: E501
         per_tool_schema_tokens = AVG_TOOL_PARAM_SCHEMA_TOKENS
 
         # 生成样例工具
         tools_detail: list[ToolTokenDetail] = []
         for i in range(min(tool_count, 10)):  # 最多展示 10 个
             tool_name = f"tool_{i + 1}"
-            tool_desc = f"{description[:50]} - operation {i + 1}" if description else f"tool {i + 1}"  # noqa: E501
+            tool_desc = (
+                f"{description[:50]} - operation {i + 1}" if description else f"tool {i + 1}"
+            )  # noqa: E501
             tool_total = per_tool_desc_tokens + per_tool_schema_tokens
 
-            tools_detail.append(ToolTokenDetail(
-                tool_name=tool_name,
-                total_tokens=tool_total,
-                breakdown=[
-                    TokenBreakdown("name", tool_name, len(tool_name), Tokenizer.count(tool_name), estimated=True),  # noqa: E501
-                    TokenBreakdown("description", tool_desc, len(tool_desc), per_tool_desc_tokens, estimated=True),  # noqa: E501
-                    TokenBreakdown("input_schema", "{}", 2, per_tool_schema_tokens, estimated=True),
-                ],
-                optimization_potential=int(per_tool_desc_tokens * 0.3),  # 估算优化潜力
-            ))
+            tools_detail.append(
+                ToolTokenDetail(
+                    tool_name=tool_name,
+                    total_tokens=tool_total,
+                    breakdown=[
+                        TokenBreakdown(
+                            "name",
+                            tool_name,
+                            len(tool_name),
+                            Tokenizer.count(tool_name),
+                            estimated=True,
+                        ),  # noqa: E501
+                        TokenBreakdown(
+                            "description",
+                            tool_desc,
+                            len(tool_desc),
+                            per_tool_desc_tokens,
+                            estimated=True,
+                        ),  # noqa: E501
+                        TokenBreakdown(
+                            "input_schema", "{}", 2, per_tool_schema_tokens, estimated=True
+                        ),
+                    ],
+                    optimization_potential=int(per_tool_desc_tokens * 0.3),  # 估算优化潜力
+                )
+            )
 
         total_tokens = sum(t.total_tokens for t in tools_detail)
         context_pct = total_tokens / CONTEXT_WINDOW_SIZE * 100
@@ -621,13 +691,9 @@ class TokenAnalyzer:
                 f"⚠️  工具定义占用 {context_pct:.1f}% 上下文，超过建议的 {MAX_SAFE_TOOL_PCT}%"
             )
         elif context_pct > 10:
-            suggestions.append(
-                f"📝 工具定义占用 {context_pct:.1f}% 上下文，处于中等水平"
-            )
+            suggestions.append(f"📝 工具定义占用 {context_pct:.1f}% 上下文，处于中等水平")
         else:
-            suggestions.append(
-                f"✅ 工具定义占用 {context_pct:.1f}% 上下文，控制在健康范围内"
-            )
+            suggestions.append(f"✅ 工具定义占用 {context_pct:.1f}% 上下文，控制在健康范围内")
 
         # 2. 单个工具描述过长
         for tool in tools:
@@ -692,8 +758,12 @@ def format_report(report: AnalysisReport, verbose: bool = False) -> str:
         lines.append(f"  {'工具名称':<30} {'Token':>6} {'描述':>6} {'Schema':>6} {'节省':>6}")
         lines.append("  " + "─" * 60)
         for tool in sorted(report.tools, key=lambda t: t.total_tokens, reverse=True):
-            desc_t = next((b.token_count for b in tool.breakdown if b.field_name == "description"), 0)  # noqa: E501
-            schema_t = next((b.token_count for b in tool.breakdown if b.field_name == "input_schema"), 0)  # noqa: E501
+            desc_t = next(
+                (b.token_count for b in tool.breakdown if b.field_name == "description"), 0
+            )  # noqa: E501
+            schema_t = next(
+                (b.token_count for b in tool.breakdown if b.field_name == "input_schema"), 0
+            )  # noqa: E501
             opt = tool.optimization_potential
             lines.append(
                 f"  {tool.tool_name[:28]:<30} {tool.total_tokens:>5} "

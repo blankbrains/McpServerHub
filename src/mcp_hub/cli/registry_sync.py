@@ -29,8 +29,11 @@ CURATED_SERVERS = [
 
 # npm 搜索关键词
 NPM_SEARCH_KEYWORDS = [
-    "mcp-server", "mcp%20server", "modelcontextprotocol",
-    "mcp-tool", "mcp-plugin",
+    "mcp-server",
+    "mcp%20server",
+    "modelcontextprotocol",
+    "mcp-tool",
+    "mcp-plugin",
 ]
 
 
@@ -66,8 +69,10 @@ async def sync_from_npm(client: httpx.AsyncClient, dry_run: bool) -> int:
                 # 过滤：只收录 MCP 相关包
                 desc = (pkg.get("description") or "").lower()
                 keywords = pkg.get("keywords", [])
-                is_mcp = any(k in desc or k in str(keywords).lower()
-                             for k in ["mcp", "modelcontextprotocol", "model context protocol"])
+                is_mcp = any(
+                    k in desc or k in str(keywords).lower()
+                    for k in ["mcp", "modelcontextprotocol", "model context protocol"]
+                )
                 if not is_mcp and "mcp" not in name.lower():
                     continue
 
@@ -78,8 +83,9 @@ async def sync_from_npm(client: httpx.AsyncClient, dry_run: bool) -> int:
 
                 console.print(f"  ✅ {name}@[green]{ver}[/green] (pop={score:.3f})")
                 if not dry_run:
-                    await _register_npm_package(name, ver, pkg.get("description", ""),
-                                                pkg.get("homepage", ""), keywords)
+                    await _register_npm_package(
+                        name, ver, pkg.get("description", ""), pkg.get("homepage", ""), keywords
+                    )
                     count += 1
 
         except Exception as e:
@@ -106,11 +112,16 @@ async def sync_from_pypi(client: httpx.AsyncClient, dry_run: bool) -> int:
         all_pkgs = resp.json().get("packages", [])
 
         # 筛选 MCP 相关包
-        mcp_pkgs = [p for p in all_pkgs if (
-            p.startswith("mcp-server-") or
-            p.startswith("mcp-") and "server" in p or
-            "mcp-server" in p
-        )]
+        mcp_pkgs = [
+            p
+            for p in all_pkgs
+            if (
+                p.startswith("mcp-server-")
+                or p.startswith("mcp-")
+                and "server" in p
+                or "mcp-server" in p
+            )
+        ]
         mcp_pkgs = sorted(set(mcp_pkgs))[:100]  # 最多 100 个
 
         console.print(f"  找到 {len(mcp_pkgs)} 个 MCP 相关包")
@@ -132,9 +143,9 @@ async def sync_from_pypi(client: httpx.AsyncClient, dry_run: bool) -> int:
                         info = info_resp.json().get("info", {})
                         ver = info.get("version", "?")
                         desc = (info.get("summary", "") or "")[:200]
-                        home = info.get("home_page", "") or info.get(
-                            "project_urls", {}
-                        ).get("Source", "")
+                        home = info.get("home_page", "") or info.get("project_urls", {}).get(
+                            "Source", ""
+                        )
 
                         console.print(f"  ✅ {pkg_name}@[green]{ver}[/green]")
                         if not dry_run:
@@ -359,6 +370,7 @@ async def _register_github_repo(full_name: str, desc: str, stars: int, topics: l
 @click.option("--source", type=click.Choice(["npm", "pypi", "github", "all"]), default="all")
 def registry_sync(dry_run: bool, source: str):
     """从 npm/PyPI/GitHub 同步热门 MCP Server 到本地市场。"""
+
     async def _run():
         console.print("[bold]🔄 正在同步 MCP 注册表 (200+ servers)...[/bold]\n")
 

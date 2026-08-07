@@ -22,10 +22,12 @@ def event():
 @click.argument("payload", required=False)
 def publish_event(topic: str, payload: str | None):
     """发布事件。"""
+
     async def _run():
         data = json.loads(payload) if payload else {}
         count = await _bus.publish(topic, "cli", data)
         click.echo(f"📢 事件 '{topic}' 已发布，{count} 个接收者")
+
     asyncio.run(_run())
 
 
@@ -33,6 +35,7 @@ def publish_event(topic: str, payload: str | None):
 @click.argument("topic", required=True)
 def subscribe_event(topic: str):
     """订阅事件。"""
+
     async def _run():
         q = await _bus.subscribe(topic)
         click.echo(f"👂 正在监听 '{topic}' (按 Ctrl+C 停止)...")
@@ -42,6 +45,7 @@ def subscribe_event(topic: str):
                 click.echo(f"  📨 {evt.topic}: {json.dumps(evt.payload, ensure_ascii=False)}")
         except KeyboardInterrupt:
             click.echo("\n⏹ 已停止监听")
+
     asyncio.run(_run())
 
 
@@ -62,11 +66,14 @@ def list_events():
 @click.option("--limit", default=50, type=int, help="显示条数")
 def event_history(topic: str | None, limit: int):
     """查看事件历史。"""
+
     async def _run():
         try:
+            from sqlalchemy import exc as sa_exc
+            from sqlalchemy import select
+
             from mcp_hub.db.database import async_session_factory
             from mcp_hub.db.models import EventModel
-            from sqlalchemy import select, exc as sa_exc
 
             async with async_session_factory() as session:
                 query = select(EventModel).order_by(EventModel.created_at.desc()).limit(limit)
@@ -81,10 +88,11 @@ def event_history(topic: str | None, limit: int):
 
             click.echo(f"📋 事件历史 (最近 {len(events)} 条):")
             for e in events:
-                ts = e.created_at.strftime('%m-%d %H:%M:%S') if e.created_at else '未知时间'
+                ts = e.created_at.strftime("%m-%d %H:%M:%S") if e.created_at else "未知时间"
                 click.echo(f"  [{ts}] {e.topic} ← {e.publisher}")
         except sa_exc.OperationalError:
             click.echo("📭 暂无事件记录")
         except Exception as e:
             click.echo(f"⚠️ 查询失败: {e}")
+
     asyncio.run(_run())

@@ -1,4 +1,5 @@
 """监控大屏 API — 聚合所有 Server 的运行状态、资源位置、性能指标。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -9,13 +10,13 @@ from sqlalchemy import func, select
 from mcp_hub.api.dependencies import get_optional_user
 from mcp_hub.core.monitor import Monitor
 from mcp_hub.core.process_manager import get_process_manager
-from mcp_hub.logging_config import get_logger
-
-logger = get_logger(__name__)
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.token_analyzer import TokenAnalyzer
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import UsageStatsModel, UserServerModel
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["monitor"])
 
@@ -37,8 +38,9 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
     if user_id:
         async with async_session_factory() as session:
             result = await session.execute(
-                select(UserServerModel.server_id, UserServerModel.enabled)
-                .where(UserServerModel.user_id == user_id)
+                select(UserServerModel.server_id, UserServerModel.enabled).where(
+                    UserServerModel.user_id == user_id
+                )
             )
             for row in result.fetchall():
                 tracked_info[row[0]] = row[1] if row[1] is not None else True
@@ -46,16 +48,13 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
     server_by_id = {server["id"]: server for server in servers}
     if user_id:
         relevant = [
-            server_by_id[server_id]
-            for server_id in tracked_info
-            if server_id in server_by_id
+            server_by_id[server_id] for server_id in tracked_info if server_id in server_by_id
         ]
     else:
         relevant = [
             server
             for server in servers
-            if server.get("status") != "not_installed"
-            and not server["id"].startswith("@custom/")
+            if server.get("status") != "not_installed" and not server["id"].startswith("@custom/")
         ]
 
     # 3. 构建每个 Server 的详情
@@ -103,34 +102,35 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
                 filters.append(UsageStatsModel.user_id == user_id)
             async with async_session_factory() as session:
                 result = await session.execute(
-                    select(func.count(UsageStatsModel.id))
-                    .where(*filters)
+                    select(func.count(UsageStatsModel.id)).where(*filters)
                 )
                 calls = result.scalar() or 0
         except Exception:
             logger.warning("获取调用次数统计失败", server_id=sid, exc_info=True)
         total_calls_all += calls
 
-        items.append({
-            "server_id": sid,
-            "name": s.get("name", sid.split("/")[-1]),
-            "description": s.get("description", ""),
-            "status": s.get("status", "unknown"),
-            "running": running,
-            "enabled": tracked_info.get(sid, True),
-            "pid": pid,
-            "location": location or "N/A",
-            "uptime_seconds": uptime_seconds,
-            "reliability_score": score,
-            "total_checks": reliability.total_checks_recorded,
-            "last_check_status": reliability.last_check_status,
-            "token_consumption": tokens,
-            "call_count_7d": calls,
-            "rating": s.get("rating", 0),
-            "version": s.get("version", "?"),
-            "security_level": s.get("security_level", "unreviewed"),
-            "install_command": s.get("install_command", ""),
-        })
+        items.append(
+            {
+                "server_id": sid,
+                "name": s.get("name", sid.split("/")[-1]),
+                "description": s.get("description", ""),
+                "status": s.get("status", "unknown"),
+                "running": running,
+                "enabled": tracked_info.get(sid, True),
+                "pid": pid,
+                "location": location or "N/A",
+                "uptime_seconds": uptime_seconds,
+                "reliability_score": score,
+                "total_checks": reliability.total_checks_recorded,
+                "last_check_status": reliability.last_check_status,
+                "token_consumption": tokens,
+                "call_count_7d": calls,
+                "rating": s.get("rating", 0),
+                "version": s.get("version", "?"),
+                "security_level": s.get("security_level", "unreviewed"),
+                "install_command": s.get("install_command", ""),
+            }
+        )
 
     # 3. 聚合统计
     running_count = sum(1 for item in items if item["running"])
@@ -146,9 +146,9 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
         "healthy": healthy_count,
         "total_calls_7d": total_calls_all,
         "total_token_consumption": total_tokens_all,
-        "avg_reliability": round(
-            sum(i["reliability_score"] for i in items) / len(items), 1
-        ) if items else 0,
+        "avg_reliability": round(sum(i["reliability_score"] for i in items) / len(items), 1)
+        if items
+        else 0,
     }
 
     # 按可靠性排序

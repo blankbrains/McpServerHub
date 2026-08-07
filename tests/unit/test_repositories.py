@@ -1,4 +1,5 @@
 """单元测试 — Repository 层（数据库访问对象）。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,7 +11,6 @@ from mcp_hub.db.repositories import (
     ServerRepository,
     UserRepository,
 )
-
 
 # ── 数据库 fixture ────────────────────────────────────────
 
@@ -206,11 +206,13 @@ class TestServerRepositoryRegister:
     async def test_register_new(self, db_session) -> None:
         async with db_session() as session:
             repo = ServerRepository(session)
-            sid = await repo.register_server({
-                "id": "@new/test",
-                "name": "test",
-                "description": "新 Server",
-            })
+            sid = await repo.register_server(
+                {
+                    "id": "@new/test",
+                    "name": "test",
+                    "description": "新 Server",
+                }
+            )
         assert sid == "@new/test"
         async with db_session() as session:
             repo = ServerRepository(session)
@@ -220,11 +222,13 @@ class TestServerRepositoryRegister:
     async def test_register_update_existing(self, seeded_session) -> None:
         async with seeded_session() as session:
             repo = ServerRepository(session)
-            sid = await repo.register_server({
-                "id": "@alpha/search",
-                "name": "search",
-                "description": "已更新描述",
-            })
+            sid = await repo.register_server(
+                {
+                    "id": "@alpha/search",
+                    "name": "search",
+                    "description": "已更新描述",
+                }
+            )
         assert sid == "@alpha/search"
         async with seeded_session() as session:
             repo = ServerRepository(session)
@@ -292,9 +296,12 @@ class TestReviewRepository:
     async def test_rate_with_parent(self, seeded_session) -> None:
         async with seeded_session() as session:
             repo = ReviewRepository(session)
-            parent_result = await repo.rate("@alpha/search", "user1", 4, "原评价")
+            await repo.rate("@alpha/search", "user1", 4, "原评价")
             reply_result = await repo.rate(
-                "@alpha/search", "user2", 5, "回复",
+                "@alpha/search",
+                "user2",
+                5,
+                "回复",
                 parent_id=1,
             )
         assert reply_result.get("parent_id") == 1
@@ -344,7 +351,9 @@ class TestReviewRepository:
                 # get the ReviewModel by get_review
                 review_model = await repo.get_review(review_id)
                 assert review_model is not None
-                can, msg = await repo.can_delete_review(review_model, user_id="admin", user_role="admin")
+                can, msg = await repo.can_delete_review(
+                    review_model, user_id="admin", user_role="admin"
+                )
                 assert can is True
 
     async def test_get_reviews_empty(self, seeded_session) -> None:

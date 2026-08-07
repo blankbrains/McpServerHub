@@ -31,6 +31,7 @@ def test_jwt_has_valid_structure():
     # header
     import base64
     import json
+
     header = json.loads(base64.urlsafe_b64decode(parts[0] + "=="))
     assert header["alg"] == "HS256"
     assert header["typ"] == "JWT"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import signal
 import subprocess as sp
 import sys
 import time
@@ -85,12 +84,14 @@ def stop_daemon():
 @daemon.command("status")
 def daemon_status():
     """查看 Hub 状态。"""
+
     async def _run():
         pm = ProcessManager()
         running = pm.list_running()
         click.echo(f"📊 运行中: {len(running)} 个 Server")
         for p in running:
             click.echo(f"   🟢 {p.server_id} (PID: {p.pid})")
+
     asyncio.run(_run())
 
 
@@ -98,6 +99,10 @@ def daemon_status():
 def daemon_enable():
     """配置开机自启。"""
     username = os.environ.get("USER", os.environ.get("USERNAME", "root"))
+    exec_start = (
+        f"{sys.executable} -m uvicorn mcp_hub.api.app:create_app "
+        "--host 0.0.0.0 --port 3987 --workers 2"
+    )
     service_content = f"""[Unit]
 Description=MCP Server Hub Daemon
 After=network.target
@@ -106,7 +111,7 @@ After=network.target
 Type=simple
 User={username}
 WorkingDirectory={os.getcwd()}
-ExecStart={sys.executable} -m uvicorn mcp_hub.api.app:create_app --host 0.0.0.0 --port 3987 --workers 2
+ExecStart={exec_start}
 Restart=on-failure
 RestartSec=10
 
@@ -121,7 +126,8 @@ WantedBy=multi-user.target
     # 尝试通过 systemctl 启用
     result = sp.run(
         ["systemctl", "--user", "enable", "mcp-hub.service"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode == 0:
         click.echo("✅ 已配置开机自启（systemd user service 已创建并启用）")
@@ -135,7 +141,8 @@ def daemon_disable():
     """取消开机自启。"""
     result = sp.run(
         ["systemctl", "--user", "disable", "mcp-hub.service"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     service_path = Path.home() / ".config" / "systemd" / "user" / "mcp-hub.service"
     if service_path.exists():

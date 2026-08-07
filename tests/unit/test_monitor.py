@@ -17,19 +17,34 @@ from mcp_hub.core.monitor import (
 
 # ── 数据结构 ───────────────────────────────────────────────
 
+
 class TestUptimeStats:
     def test_creation(self) -> None:
-        u = UptimeStats(window="24h", total_checks=100, passed_checks=95, uptime_pct=95.0, avg_response_time_ms=50.0)  # noqa: E501
+        u = UptimeStats(
+            window="24h",
+            total_checks=100,
+            passed_checks=95,
+            uptime_pct=95.0,
+            avg_response_time_ms=50.0,
+        )  # noqa: E501
         assert u.window == "24h"
         assert u.uptime_pct == 95.0
         assert u.total_checks == 100
 
     def test_uptime_calculation(self) -> None:
-        u = UptimeStats(window="24h", total_checks=10, passed_checks=10, uptime_pct=100.0, avg_response_time_ms=0)  # noqa: E501
+        u = UptimeStats(
+            window="24h",
+            total_checks=10,
+            passed_checks=10,
+            uptime_pct=100.0,
+            avg_response_time_ms=0,
+        )  # noqa: E501
         assert u.uptime_pct == 100.0
 
     def test_zero_checks(self) -> None:
-        u = UptimeStats(window="1h", total_checks=0, passed_checks=0, uptime_pct=100.0, avg_response_time_ms=0)  # noqa: E501
+        u = UptimeStats(
+            window="1h", total_checks=0, passed_checks=0, uptime_pct=100.0, avg_response_time_ms=0
+        )  # noqa: E501
         assert u.uptime_pct == 100.0
 
 
@@ -43,8 +58,10 @@ class TestReliabilityReport:
     def test_with_stats(self) -> None:
         stats = [UptimeStats("24h", 100, 99, 99.0, 42.0)]
         r = ReliabilityReport(
-            server_id="@test/srv", reliability_score=90,
-            uptime_stats=stats, total_checks_recorded=100,
+            server_id="@test/srv",
+            reliability_score=90,
+            uptime_stats=stats,
+            total_checks_recorded=100,
             last_check_status="ok",
         )
         assert len(r.uptime_stats) == 1
@@ -54,9 +71,12 @@ class TestReliabilityReport:
 class TestServerHealthSummary:
     def test_creation(self) -> None:
         s = ServerHealthSummary(
-            server_id="@test/srv", status="healthy",
-            reliability_score=95, uptime_24h=99.5,
-            avg_response_ms=30.0, running=True,
+            server_id="@test/srv",
+            status="healthy",
+            reliability_score=95,
+            uptime_24h=99.5,
+            avg_response_ms=30.0,
+            running=True,
         )
         assert s.status == "healthy"
         assert s.reliability_score == 95
@@ -64,6 +84,7 @@ class TestServerHealthSummary:
 
 
 # ── Monitor 静态方法 ──────────────────────────────────────
+
 
 class TestResponseTimeScoring:
     def test_perfect_response_time(self) -> None:
@@ -128,9 +149,11 @@ class TestReliabilityScoring:
 
 # ── 时间窗口 ──────────────────────────────────────────────
 
+
 class TestTimeWindows:
     def test_windows_defined(self) -> None:
         from mcp_hub.core.monitor import TIME_WINDOWS
+
         assert "1h" in TIME_WINDOWS
         assert "24h" in TIME_WINDOWS
         assert "7d" in TIME_WINDOWS
@@ -138,6 +161,7 @@ class TestTimeWindows:
 
     def test_window_durations(self) -> None:
         from mcp_hub.core.monitor import TIME_WINDOWS
+
         assert TIME_WINDOWS["1h"].total_seconds() == 3600
         assert TIME_WINDOWS["24h"].total_seconds() == 86400
         assert TIME_WINDOWS["7d"].total_seconds() == 604800
@@ -146,6 +170,7 @@ class TestTimeWindows:
     def test_invalid_window(self) -> None:
         """无效窗口名应被忽略。"""
         import asyncio
+
         result = asyncio.run(Monitor.get_uptime("@test/srv", windows=["invalid"]))
         assert len(result) == 0
 
@@ -157,6 +182,7 @@ class TestTimeWindows:
 def event_loop():
     """为 async fixture 提供事件循环。"""
     import asyncio
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     yield loop
@@ -167,6 +193,7 @@ def event_loop():
 async def _db_tables():
     """一次性创建所有数据库表（模块级）。"""
     from mcp_hub.db.database import Base, engine
+
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -280,6 +307,7 @@ class TestMonitorIntegration:
 
 # ── Monitor.record_check ──────────────────────────────────
 
+
 class TestRecordCheck:
     @pytest.mark.asyncio
     async def test_record_success(self) -> None:
@@ -353,6 +381,7 @@ class TestRecordCheck:
     async def test_concurrent_records(self) -> None:
         """并发记录不应冲突。"""
         import asyncio
+
         sid = "@test/concurrent"
 
         async def record():

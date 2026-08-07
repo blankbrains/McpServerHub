@@ -16,6 +16,7 @@ from mcp_hub.core.server_builder import (
 
 # ── ToolTemplate ───────────────────────────────────────────
 
+
 class TestToolTemplate:
     def test_creation(self) -> None:
         t = ToolTemplate(name="hello", description="Say hello")
@@ -46,6 +47,7 @@ class TestToolTemplate:
 
 
 # ── ServerBuilder ──────────────────────────────────────────
+
 
 class TestServerBuilder:
     def test_available_tools(self) -> None:
@@ -226,7 +228,9 @@ class TestServerBuilder:
 
     def test_translate_tool(self) -> None:
         builder = ServerBuilder()
-        project = builder.create_project(name="test-translate", language="python", tools=["translate"])  # noqa: E501
+        project = builder.create_project(
+            name="test-translate", language="python", tools=["translate"]
+        )  # noqa: E501
         server_py = next(v for k, v in project.files.items() if k.endswith("server.py"))
         assert "translate" in server_py
         assert "target_lang" in server_py
@@ -235,8 +239,18 @@ class TestServerBuilder:
         """8 个工具一起生成不应报错，且 Python 语法正确。"""
         builder = ServerBuilder()
         project = builder.create_project(
-            name="all-eight", language="python",
-            tools=["hello", "echo", "calculator", "greet", "weather", "memo", "search", "translate"],  # noqa: E501
+            name="all-eight",
+            language="python",
+            tools=[
+                "hello",
+                "echo",
+                "calculator",
+                "greet",
+                "weather",
+                "memo",
+                "search",
+                "translate",
+            ],  # noqa: E501
         )
         for fn, c in project.files.items():
             if fn.endswith(".py"):

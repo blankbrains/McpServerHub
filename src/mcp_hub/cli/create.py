@@ -30,11 +30,12 @@ AVAILABLE_TOOL_DESCRIPTIONS = {
 
 def _interactive_wizard(name: str | None) -> tuple[str, str, str, str, list[str]]:
     """交互式向导，收集用户输入。"""
-    console.print(Panel.fit(
-        "[bold cyan]🛠️  MCP Server Builder[/bold cyan]\n"
-        "自动生成生产级 MCP Server 项目骨架",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]🛠️  MCP Server Builder[/bold cyan]\n自动生成生产级 MCP Server 项目骨架",
+            border_style="cyan",
+        )
+    )
 
     # 项目名称
     if not name:
@@ -57,6 +58,7 @@ def _interactive_wizard(name: str | None) -> tuple[str, str, str, str, list[str]
 
     # 作者
     import os
+
     default_author = os.environ.get("USER") or os.environ.get("USERNAME") or "developer"
     author = Prompt.ask("[bold]作者[/bold]", default=default_author)
 
@@ -114,6 +116,7 @@ def create(
       mcp create my-server -l python -t hello,echo  完全非交互
       mcp create my-server --language typescript
     """
+
     async def _run():
         from pathlib import Path
 
@@ -145,24 +148,28 @@ def create(
             )
 
             output_path = Path(output) / _final_name
-            if output_path.exists() and not yes and not Confirm.ask(
-                f"目录 '{output_path}' 已存在，覆盖?", default=False
+            if (
+                output_path.exists()
+                and not yes
+                and not Confirm.ask(f"目录 '{output_path}' 已存在，覆盖?", default=False)
             ):
                 console.print("[yellow]已取消[/yellow]")
                 return
 
             project.write(Path(output))
 
-            console.print(Panel.fit(
-                f"[bold green]✅ MCP Server 项目已创建![/bold green]\n\n"
-                f"{project.summary()}\n\n"
-                f"[bold]下一步:[/bold]\n"
-                f"  cd {output_path}\n"
-                f"  {'pip install -e .' if _final_lang == 'python' else 'npm install'}\n"
-                f"  {'python -m ' + _final_name.replace('-', '_') if _final_lang == 'python' else 'npm run build'}",  # noqa: E501
-                title="🎉 创建成功",
-                border_style="green",
-            ))
+            console.print(
+                Panel.fit(
+                    f"[bold green]✅ MCP Server 项目已创建![/bold green]\n\n"
+                    f"{project.summary()}\n\n"
+                    f"[bold]下一步:[/bold]\n"
+                    f"  cd {output_path}\n"
+                    f"  {'pip install -e .' if _final_lang == 'python' else 'npm install'}\n"
+                    f"  {'python -m ' + _final_name.replace('-', '_') if _final_lang == 'python' else 'npm run build'}",  # noqa: E501
+                    title="🎉 创建成功",
+                    border_style="green",
+                )
+            )
 
         except ValueError as e:
             console.print(f"[red]❌ 创建失败: {e}[/red]")

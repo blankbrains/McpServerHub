@@ -31,6 +31,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
 
     等级: 🟢 verified(90+) 🟡 reviewed(70+) 🟠 unreviewed(40+) 🔴 blocked(<40)
     """
+
     async def _run():
         scanner = SecurityScanner()
         registry = Registry()
@@ -52,6 +53,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
 
             if json_output:
                 import json as j
+
                 out = []
                 for r in results:
                     out.append({"server_id": r.server_id, "level": r.level, "score": r.score})
@@ -71,7 +73,12 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
             results.sort(key=lambda r: r.score)
 
             for r in results:
-                level_icon = {"verified": "🟢", "reviewed": "🟡", "unreviewed": "🟠", "blocked": "🔴"}  # noqa: E501
+                level_icon = {
+                    "verified": "🟢",
+                    "reviewed": "🟡",
+                    "unreviewed": "🟠",
+                    "blocked": "🔴",
+                }  # noqa: E501
                 icon = level_icon.get(r.level, "❓")
                 critical = sum(1 for f in r.findings if f.severity == "critical")
                 high = sum(1 for f in r.findings if f.severity == "high")
@@ -109,6 +116,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
 
             if json_output:
                 import json as j
+
                 out = {
                     "server_id": report.server_id,
                     "score": report.score,
@@ -122,13 +130,23 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
                 return
 
             # 显示报告
-            level_icons = {"verified": "🟢", "reviewed": "🟡", "unreviewed": "🟠", "blocked": "🔴"}  # noqa: E501
+            level_icons = {
+                "verified": "🟢",
+                "reviewed": "🟡",
+                "unreviewed": "🟠",
+                "blocked": "🔴",
+            }
             icon = level_icons.get(report.level, "❓")
             color = "green" if report.score >= 70 else "red"
-            console.print(Panel.fit(
-                f"[bold]{icon} 安全评分: {report.score}/100[/bold] — [{color}]{report.level}[/]",
-                title=f"🔒 {sid}",
-            ))
+            score_summary = (
+                f"[bold]{icon} 安全评分: {report.score}/100[/bold] — [{color}]{report.level}[/]"
+            )
+            console.print(
+                Panel.fit(
+                    score_summary,
+                    title=f"🔒 {sid}",
+                )
+            )
 
             if report.findings:
                 # 按严重程度分组
@@ -159,7 +177,12 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
                     "publisher_trust": "发布者信任",
                     "code_patterns": "代码模式",
                 }
-                max_scores = {"command_safety": 40, "package_reputation": 25, "publisher_trust": 20, "code_patterns": 15}  # noqa: E501
+                max_scores = {
+                    "command_safety": 40,
+                    "package_reputation": 25,
+                    "publisher_trust": 20,
+                    "code_patterns": 15,
+                }  # noqa: E501
                 for dim, name in dim_names.items():
                     score_table.add_row(name, str(breakdown[dim]), str(max_scores[dim]))
                 console.print(score_table)

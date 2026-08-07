@@ -17,6 +17,7 @@ import click
 @click.option("--no-seed", is_flag=True, help="不导入预置数据")
 def init_cmd(db_url: str | None, force: bool, no_seed: bool):
     """一键初始化 MCP Server Hub 环境。"""
+
     async def _run():
         click.echo("\n🔵 MCP Server Hub 初始化\n")
 
@@ -27,6 +28,7 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
 
         try:
             import subprocess
+
             result = subprocess.run(
                 ["psql", "--version"], capture_output=True, text=True, timeout=5
             )
@@ -53,11 +55,13 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
         env_path = config_dir / ".env"
         if not env_path.exists() or force:
             if db_url:
-                db_line = f'MCP_HUB_DATABASE_URL={db_url}'
+                db_line = f"MCP_HUB_DATABASE_URL={db_url}"
             elif os.environ.get("MCP_HUB_DATABASE_URL"):
-                db_line = f'MCP_HUB_DATABASE_URL={os.environ["MCP_HUB_DATABASE_URL"]}'
+                db_line = f"MCP_HUB_DATABASE_URL={os.environ['MCP_HUB_DATABASE_URL']}"
             else:
-                db_line = "MCP_HUB_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/mcp_hub"
+                db_line = (
+                    "MCP_HUB_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/mcp_hub"
+                )
 
             env_content = f"""# MCP Server Hub 配置（由 mcp init 生成）
 {db_line}
@@ -76,10 +80,12 @@ MCP_HUB_WORKERS=2
         click.echo("\n🗄️  数据库初始化...")
         try:
             from mcp_hub.db.database import init_db
+
             asyncio.run(init_db())
             click.echo("   ✅ 数据库表已创建")
             if not no_seed:
                 from mcp_hub.db.seed import seed_database
+
                 n = asyncio.run(seed_database())
                 click.echo(f"   ✅ 已导入 {n} 个预置 MCP Server")
         except Exception as e:
@@ -107,7 +113,7 @@ MCP_HUB_WORKERS=2
         # Step 6: 开机自启
         click.echo("\n🔄 开机自启配置...")
         try:
-            mcp_port = os.environ.get('MCP_HUB_PORT', '3987')
+            mcp_port = os.environ.get("MCP_HUB_PORT", "3987")
             cron_job = (
                 f"@reboot sleep 5 && cd {os.getcwd()}"
                 f" && {sys.executable} -m uvicorn mcp_hub.api.app:create_app"
@@ -115,10 +121,9 @@ MCP_HUB_WORKERS=2
                 f" --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
             )
             import subprocess as _sp
+
             # 获取现有 crontab，过滤掉 mcp-hub 相关条目
-            existing = _sp.run(
-                ["crontab", "-l"], capture_output=True, text=True
-            )
+            existing = _sp.run(["crontab", "-l"], capture_output=True, text=True)
             lines: list[str] = []
             if existing.returncode == 0 and existing.stdout:
                 lines = [line for line in existing.stdout.splitlines() if "mcp-hub" not in line]

@@ -25,6 +25,7 @@ console = Console()
 @click.option("--dry-run", "dry_run", is_flag=True, help="预览模式（只检查不安装）")
 def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: bool):
     """安装 MCP Server（安装前自动安全扫描，支持多参数）。"""
+
     async def _install_one(sid: str) -> dict:
         registry = Registry()
         server_data = await registry.get_by_id(sid)
@@ -39,19 +40,23 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
 
             if report.score < 40:
                 high_issues = [f for f in report.findings if f.severity in ("critical", "high")]
-                console.print(Panel.fit(
-                    f"[bold red]🔴 安全评分: {report.score}/100[/bold red]\n"
-                    + "\n".join(f"  • {f.title}" for f in high_issues),
-                    title=f"⛔ {sid} 安装已阻止",
-                    border_style="red",
-                ))
+                console.print(
+                    Panel.fit(
+                        f"[bold red]🔴 安全评分: {report.score}/100[/bold red]\n"
+                        + "\n".join(f"  • {f.title}" for f in high_issues),
+                        title=f"⛔ {sid} 安装已阻止",
+                        border_style="red",
+                    )
+                )
                 return {"server_id": sid, "success": False, "error": f"安全评分 {report.score}/100"}
             elif report.score < 70:
-                console.print(Panel.fit(
-                    f"[bold yellow]🟡 安全评分: {report.score}/100 — {report.level}[/bold]",
-                    title=f"⚡ {sid} 安全提醒",
-                    border_style="yellow",
-                ))
+                console.print(
+                    Panel.fit(
+                        f"[bold yellow]🟡 安全评分: {report.score}/100 — {report.level}[/bold]",
+                        title=f"⚡ {sid} 安全提醒",
+                        border_style="yellow",
+                    )
+                )
                 if not click.confirm("继续安装?", default=False):
                     return {"server_id": sid, "success": False, "error": "用户取消"}
             else:
@@ -61,7 +66,9 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
         if dry_run:
             console.print(f"\n[cyan]🔍 预览安装 {sid}[/cyan]")
             console.print(f"   安装命令: {server_data.get('install_command', 'N/A')}")
-            console.print(f"   版本: {server_data.get('latest_version', server_data.get('version', '?'))}")
+            console.print(
+                f"   版本: {server_data.get('latest_version', server_data.get('version', '?'))}"
+            )
             console.print(f"   类型: {server_data.get('install_type', '?')}")
             console.print(f"[dim]   运行 mcp install {sid} 来安装[/dim]")
             return {"server_id": sid, "success": True, "dry_run": True}
@@ -103,6 +110,7 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
 
         if json_output:
             from rich import print_json
+
             print_json(json.dumps(results))
             return
 
@@ -133,10 +141,12 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
 def uninstall(server_id: str):
     """卸载 MCP Server。"""
     import asyncio
+
     async def _run():
         registry = Registry()
         await registry.update_status(server_id, "not_installed")
         click.echo(f"✅ {server_id} 已卸载")
+
     asyncio.run(_run())
 
 
@@ -144,6 +154,7 @@ def uninstall(server_id: str):
 def list_servers():
     """列出已安装的 Server。"""
     import asyncio
+
     async def _run():
         registry = Registry()
         servers = await registry.get_installed()
@@ -155,9 +166,10 @@ def list_servers():
         click.echo(f"\n📦 已安装 {len(servers)} 个 Server:\n")
         for s in servers:
             status = s.get("status", "unknown")
-            icon = {
-                "running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"
-            }.get(status, "❓")
+            icon = {"running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"}.get(
+                status, "❓"
+            )
             click.echo(f"  {icon} {s['id']}  v{s.get('current_version', s.get('version', '?'))}")
             click.echo(f"     {s.get('description', '')[:60]}")
+
     asyncio.run(_run())

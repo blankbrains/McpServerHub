@@ -17,6 +17,7 @@ from mcp_hub.core.registry import Registry
 @click.option("--draft", is_flag=True, help="草稿模式")
 def publish(path: str, visibility: str, draft: bool):
     """发布 MCP Server。"""
+
     async def _run():
         p = Path(path)
         # Read package metadata
@@ -30,6 +31,7 @@ def publish(path: str, visibility: str, draft: bool):
                 content = f.read()
             # Simple TOML parsing for name
             import re
+
             match = re.search(r'name\s*=\s*"([^"]+)"', content)
             meta = {"name": match.group(1) if match else p.name}
         else:
@@ -64,6 +66,7 @@ def publish(path: str, visibility: str, draft: bool):
 @click.argument("author", required=False, default="")
 def my_servers(author: str):
     """查看我发布的 Server。"""
+
     async def _run():
         if not author:
             click.echo("📦 请指定发布者名称, 例如: mcp my-servers anthropic")
@@ -76,8 +79,11 @@ def my_servers(author: str):
             return
         click.echo(f"📦 '{author}' 发布的 Server ({len(servers)}):")
         for s in servers:
-            click.echo(f"  • {s['id']}  v{s.get('version', '?')}  "
-                       f"⭐{s.get('rating', 0)}  \U0001f4e5{s.get('download_count', 0)}")
+            click.echo(
+                f"  • {s['id']}  v{s.get('version', '?')}  "
+                f"⭐{s.get('rating', 0)}  \U0001f4e5{s.get('download_count', 0)}"
+            )
+
     asyncio.run(_run())
 
 
@@ -86,6 +92,7 @@ def my_servers(author: str):
 @click.confirmation_option(prompt="确定要下架吗？")
 def unpublish(server_id: str):
     """下架 Server。"""
+
     async def _run():
         registry = Registry()
         success = await registry.unpublish_server(server_id)
@@ -93,6 +100,7 @@ def unpublish(server_id: str):
             click.echo(f"✅ {server_id} 已下架")
         else:
             click.echo(f"❌ {server_id} 未找到")
+
     asyncio.run(_run())
 
 
@@ -102,6 +110,7 @@ def unpublish(server_id: str):
 @click.option("--history", is_flag=True, help="显示操作历史")
 def stats(server_id: str, period: str, history: bool):
     """查看 Server 统计数据。"""
+
     async def _run():
         registry = Registry()
         s = await registry.get_by_id(server_id)
@@ -114,9 +123,11 @@ def stats(server_id: str, period: str, history: bool):
         click.echo(f"   ⭐ 收藏: {s.get('favorite_count', 0)}")
 
         if history:
+            from sqlalchemy import select
+
             from mcp_hub.db.database import async_session_factory
             from mcp_hub.db.models import InstallHistoryModel
-            from sqlalchemy import select
+
             async with async_session_factory() as session:
                 result = await session.execute(
                     select(InstallHistoryModel)
@@ -128,8 +139,10 @@ def stats(server_id: str, period: str, history: bool):
             if records:
                 click.echo(f"\n\U0001f4cb 最近操作 ({len(records)} 条):")
                 for r in records:
-                    click.echo(f"   [{r.created_at.strftime('%m-%d %H:%M')}] "
-                               f"{r.action} v{r.version}")
+                    click.echo(
+                        f"   [{r.created_at.strftime('%m-%d %H:%M')}] {r.action} v{r.version}"
+                    )
             else:
                 click.echo("   \U0001f4ed 暂无操作记录")
+
     asyncio.run(_run())

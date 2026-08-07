@@ -9,21 +9,37 @@ import logging
 import re
 
 import httpx
-
-logger = logging.getLogger(__name__)
 from sqlalchemy import select
 
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import ServerModel
 
+logger = logging.getLogger(__name__)
+
 # ========== 图标生成 ==========
 
 # 调色板 — 根据名字 hash 选颜色
 COLORS = [
-    "#4F46E5", "#059669", "#D97706", "#DC2626", "#7C3AED",
-    "#0284C7", "#0891B2", "#65A30D", "#9333EA", "#E11D48",
-    "#2563EB", "#0D9488", "#CA8A04", "#EA580C", "#A21CAF",
-    "#1D4ED8", "#0F766E", "#B45309", "#B91C1C", "#6D28D9",
+    "#4F46E5",
+    "#059669",
+    "#D97706",
+    "#DC2626",
+    "#7C3AED",
+    "#0284C7",
+    "#0891B2",
+    "#65A30D",
+    "#9333EA",
+    "#E11D48",
+    "#2563EB",
+    "#0D9488",
+    "#CA8A04",
+    "#EA580C",
+    "#A21CAF",
+    "#1D4ED8",
+    "#0F766E",
+    "#B45309",
+    "#B91C1C",
+    "#6D28D9",
 ]
 
 
@@ -45,7 +61,7 @@ def _generate_svg_icon(name: str) -> str:
         f'<text x="32" y="32" text-anchor="middle" dominant-baseline="central" '
         f'fill="white" font-size="{font_size}" font-weight="bold" '
         f'font-family="-apple-system,BlinkMacSystemFont,sans-serif">{letter}</text>'
-        f'</svg>'
+        f"</svg>"
     )
     b64 = base64.b64encode(svg.encode()).decode()
     return f"data:image/svg+xml;base64,{b64}"
@@ -206,7 +222,6 @@ async def enrich_all():
     await generate_icons()
 
     await translate_descriptions()
-
 
 
 if __name__ == "__main__":

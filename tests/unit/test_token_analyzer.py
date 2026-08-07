@@ -20,6 +20,7 @@ from mcp_hub.core.token_analyzer import (
 
 # ── Tokenizer ──────────────────────────────────────────────
 
+
 class TestTokenizer:
     def test_count_english(self) -> None:
         count = Tokenizer.count("Hello world")
@@ -59,6 +60,7 @@ class TestTokenizer:
 
 # ── TokenBreakdown ─────────────────────────────────────────
 
+
 class TestTokenBreakdown:
     def test_creation(self) -> None:
         tb = TokenBreakdown("name", "test-tool", 8, 3)
@@ -73,6 +75,7 @@ class TestTokenBreakdown:
 
 # ── ToolTokenDetail ────────────────────────────────────────
 
+
 class TestToolTokenDetail:
     def test_creation(self) -> None:
         td = ToolTokenDetail("web-search", 150)
@@ -83,7 +86,8 @@ class TestToolTokenDetail:
 
     def test_with_breakdown(self) -> None:
         td = ToolTokenDetail(
-            "db-query", 300,
+            "db-query",
+            300,
             breakdown=[
                 TokenBreakdown("name", "db-query", 7, 2),
                 TokenBreakdown("description", "query db", 10, 5),
@@ -95,6 +99,7 @@ class TestToolTokenDetail:
 
 
 # ── AnalysisReport ─────────────────────────────────────────
+
 
 class TestAnalysisReport:
     def test_creation(self) -> None:
@@ -132,6 +137,7 @@ class TestAnalysisReport:
 
 # ── OptimizationSuggestion ─────────────────────────────────
 
+
 class TestOptimizationSuggestion:
     def test_creation(self) -> None:
         s = OptimizationSuggestion(
@@ -148,6 +154,7 @@ class TestOptimizationSuggestion:
 
 # ── OptimizationResult ─────────────────────────────────────
 
+
 class TestOptimizationResult:
     def test_creation(self) -> None:
         r = OptimizationResult(
@@ -162,6 +169,7 @@ class TestOptimizationResult:
 
 
 # ── Optimizer ──────────────────────────────────────────────
+
 
 class TestOptimizer:
     def test_shorten_description_short(self) -> None:
@@ -217,7 +225,9 @@ class TestOptimizer:
 
     def test_optimize_tool_no_changes(self) -> None:
         name, desc, schema, suggestions = Optimizer.optimize_tool(
-            "simple", "short desc", {"type": "object", "properties": {}},
+            "simple",
+            "short desc",
+            {"type": "object", "properties": {}},
         )
         # May have no suggestions if already optimal
         assert isinstance(suggestions, list)
@@ -233,22 +243,27 @@ class TestOptimizer:
 
     def test_empty_schema(self) -> None:
         name, desc, schema, suggestions = Optimizer.optimize_tool(
-            "test", "desc", None,
+            "test",
+            "desc",
+            None,
         )
         assert schema is None
 
 
 # ── TokenAnalyzer ──────────────────────────────────────────
 
+
 class TestTokenAnalyzer:
     def test_analyze_server_no_tools(self) -> None:
         analyzer = TokenAnalyzer()
-        report = analyzer.analyze_server({
-            "id": "@test/srv",
-            "description": "a test server",
-            "install_command": "pip install test",
-            "install_type": "pip",
-        })
+        report = analyzer.analyze_server(
+            {
+                "id": "@test/srv",
+                "description": "a test server",
+                "install_command": "pip install test",
+                "install_type": "pip",
+            }
+        )
         assert report.server_id == "@test/srv"
         assert report.total_tokens > 0
         assert report.estimated  # no tool definitions
@@ -256,32 +271,34 @@ class TestTokenAnalyzer:
 
     def test_analyze_server_with_tools(self) -> None:
         analyzer = TokenAnalyzer()
-        report = analyzer.analyze_server({
-            "id": "@test/srv",
-            "description": "a test server",
-            "tool_definitions": [
-                {
-                    "name": "search",
-                    "description": "Search the web for information",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "search term"},
+        report = analyzer.analyze_server(
+            {
+                "id": "@test/srv",
+                "description": "a test server",
+                "tool_definitions": [
+                    {
+                        "name": "search",
+                        "description": "Search the web for information",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string", "description": "search term"},
+                            },
                         },
                     },
-                },
-                {
-                    "name": "fetch",
-                    "description": "Fetch a URL and return content",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string", "description": "the url"},
+                    {
+                        "name": "fetch",
+                        "description": "Fetch a URL and return content",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string", "description": "the url"},
+                            },
                         },
                     },
-                },
-            ],
-        })
+                ],
+            }
+        )
         assert report.server_id == "@test/srv"
         assert report.total_tokens > 0
         assert not report.estimated
@@ -292,24 +309,26 @@ class TestTokenAnalyzer:
         """Server with large tool definitions should show high token count."""
         analyzer = TokenAnalyzer()
         long_desc = "A tool that " + "helpful " * 100
-        report = analyzer.analyze_server({
-            "id": "@test/large",
-            "description": "big server",
-            "tool_definitions": [
-                {
-                    "name": "big-tool",
-                    "description": long_desc,
-                    "inputSchema": {
-                        "type": "object",
-                        "title": "Args",
-                        "properties": {
-                            "p1": {"type": "string", "description": "very " * 50},
-                            "p2": {"type": "integer", "description": "lots of " * 40},
+        report = analyzer.analyze_server(
+            {
+                "id": "@test/large",
+                "description": "big server",
+                "tool_definitions": [
+                    {
+                        "name": "big-tool",
+                        "description": long_desc,
+                        "inputSchema": {
+                            "type": "object",
+                            "title": "Args",
+                            "properties": {
+                                "p1": {"type": "string", "description": "very " * 50},
+                                "p2": {"type": "integer", "description": "lots of " * 40},
+                            },
                         },
                     },
-                },
-            ],
-        })
+                ],
+            }
+        )
         assert report.total_tokens > 100
         assert report.optimization_potential > 0
         assert len(report.suggestions) >= 1
@@ -352,7 +371,13 @@ class TestTokenAnalyzer:
                         "type": "object",
                         "title": "Parameters",
                         "properties": {
-                            "input": {"type": "string", "description": "The input parameter that needs to be processed by this very useful and amazing tool"},  # noqa: E501
+                            "input": {
+                                "type": "string",
+                                "description": (
+                                    "The input parameter that needs to be processed by this "
+                                    "very useful and amazing tool"
+                                ),
+                            },  # noqa: E501
                         },
                         "required": ["input"],
                     },
@@ -375,6 +400,7 @@ class TestTokenAnalyzer:
 
 
 # ── format_report / format_optimization ────────────────────
+
 
 class TestFormatters:
     def test_format_report_no_tools(self) -> None:

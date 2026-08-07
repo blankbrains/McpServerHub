@@ -59,15 +59,15 @@ class ReviewModel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
     user_id = Column(String(255), nullable=False, index=True)
-    parent_id = Column(Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True, index=True)
+    parent_id = Column(
+        Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     rating = Column(Integer, nullable=False)
     content = Column(Text, default="")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("server_id", "user_id", name="uq_review_server_user"),
-    )
+    __table_args__ = (UniqueConstraint("server_id", "user_id", name="uq_review_server_user"),)
 
 
 class UserModel(Base):
@@ -91,9 +91,7 @@ class FavoriteModel(Base):
     server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "server_id", name="uq_favorite_user_server"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "server_id", name="uq_favorite_user_server"),)
 
 
 class HealthLogModel(Base):
@@ -134,13 +132,16 @@ class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True)
+    server_id = Column(
+        String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     topic = Column(String(255), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
 
 class UsageStatsModel(Base):
     """MCP Server 调用统计 — 记录每次 tool call。"""
+
     __tablename__ = "usage_stats"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -155,6 +156,7 @@ class UsageStatsModel(Base):
 
 class UserServerModel(Base):
     """用户跟踪的 Server 配置 — 用户隔离存储。"""
+
     __tablename__ = "user_servers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -166,13 +168,12 @@ class UserServerModel(Base):
     group_name = Column(String(100), default="")
     created_at = Column(DateTime, server_default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "server_id", name="uq_user_server"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "server_id", name="uq_user_server"),)
 
 
 class NotificationModel(Base):
     """用户通知 — 系统事件、Server 告警、版本更新等。"""
+
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -188,6 +189,7 @@ class NotificationModel(Base):
 
 class PresetModel(Base):
     """配置方案 — 用户可发布整套 MCP 配置供他人一键导入。"""
+
     __tablename__ = "presets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

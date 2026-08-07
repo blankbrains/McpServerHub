@@ -52,16 +52,15 @@ class Installer:
             parts.insert(1, "-y")
         try:
             proc = await asyncio.create_subprocess_exec(
-                *parts, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                *parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
             if proc.returncode != 0:
                 return {
                     "success": False,
-                    "error": (
-                        f"安装失败 (code={proc.returncode}): "
-                        f"{stderr.decode()[:300]}"
-                    ),
+                    "error": (f"安装失败 (code={proc.returncode}): {stderr.decode()[:300]}"),
                 }
             return {"success": True, "detail": stdout.decode()[:200]}
         except asyncio.TimeoutError:
@@ -76,6 +75,7 @@ class Installer:
         from sqlalchemy import text
 
         from mcp_hub.db.database import async_session_factory
+
         async with async_session_factory() as session:
             await session.execute(
                 text(

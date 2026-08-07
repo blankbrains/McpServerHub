@@ -14,8 +14,8 @@ def cli():
 
 
 # Import and register all subcommands
-from mcp_hub.cli.auth import login, logout, whoami  # noqa: E402
 from mcp_hub.cli.agent import agent  # noqa: E402
+from mcp_hub.cli.auth import login, logout, whoami  # noqa: E402
 from mcp_hub.cli.community import favorite, favorites, rate, review  # noqa: E402
 from mcp_hub.cli.config import config  # noqa: E402
 from mcp_hub.cli.create import create  # noqa: E402

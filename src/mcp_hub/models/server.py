@@ -27,6 +27,7 @@ class SecurityInfo(BaseModel):
 
 class ServerMeta(BaseModel):
     """Server 元数据 —— 核心数据结构。"""
+
     name: str  # @org/server-name
     version: str
     description: str = ""
@@ -56,6 +57,7 @@ class ServerMeta(BaseModel):
 
 class ServerCreate(BaseModel):
     """创建 Server 请求。"""
+
     name: str = Field(..., pattern=r"^@[\w-]+/[\w.-]+$")
     version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
     description: str = ""
@@ -69,6 +71,7 @@ class ServerCreate(BaseModel):
 
 class ServerResponse(BaseModel):
     """Server 响应。"""
+
     id: str
     name: str
     display_name: str

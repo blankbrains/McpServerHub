@@ -8,11 +8,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mcp_hub import __version__
+from mcp_hub.api.routes_admin import router as admin_router
 from mcp_hub.api.routes_auth import router as auth_router
 from mcp_hub.api.routes_builder import router as builder_router
 from mcp_hub.api.routes_community import router as community_router
@@ -21,17 +21,16 @@ from mcp_hub.api.routes_export import router as export_router
 from mcp_hub.api.routes_health import router as health_router
 from mcp_hub.api.routes_manage import router as manage_router
 from mcp_hub.api.routes_market import router as market_router
+from mcp_hub.api.routes_monitor import router as monitor_router
+from mcp_hub.api.routes_notifications import router as notifications_router
+from mcp_hub.api.routes_presets import router as presets_router
 from mcp_hub.api.routes_publish import router as publish_router
 from mcp_hub.api.routes_realtime import router as realtime_router
 from mcp_hub.api.routes_search import router as search_router
 from mcp_hub.api.routes_security import router as security_router
-from mcp_hub.api.routes_token import router as token_router
-from mcp_hub.api.routes_monitor import router as monitor_router
-from mcp_hub.api.routes_usage import router as usage_router
 from mcp_hub.api.routes_telemetry import router as telemetry_router
-from mcp_hub.api.routes_notifications import router as notifications_router
-from mcp_hub.api.routes_admin import router as admin_router
-from mcp_hub.api.routes_presets import router as presets_router
+from mcp_hub.api.routes_token import router as token_router
+from mcp_hub.api.routes_usage import router as usage_router
 from mcp_hub.config import get_settings
 from mcp_hub.exceptions import McpHubError
 from mcp_hub.logging_config import get_logger
@@ -44,6 +43,7 @@ async def lifespan(_app: FastAPI):
     logger.info("db.initializing")
     try:
         from mcp_hub.db.database import init_db
+
         await init_db()
         logger.info("db.initialized")
     except Exception as e:
@@ -76,7 +76,9 @@ def create_app(dev: bool = False) -> FastAPI:
 
     # === Exception Handlers (统一响应格式) ===
 
-    def _error_response(code: str, message: str, status: int = 500, details: dict | None = None) -> JSONResponse:
+    def _error_response(
+        code: str, message: str, status: int = 500, details: dict | None = None
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=status,
             content={
@@ -146,10 +148,12 @@ def create_app(dev: bool = False) -> FastAPI:
     # 使用统一的 SPA 挂载逻辑
     static_dir = Path(__file__).parent.parent / "web" / "static"
     from mcp_hub.web.app import mount_web_dashboard
+
     mount_web_dashboard(app, static_dir)
 
     # 没有前端构建时，提供 JSON 根路径
     if not (static_dir / "index.html").exists():
+
         @app.get("/")
         async def root():
             return {

@@ -33,9 +33,7 @@ def get_agent_state_dir(agent_type: str | None = None) -> Path:
         return Path(configured).expanduser()
 
     configured_agent_type = (
-        agent_type
-        if agent_type is not None
-        else os.environ.get(AGENT_TYPE_ENV, DEFAULT_AGENT_TYPE)
+        agent_type if agent_type is not None else os.environ.get(AGENT_TYPE_ENV, DEFAULT_AGENT_TYPE)
     )
     try:
         normalized_agent_type = normalize_agent_type(configured_agent_type)

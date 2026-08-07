@@ -1,4 +1,5 @@
 """CLI publish 命令测试。"""
+
 from __future__ import annotations
 
 from click.testing import CliRunner

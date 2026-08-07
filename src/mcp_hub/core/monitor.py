@@ -28,10 +28,10 @@ logger = get_logger(__name__)
 # ── 常量 ───────────────────────────────────────────────────
 
 # 可靠性评分权重
-WEIGHT_UPTIME_24H = 0.40    # 24小时 uptime 权重最高
-WEIGHT_UPTIME_7D = 0.30     # 7天 uptime
+WEIGHT_UPTIME_24H = 0.40  # 24小时 uptime 权重最高
+WEIGHT_UPTIME_7D = 0.30  # 7天 uptime
 WEIGHT_RESPONSE_TIME = 0.20  # 响应时间
-WEIGHT_UPTIME_1H = 0.10     # 当前稳定性
+WEIGHT_UPTIME_1H = 0.10  # 当前稳定性
 
 # 时间窗口定义
 TIME_WINDOWS: dict[str, timedelta] = {
@@ -42,9 +42,9 @@ TIME_WINDOWS: dict[str, timedelta] = {
 }
 
 # 响应时间评分标准（毫秒）
-RESPONSE_TIME_GOOD = 100    # <100ms → 满分
-RESPONSE_TIME_OK = 500      # <500ms → 部分扣分
-RESPONSE_TIME_SLOW = 2000   # <2000ms → 严重扣分
+RESPONSE_TIME_GOOD = 100  # <100ms → 满分
+RESPONSE_TIME_OK = 500  # <500ms → 部分扣分
+RESPONSE_TIME_SLOW = 2000  # <2000ms → 严重扣分
 
 
 # ── 数据结构 ───────────────────────────────────────────────
@@ -53,18 +53,20 @@ RESPONSE_TIME_SLOW = 2000   # <2000ms → 严重扣分
 @dataclass
 class UptimeStats:
     """某个时间段内的 uptime 统计。"""
-    window: str           # 1h, 24h, 7d, 30d
+
+    window: str  # 1h, 24h, 7d, 30d
     total_checks: int
     passed_checks: int
-    uptime_pct: float     # 0-100
+    uptime_pct: float  # 0-100
     avg_response_time_ms: float
 
 
 @dataclass
 class ReliabilityReport:
     """Server 的完整可靠性报告。"""
+
     server_id: str
-    reliability_score: int          # 0-100
+    reliability_score: int  # 0-100
     uptime_stats: list[UptimeStats] = field(default_factory=list)
     total_checks_recorded: int = 0
     last_check_at: str | None = None
@@ -75,8 +77,9 @@ class ReliabilityReport:
 @dataclass
 class ServerHealthSummary:
     """Server 健康摘要。"""
+
     server_id: str
-    status: str           # healthy / warning / error / unknown
+    status: str  # healthy / warning / error / unknown
     reliability_score: int
     uptime_24h: float
     avg_response_ms: float
@@ -159,9 +162,7 @@ class Monitor:
                     rows = await session.execute(
                         select(
                             func.count(HealthLogModel.id),
-                            func.sum(
-                                case((HealthLogModel.status == "ok", 1), else_=0)
-                            ),
+                            func.sum(case((HealthLogModel.status == "ok", 1), else_=0)),
                             func.avg(HealthLogModel.response_time_ms),
                         ).where(
                             HealthLogModel.server_id == server_id,
@@ -178,13 +179,15 @@ class Monitor:
                     avg_ms = 0.0
 
                 uptime_pct = (passed / total * 100) if total > 0 else 0.0
-                results.append(UptimeStats(
-                    window=w,
-                    total_checks=total,
-                    passed_checks=passed,
-                    uptime_pct=round(uptime_pct, 1),
-                    avg_response_time_ms=round(avg_ms, 1),
-                ))
+                results.append(
+                    UptimeStats(
+                        window=w,
+                        total_checks=total,
+                        passed_checks=passed,
+                        uptime_pct=round(uptime_pct, 1),
+                        avg_response_time_ms=round(avg_ms, 1),
+                    )
+                )
 
         return results
 
@@ -212,7 +215,7 @@ class Monitor:
         uptime_1h = u1h.uptime_pct if u1h else 0
 
         # 响应时间评分
-        avg_ms = (u24h.avg_response_time_ms if u24h else 0)
+        avg_ms = u24h.avg_response_time_ms if u24h else 0
         response_score = Monitor._score_response_time(avg_ms)
 
         # 综合评分
@@ -225,9 +228,7 @@ class Monitor:
         score = max(0, min(100, round(score)))
 
         # 获取最近状态
-        last_check, total_checks, recent_errors = await Monitor._get_recent_status(
-            server_id
-        )
+        last_check, total_checks, recent_errors = await Monitor._get_recent_status(server_id)
 
         # 如果没有数据，评分为 0
         if total_checks == 0:
@@ -250,7 +251,9 @@ class Monitor:
             return 100.0
         if avg_ms <= RESPONSE_TIME_OK:
             # 100 → 线性下降至 60
-            return 100 - (avg_ms - RESPONSE_TIME_GOOD) / (RESPONSE_TIME_OK - RESPONSE_TIME_GOOD) * 40  # noqa: E501
+            return (
+                100 - (avg_ms - RESPONSE_TIME_GOOD) / (RESPONSE_TIME_OK - RESPONSE_TIME_GOOD) * 40
+            )  # noqa: E501
         if avg_ms <= RESPONSE_TIME_SLOW:
             # 60 → 线性下降至 20
             return 60 - (avg_ms - RESPONSE_TIME_OK) / (RESPONSE_TIME_SLOW - RESPONSE_TIME_OK) * 40
@@ -264,9 +267,7 @@ class Monitor:
         async with async_session_factory() as session:
             # 总记录数
             count_row = await session.execute(
-                select(func.count(HealthLogModel.id)).where(
-                    HealthLogModel.server_id == server_id
-                )
+                select(func.count(HealthLogModel.id)).where(HealthLogModel.server_id == server_id)
             )
             total = count_row.scalar() or 0
 
@@ -369,8 +370,7 @@ class Monitor:
                 await session.execute(
                     select(func.count(HealthLogModel.id)).where(
                         HealthLogModel.status == "error",
-                        HealthLogModel.created_at
-                        >= datetime.utcnow() - timedelta(hours=24),
+                        HealthLogModel.created_at >= datetime.utcnow() - timedelta(hours=24),
                     )
                 )
             ).scalar() or 0
@@ -380,9 +380,7 @@ class Monitor:
             "running": len(running),
             "total_health_checks": total_logs,
             "errors_last_24h": error_logs_24h,
-            "monitored_servers": len([
-                s for s in installed if s.get("status") == "running"
-            ]),
+            "monitored_servers": len([s for s in installed if s.get("status") == "running"]),
         }
 
 
@@ -391,8 +389,4 @@ class Monitor:
 
 def _get_case_expression() -> Any:
     """创建 case 表达式用于 SQL count。"""
-    return func.sum(
-        case((HealthLogModel.status == "ok", 1), else_=0)
-    )
-
-
+    return func.sum(case((HealthLogModel.status == "ok", 1), else_=0))

@@ -65,9 +65,7 @@ def _command_config(command: str) -> dict[str, object]:
     return config
 
 
-def get_config_for_agent(
-    server_name: str, command: str, agent: str = "generic"
-) -> dict:
+def get_config_for_agent(server_name: str, command: str, agent: str = "generic") -> dict:
     """生成指定 Agent 的配置片段。"""
     cfg = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
     server_config = _command_config(command)
@@ -158,7 +156,7 @@ class ConfigManager:
 
         # 将环境变量注入配置 content
         if env_vars and "config_content" in base_config:
-            for config_key, config_value in base_config["config_content"].items():
+            for _config_key, config_value in base_config["config_content"].items():
                 if server_name in config_value:
                     config_value[server_name]["env"] = env_vars
                     break
@@ -234,7 +232,11 @@ class ConfigManager:
         different = []
         for n in all_names:
             if n in local_servers and n in hub_servers:
-                l_cmd = local_servers[n].get("command", "") if isinstance(local_servers[n], dict) else ""
+                l_cmd = (
+                    local_servers[n].get("command", "")
+                    if isinstance(local_servers[n], dict)
+                    else ""
+                )
                 h_cmd = hub_servers.get(n, "")
                 if l_cmd and h_cmd and l_cmd != h_cmd:
                     different.append({"name": n, "local": l_cmd, "hub": h_cmd})
@@ -271,7 +273,7 @@ class ConfigManager:
         backup_path.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
         return {
             "success": True,
-            "message": f"配置已备份",
+            "message": "配置已备份",
             "path": str(backup_path),
             "filename": filename,
         }
@@ -289,13 +291,15 @@ class ConfigManager:
                 count = len(cfg.get("mcpServers", {}))
             except Exception:
                 count = -1
-            backups.append({
-                "filename": f.name,
-                "path": str(f),
-                "size": stat.st_size,
-                "created_at": stat.st_mtime,
-                "server_count": count,
-            })
+            backups.append(
+                {
+                    "filename": f.name,
+                    "path": str(f),
+                    "size": stat.st_size,
+                    "created_at": stat.st_mtime,
+                    "server_count": count,
+                }
+            )
         return backups
 
     async def restore_backup(self, filename: str) -> dict:
@@ -310,7 +314,9 @@ class ConfigManager:
         # 写入当前配置
         config_data = json.loads(backup_path.read_text(encoding="utf-8"))
         config_path = self.config_dir / "mcp.json"
-        config_path.write_text(json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        config_path.write_text(
+            json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
         return {
             "success": True,
             "message": f"已从 {filename} 恢复配置",
@@ -328,7 +334,6 @@ class ConfigManager:
         - 磁盘空间是否充足
         - 当前环境是否可能存在端口冲突
         """
-        import os
         import shutil
         import subprocess
         import sys
@@ -338,11 +343,13 @@ class ConfigManager:
         # 1. Python 版本检查
         py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
         py_ok = sys.version_info >= (3, 10)
-        checks.append({
-            "name": "Python 版本",
-            "status": "ok" if py_ok else "fail",
-            "detail": f"Python {py_version}" + (" (需要 ≥ 3.10)" if not py_ok else " ✓"),
-        })
+        checks.append(
+            {
+                "name": "Python 版本",
+                "status": "ok" if py_ok else "fail",
+                "detail": f"Python {py_version}" + (" (需要 ≥ 3.10)" if not py_ok else " ✓"),
+            }
+        )
 
         # 2. 安装工具检查
         cmd_parts = command.split()
@@ -351,8 +358,9 @@ class ConfigManager:
 
         if tool in ("pip", "pip3"):
             try:
-                subprocess.run([sys.executable, "-m", "pip", "--version"],
-                             capture_output=True, timeout=10)
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "--version"], capture_output=True, timeout=10
+                )
                 tool_available = True
             except Exception:
                 pass
@@ -365,28 +373,34 @@ class ConfigManager:
         elif tool == "go":
             tool_available = shutil.which("go") is not None
 
-        checks.append({
-            "name": f"安装工具 ({tool})",
-            "status": "ok" if tool_available else "warn",
-            "detail": "已安装" if tool_available else f"未找到 {tool}，安装可能失败",
-        })
+        checks.append(
+            {
+                "name": f"安装工具 ({tool})",
+                "status": "ok" if tool_available else "warn",
+                "detail": "已安装" if tool_available else f"未找到 {tool}，安装可能失败",
+            }
+        )
 
         # 3. 磁盘空间检查
         try:
             usage = shutil.disk_usage(self.config_dir)
-            free_gb = usage.free / (1024 ** 3)
+            free_gb = usage.free / (1024**3)
             disk_ok = free_gb >= 1.0
-            checks.append({
-                "name": "磁盘空间",
-                "status": "ok" if disk_ok else "warn",
-                "detail": f"可用 {free_gb:.1f} GB" + ("" if disk_ok else " (建议 ≥ 1GB)"),
-            })
+            checks.append(
+                {
+                    "name": "磁盘空间",
+                    "status": "ok" if disk_ok else "warn",
+                    "detail": f"可用 {free_gb:.1f} GB" + ("" if disk_ok else " (建议 ≥ 1GB)"),
+                }
+            )
         except Exception:
-            checks.append({
-                "name": "磁盘空间",
-                "status": "ok",
-                "detail": "无法检测",
-            })
+            checks.append(
+                {
+                    "name": "磁盘空间",
+                    "status": "ok",
+                    "detail": "无法检测",
+                }
+            )
 
         # 汇总
         has_failure = any(c["status"] == "fail" for c in checks)

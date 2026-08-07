@@ -14,6 +14,7 @@ from mcp_hub.core.registry import Registry
 @click.argument("server_name", required=False)
 def start(server_name: str | None):
     """启动 Server (支持 all: 启动所有已安装但未运行的)。"""
+
     async def _run():
         registry = Registry()
         pm = ProcessManager()
@@ -27,13 +28,14 @@ def start(server_name: str | None):
             # 获取已禁用的 Server ID 列表
             disabled: set[str] = set()
             try:
+                from sqlalchemy import select
+
                 from mcp_hub.db.database import async_session_factory
                 from mcp_hub.db.models import UserServerModel
-                from sqlalchemy import select
+
                 async with async_session_factory() as session:
                     result = await session.execute(
-                        select(UserServerModel.server_id)
-                        .where(UserServerModel.enabled == False)  # noqa: E712
+                        select(UserServerModel.server_id).where(UserServerModel.enabled == False)  # noqa: E712
                     )
                     disabled = {row[0] for row in result.fetchall()}
             except Exception:
@@ -83,6 +85,7 @@ def start(server_name: str | None):
 @click.argument("server_name", required=False)
 def stop(server_name: str | None):
     """停止 Server (支持 all: 停止所有运行中的)。"""
+
     async def _run():
         registry = Registry()
         pm = ProcessManager()
@@ -115,6 +118,7 @@ def stop(server_name: str | None):
 @click.argument("server_name", required=True)
 def restart(server_name: str):
     """重启 Server。"""
+
     async def _run():
         registry = Registry()
         pm = ProcessManager()
@@ -137,6 +141,7 @@ def status_cmd(server_name: str | None):
     """查看 Server 状态。"""
     from rich.console import Console
     from rich.table import Table
+
     _console = Console()
 
     async def _run():
@@ -152,9 +157,9 @@ def status_cmd(server_name: str | None):
 
             running = pm.is_running(server_id)
             status = server.get("status", "not_installed")
-            icon = {
-                "running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"
-            }.get(status, "❓")
+            icon = {"running": "🟢", "stopped": "⏹", "error": "🔴", "not_installed": "📥"}.get(
+                status, "❓"
+            )
             _console.print(f"{icon} [bold]{server_id}[/bold]")
             _console.print(f"   状态: {status}")
             _console.print(f"   版本: v{server.get('version', '?')}")
@@ -169,9 +174,7 @@ def status_cmd(server_name: str | None):
 
             running_count = len(pm.list_running())
 
-            summary_title = (
-                f"📊 总览: {running_count} 运行 / {len(servers)} 已安装"
-            )
+            summary_title = f"📊 总览: {running_count} 运行 / {len(servers)} 已安装"
             table = Table(title=summary_title, header_style="bold cyan")
             table.add_column("状态", justify="center")
             table.add_column("Server ID", style="cyan")
@@ -190,11 +193,14 @@ def status_cmd(server_name: str | None):
             # 检查可用更新（不阻塞主流程）
             try:
                 from mcp_hub.core.version_manager import VersionManager
+
                 vm = VersionManager()
                 updates = await vm.check_updates()
                 if updates:
-                    _console.print(f"\n[yellow]⚠️  {len(updates)} 个 Server 有可用更新。"
-                                   f"运行 [bold]mcp update[/bold] 查看详情[/yellow]")
+                    _console.print(
+                        f"\n[yellow]⚠️  {len(updates)} 个 Server 有可用更新。"
+                        f"运行 [bold]mcp update[/bold] 查看详情[/yellow]"
+                    )
             except Exception:
                 pass  # 网络错误不阻塞 status
 

@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 class ErrorDetail(BaseModel):
     """错误详情。"""
+
     code: str
     message: str
     details: dict[str, Any] | None = None
@@ -25,23 +26,27 @@ class ErrorDetail(BaseModel):
 
 class ApiResponse(BaseModel):
     """基础响应。"""
+
     success: bool = True
 
 
 class ApiDataResponse(ApiResponse):
     """带数据的成功响应。"""
+
     data: Any = None
     meta: dict[str, Any] | None = None
 
 
 class ApiErrorResponse(ApiResponse):
     """错误响应。"""
+
     success: bool = False
     error: ErrorDetail
 
 
 class ApiListResponse(ApiResponse):
     """列表响应。"""
+
     data: list[Any] = []
     meta: dict[str, Any] | None = None
 

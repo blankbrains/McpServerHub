@@ -48,6 +48,7 @@ def analyze(
       mcp analyze @anthropic/web-search --json  输出 JSON
       mcp analyze @anthropic/web-search --deep  尝试连接实时 Server
     """
+
     async def _run():
         analyzer = TokenAnalyzer()
         registry = Registry()
@@ -71,7 +72,13 @@ def analyze(
             if json_output:
                 out = []
                 for r in results:
-                    out.append({"server_id": r.server_id, "total_tokens": r.total_tokens, "context_pct": r.context_usage_pct})  # noqa: E501
+                    out.append(
+                        {
+                            "server_id": r.server_id,
+                            "total_tokens": r.total_tokens,
+                            "context_pct": r.context_usage_pct,
+                        }
+                    )  # noqa: E501
                 console.print(json.dumps(out, ensure_ascii=False, indent=2))
                 return
 
@@ -87,7 +94,9 @@ def analyze(
             results.sort(key=lambda r: r.total_tokens, reverse=True)
             for r in results:
                 pct = Tokenizer.format_pct(r.context_usage_pct)
-                level = "🟢" if r.context_usage_pct < 10 else "🟡" if r.context_usage_pct < 16 else "🔴"  # noqa: E501
+                level = (
+                    "🟢" if r.context_usage_pct < 10 else "🟡" if r.context_usage_pct < 16 else "🔴"
+                )  # noqa: E501
                 short_id = r.server_id.split("/")[-1] if "/" in r.server_id else r.server_id
                 table.add_row(
                     short_id[:25],
@@ -121,7 +130,9 @@ def analyze(
                     "server_id": report.server_id,
                     "total_tokens": report.total_tokens,
                     "context_pct": report.context_usage_pct,
-                    "tools": [{"name": t.tool_name, "tokens": t.total_tokens} for t in report.tools],  # noqa: E501
+                    "tools": [
+                        {"name": t.tool_name, "tokens": t.total_tokens} for t in report.tools
+                    ],  # noqa: E501
                     "opt_potential": report.optimization_potential,
                     "suggestions": report.suggestions,
                     "estimated": report.estimated,
@@ -161,6 +172,7 @@ def optimize(server_name: str, do_apply: bool):
       mcp optimize @anthropic/web-search       查看优化建议
       mcp optimize --apply @anthropic/web-search  写入配置文件
     """
+
     async def _run():
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         registry = Registry()
@@ -174,14 +186,17 @@ def optimize(server_name: str, do_apply: bool):
 
         if do_apply:
             from pathlib import Path
+
             config_dir = Path.home() / ".config" / "mcp-hub"
             config_dir.mkdir(parents=True, exist_ok=True)
             output_path = config_dir / "mcp-optimized.json"
             output_path.write_text(result.optimized_definition, encoding="utf-8")
             console.print(f"[green]✅ 优化配置已写入 {output_path}[/green]")
-            console.print(f"[dim]  原来: {Tokenizer.format_tokens(result.original_tokens)} → "
-                          f"优化后: {Tokenizer.format_tokens(result.optimized_tokens)} "
-                          f"(节省 {result.savings_pct:.1f}%)[/dim]")
+            console.print(
+                f"[dim]  原来: {Tokenizer.format_tokens(result.original_tokens)} → "
+                f"优化后: {Tokenizer.format_tokens(result.optimized_tokens)} "
+                f"(节省 {result.savings_pct:.1f}%)[/dim]"
+            )
         else:
             console.print(format_optimization(result))
             console.print("\n[yellow]提示: 使用 --apply 参数将优化后的配置写入文件[/yellow]")

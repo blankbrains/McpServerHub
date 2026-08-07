@@ -22,8 +22,12 @@ async def _prepare_dashboard_data() -> None:
         await connection.run_sync(Base.metadata.create_all)
     async with async_session_factory() as session:
         server_ids = [_ALICE_SERVER, _BOB_SERVER, _PUBLIC_SERVER, _CUSTOM_SERVER]
-        await session.execute(delete(UsageStatsModel).where(UsageStatsModel.server_id.in_(server_ids)))
-        await session.execute(delete(UserServerModel).where(UserServerModel.server_id.in_(server_ids)))
+        await session.execute(
+            delete(UsageStatsModel).where(UsageStatsModel.server_id.in_(server_ids))
+        )
+        await session.execute(
+            delete(UserServerModel).where(UserServerModel.server_id.in_(server_ids))
+        )
         await session.execute(delete(ServerModel).where(ServerModel.id.in_(server_ids)))
         session.add_all(
             [

@@ -50,17 +50,13 @@ LANGUAGES = {
 @router.get("/search/tags")
 async def get_tags():
     """获取可筛选的标签列表。"""
-    return {"success": True, "data": [
-        {"id": k, "name": k, "count": 0} for k in SEARCH_TAGS
-    ]}
+    return {"success": True, "data": [{"id": k, "name": k, "count": 0} for k in SEARCH_TAGS]}
 
 
 @router.get("/search/languages")
 async def get_languages():
     """获取编程语言列表。"""
-    return {"success": True, "data": [
-        {"id": k.lower(), "name": k} for k in LANGUAGES
-    ]}
+    return {"success": True, "data": [{"id": k.lower(), "name": k} for k in LANGUAGES]}
 
 
 @router.get("/search/authors")
@@ -68,6 +64,7 @@ async def get_authors():
     """获取常见作者/组织。"""
     async with async_session_factory() as session:
         from sqlalchemy import text
+
         rows = await session.execute(
             text(
                 "SELECT author, COUNT(*) as cnt FROM servers "
@@ -178,9 +175,13 @@ async def advanced_search(
             "page": page,
             "page_size": page_size,
             "filters": {
-                "q": q, "category": category, "tag": tag,
-                "author": author, "language": language,
-                "install_type": install_type, "security_level": security_level,
+                "q": q,
+                "category": category,
+                "tag": tag,
+                "author": author,
+                "language": language,
+                "install_type": install_type,
+                "security_level": security_level,
                 "min_stars": min_stars,
             },
         },

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shlex
 import time
@@ -17,15 +18,43 @@ logger = get_logger(__name__)
 
 # 子进程环境变量安全白名单前缀
 _SAFE_ENV_PREFIXES = (
-    "PATH", "HOME", "USER", "LANG", "LC_", "TZ",
-    "MCP_HUB_", "NODE", "NPM", "PYTHON", "PIP",
-    "VIRTUAL_ENV", "CONDA_", "SHELL", "TERM",
-    "DISPLAY", "XDG_", "DBUS_", "SSH_",
-    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
-    "TEMP", "TMP", "USERPROFILE", "APPDATA",
-    "PROGRAMFILES", "PROGRAMDATA", "COMPUTERNAME",
-    "HOSTNAME", "LOGNAME", "PWD", "OLDPWD",
-    "COLORTERM", "EDITOR", "VISUAL", "PAGER",
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_",
+    "TZ",
+    "MCP_HUB_",
+    "NODE",
+    "NPM",
+    "PYTHON",
+    "PIP",
+    "VIRTUAL_ENV",
+    "CONDA_",
+    "SHELL",
+    "TERM",
+    "DISPLAY",
+    "XDG_",
+    "DBUS_",
+    "SSH_",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "APPDATA",
+    "PROGRAMFILES",
+    "PROGRAMDATA",
+    "COMPUTERNAME",
+    "HOSTNAME",
+    "LOGNAME",
+    "PWD",
+    "OLDPWD",
+    "COLORTERM",
+    "EDITOR",
+    "VISUAL",
+    "PAGER",
 )
 
 
@@ -131,11 +160,11 @@ class ProcessManager:
                     "process.startup_failed",
                     server_id=server_id,
                     exit_code=process.returncode,
-                    stderr=''.join(error_msg)[:500],
+                    stderr="".join(error_msg)[:500],
                 )
                 log_fd.close()
                 self._processes.pop(server_id, None)
-                raise ProcessStartupError(server_id, process.returncode, ''.join(error_msg))
+                raise ProcessStartupError(server_id, process.returncode, "".join(error_msg))
 
             # Start keep-alive pings for stdio-based MCP servers
             self._start_keepalive(server_id)
@@ -145,6 +174,7 @@ class ProcessManager:
     def _start_keepalive(self, server_id: str) -> None:
         """定期发送 keep-alive 保持 stdio MCP Server 存活。"""
         import asyncio
+
         async def _ping():
             try:
                 while True:
@@ -201,10 +231,8 @@ class ProcessManager:
                     pass
             # Close the log file descriptor if still open
             if proc.log_fd is not None:
-                try:
+                with contextlib.suppress(OSError):
                     os.close(proc.log_fd)
-                except OSError:
-                    pass
                 proc.log_fd = None
             return True
 
@@ -212,10 +240,7 @@ class ProcessManager:
         return self._processes.get(server_id)
 
     def list_running(self) -> list[ManagedProcess]:
-        return [
-            p for p in self._processes.values()
-            if p.process and p.process.returncode is None
-        ]
+        return [p for p in self._processes.values() if p.process and p.process.returncode is None]
 
     def is_running(self, server_id: str) -> bool:
         proc = self._processes.get(server_id)
@@ -226,14 +251,10 @@ class ProcessManager:
         async with self._lock:
             for proc in list(self._processes.values()):
                 if proc.log_fd is not None:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.close(proc.log_fd)
-                    except OSError:
-                        pass
                     proc.log_fd = None
                 if proc.process and proc.process.returncode is None:
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         proc.process.terminate()
-                    except ProcessLookupError:
-                        pass
             self._processes.clear()

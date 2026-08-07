@@ -15,6 +15,7 @@ from mcp_hub.core.registry import Registry
 def trending(_category: str | None, json_output: bool):
     """热门趋势榜。"""
     import json
+
     async def _run():
         registry = Registry()
         results = await registry.get_trending()
@@ -24,12 +25,14 @@ def trending(_category: str | None, json_output: bool):
         click.echo("\n🔥 热门趋势:\n")
         for i, s in enumerate(results[:10], 1):
             click.echo(f"  {i}. {s['id']}  ⭐{s.get('rating', 0)}  📥{s.get('download_count', 0)}")
+
     asyncio.run(_run())
 
 
 @click.command("top-rated")
 def top_rated():
     """评分最高榜。"""
+
     async def _run():
         registry = Registry()
         results = await registry.get_top_rated()
@@ -37,28 +40,33 @@ def top_rated():
         for i, s in enumerate(results[:10], 1):
             stars = "⭐" * int(s.get("rating", 0))
             click.echo(f"  {i}. {stars} {s['id']}  ({s.get('rating', 0)})")
+
     asyncio.run(_run())
 
 
 @click.command("most-downloaded")
 def most_downloaded():
     """下载最多榜。"""
+
     async def _run():
         registry = Registry()
         results = await registry.get_trending()
         click.echo("\n📥 下载最多:\n")
         for i, s in enumerate(results[:10], 1):
             click.echo(f"  {i}. {s['id']}  📥{s.get('download_count', 0)}")
+
     asyncio.run(_run())
 
 
 @click.command("new-releases")
 def new_releases():
     """最新发布榜。"""
+
     async def _run():
         registry = Registry()
         results = await registry.get_new_releases()
         click.echo("\n🆕 最新发布:\n")
         for i, s in enumerate(results[:10], 1):
             click.echo(f"  {i}. {s['id']}  v{s.get('version', '?')}")
+
     asyncio.run(_run())

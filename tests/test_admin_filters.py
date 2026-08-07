@@ -17,46 +17,46 @@ async def _prepare_admin_filter_data() -> None:
         user_ids = ["admin-filter-admin", "admin-filter-user"]
         server_ids = ["@admin-filter/verified", "@admin-filter/blocked"]
         await session.execute(
-            delete(UsageStatsModel).where(
-                UsageStatsModel.server_id.in_(server_ids)
-            )
+            delete(UsageStatsModel).where(UsageStatsModel.server_id.in_(server_ids))
         )
         await session.execute(delete(ServerModel).where(ServerModel.id.in_(server_ids)))
         await session.execute(delete(UserModel).where(UserModel.id.in_(user_ids)))
-        session.add_all([
-            UserModel(id="admin-filter-admin", display_name="Admin", role="admin"),
-            UserModel(id="admin-filter-user", display_name="User", role="user"),
-            ServerModel(
-                id="@admin-filter/verified",
-                name="verified",
-                security_level="verified",
-                install_command="npx verified",
-            ),
-            ServerModel(
-                id="@admin-filter/blocked",
-                name="blocked",
-                security_level="blocked",
-                install_command="npx blocked",
-            ),
-            UsageStatsModel(
-                user_id="admin-filter-user",
-                server_id="@admin-filter/blocked",
-                tool_name="run",
-                status="ok",
-            ),
-            UsageStatsModel(
-                user_id="admin-filter-user",
-                server_id="@admin-filter/blocked",
-                tool_name="run",
-                status="ok",
-            ),
-            UsageStatsModel(
-                user_id="admin-filter-user",
-                server_id="@admin-filter/verified",
-                tool_name="run",
-                status="ok",
-            ),
-        ])
+        session.add_all(
+            [
+                UserModel(id="admin-filter-admin", display_name="Admin", role="admin"),
+                UserModel(id="admin-filter-user", display_name="User", role="user"),
+                ServerModel(
+                    id="@admin-filter/verified",
+                    name="verified",
+                    security_level="verified",
+                    install_command="npx verified",
+                ),
+                ServerModel(
+                    id="@admin-filter/blocked",
+                    name="blocked",
+                    security_level="blocked",
+                    install_command="npx blocked",
+                ),
+                UsageStatsModel(
+                    user_id="admin-filter-user",
+                    server_id="@admin-filter/blocked",
+                    tool_name="run",
+                    status="ok",
+                ),
+                UsageStatsModel(
+                    user_id="admin-filter-user",
+                    server_id="@admin-filter/blocked",
+                    tool_name="run",
+                    status="ok",
+                ),
+                UsageStatsModel(
+                    user_id="admin-filter-user",
+                    server_id="@admin-filter/verified",
+                    tool_name="run",
+                    status="ok",
+                ),
+            ]
+        )
         await session.commit()
 
 

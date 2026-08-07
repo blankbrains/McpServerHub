@@ -7,7 +7,9 @@ from __future__ import annotations
 import os
 import tempfile
 
-os.environ.setdefault("MCP_HUB_DATABASE_URL", f"sqlite+aiosqlite:///{tempfile.mkdtemp()}/test_mcp_hub.db")
+os.environ.setdefault(
+    "MCP_HUB_DATABASE_URL", f"sqlite+aiosqlite:///{tempfile.mkdtemp()}/test_mcp_hub.db"
+)
 os.environ.setdefault("MCP_HUB_SECRET", "test-secret-key")
 os.environ.setdefault("MCP_HUB_GITHUB_CLIENT_ID", "test-client-id")
 os.environ.setdefault("MCP_HUB_GITHUB_CLIENT_SECRET", "test-client-secret")

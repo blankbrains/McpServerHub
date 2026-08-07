@@ -30,19 +30,23 @@ class VersionManager:
                 install_cmd = s.get("install_command", "")
                 latest = await self._fetch_latest_version(sid, install_cmd, client)
                 if latest and cur and latest != cur:
-                    updates.append({
-                        "server_id": sid,
-                        "current": cur,
-                        "latest": latest,
-                        "has_update": True,
-                    })
+                    updates.append(
+                        {
+                            "server_id": sid,
+                            "current": cur,
+                            "latest": latest,
+                            "has_update": True,
+                        }
+                    )
                 elif latest and not cur:
-                    updates.append({
-                        "server_id": sid,
-                        "current": "?",
-                        "latest": latest,
-                        "has_update": True,
-                    })
+                    updates.append(
+                        {
+                            "server_id": sid,
+                            "current": "?",
+                            "latest": latest,
+                            "has_update": True,
+                        }
+                    )
         return updates
 
     async def _fetch_latest_version(
@@ -119,6 +123,7 @@ class VersionManager:
             try:
                 from mcp_hub.core.installer import Installer
                 from mcp_hub.models.server import InstallConfig, ServerMeta
+
                 installer = Installer()
                 meta = ServerMeta(
                     name=server_id,
@@ -131,7 +136,10 @@ class VersionManager:
                 )
                 install_result = await installer.install(meta)
                 if not install_result.get("success"):
-                    return {"success": False, "message": f"回滚安装失败: {install_result.get('error', '未知错误')}"}
+                    return {
+                        "success": False,
+                        "message": f"回滚安装失败: {install_result.get('error', '未知错误')}",
+                    }
             except Exception as e:
                 logger.warning("回滚安装失败", server_id=server_id, error=str(e))
                 return {"success": False, "message": f"回滚安装异常: {e}"}
@@ -161,7 +169,10 @@ class VersionManager:
             if pkg:
                 try:
                     proc = await asyncio.create_subprocess_exec(
-                        "npm", "cache", "clean", pkg,
+                        "npm",
+                        "cache",
+                        "clean",
+                        pkg,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
@@ -174,7 +185,10 @@ class VersionManager:
             pkg_name = install_cmd.split()[-1]
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "pip", "install", "--upgrade", pkg_name,
+                    "pip",
+                    "install",
+                    "--upgrade",
+                    pkg_name,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

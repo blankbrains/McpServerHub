@@ -78,6 +78,7 @@ KNOWN_AGENT_PATHS: dict[str, dict] = {
 @dataclass
 class AgentMCPConfig:
     """单个 Agent 的 MCP 配置快照。"""
+
     agent_id: str
     agent_name: str
     paths_found: list[str] = field(default_factory=list)
@@ -89,6 +90,7 @@ class AgentMCPConfig:
 @dataclass
 class DiscoverResult:
     """本地发现汇总结果。"""
+
     agents: list[AgentMCPConfig] = field(default_factory=list)
     all_server_names: set[str] = field(default_factory=set)
     total_agents_found: int = 0
@@ -97,16 +99,18 @@ class DiscoverResult:
 @dataclass
 class AgentCompareResult:
     """跨 Agent 比较结果。"""
+
     server_name: str
-    present_in: list[str] = field(default_factory=list)    # 哪些 Agent 有此 Server
-    absent_in: list[str] = field(default_factory=list)     # 哪些 Agent 缺少此 Server
+    present_in: list[str] = field(default_factory=list)  # 哪些 Agent 有此 Server
+    absent_in: list[str] = field(default_factory=list)  # 哪些 Agent 缺少此 Server
     commands: dict[str, str] = field(default_factory=dict)  # agent_id -> command
-    has_conflict: bool = False                               # 不同 Agent 的命令是否不一致
+    has_conflict: bool = False  # 不同 Agent 的命令是否不一致
 
 
 @dataclass
 class Conflict:
     """配置冲突。"""
+
     server_name: str
     agent_a: str
     command_a: str
@@ -173,16 +177,18 @@ class LocalAgentDiscovery:
             commands = {aid: agent_cmds.get(aid, "") for aid in agent_ids}
 
             # 检查冲突：同一 Server 在不同 Agent 中命令不同
-            unique_cmds = set(c for c in agent_cmds.values() if c)
+            unique_cmds = {c for c in agent_cmds.values() if c}
             has_conflict = len(unique_cmds) > 1
 
-            compare_results.append(AgentCompareResult(
-                server_name=srv_name,
-                present_in=present,
-                absent_in=absent,
-                commands=commands,
-                has_conflict=has_conflict,
-            ))
+            compare_results.append(
+                AgentCompareResult(
+                    server_name=srv_name,
+                    present_in=present,
+                    absent_in=absent,
+                    commands=commands,
+                    has_conflict=has_conflict,
+                )
+            )
 
         return compare_results
 
@@ -201,14 +207,16 @@ class LocalAgentDiscovery:
                     aid_i, cmd_i = entries[i]
                     aid_j, cmd_j = entries[j]
                     if cmd_i != cmd_j:
-                        conflicts.append(Conflict(
-                            server_name=item.server_name,
-                            agent_a=aid_i,
-                            command_a=cmd_i,
-                            agent_b=aid_j,
-                            command_b=cmd_j,
-                            severity="warning",
-                        ))
+                        conflicts.append(
+                            Conflict(
+                                server_name=item.server_name,
+                                agent_a=aid_i,
+                                command_a=cmd_i,
+                                agent_b=aid_j,
+                                command_b=cmd_j,
+                                severity="warning",
+                            )
+                        )
 
         return conflicts
 
@@ -251,7 +259,9 @@ class LocalAgentDiscovery:
                     result.paths_found.append(str(p))
                     for srv_name, srv_config in mcp_servers.items():
                         result.server_names.append(srv_name)
-                        result.server_details[srv_name] = srv_config if isinstance(srv_config, dict) else {}
+                        result.server_details[srv_name] = (
+                            srv_config if isinstance(srv_config, dict) else {}
+                        )
             except json.JSONDecodeError as e:
                 logger.warning(
                     "local_discovery.invalid_json",

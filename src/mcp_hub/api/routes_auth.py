@@ -77,14 +77,13 @@ async def get_current_user(request: Request):
     if not user_id:
         raise TokenInvalidError()
 
-    from mcp_hub.db.database import async_session_factory
-    from mcp_hub.db.models import UserModel
     from sqlalchemy import select
 
+    from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.models import UserModel
+
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(UserModel).where(UserModel.id == user_id)
-        )
+        result = await session.execute(select(UserModel).where(UserModel.id == user_id))
         usr = result.scalar_one_or_none()
         if not usr:
             raise TokenInvalidError()

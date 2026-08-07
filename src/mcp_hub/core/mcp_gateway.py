@@ -15,6 +15,7 @@ Gateway 将请求路由到对应的 MCP Server 子进程，并记录每次调用
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -32,15 +33,43 @@ logger = get_logger(__name__)
 
 # 子进程环境变量安全白名单前缀
 _GATEWAY_SAFE_ENV_PREFIXES = (
-    "PATH", "HOME", "USER", "LANG", "LC_", "TZ",
-    "MCP_HUB_", "NODE", "NPM", "PYTHON", "PIP",
-    "VIRTUAL_ENV", "CONDA_", "SHELL", "TERM",
-    "DISPLAY", "XDG_", "DBUS_", "SSH_",
-    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
-    "TEMP", "TMP", "USERPROFILE", "APPDATA",
-    "PROGRAMFILES", "PROGRAMDATA", "COMPUTERNAME",
-    "HOSTNAME", "LOGNAME", "PWD", "OLDPWD",
-    "COLORTERM", "EDITOR", "VISUAL", "PAGER",
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_",
+    "TZ",
+    "MCP_HUB_",
+    "NODE",
+    "NPM",
+    "PYTHON",
+    "PIP",
+    "VIRTUAL_ENV",
+    "CONDA_",
+    "SHELL",
+    "TERM",
+    "DISPLAY",
+    "XDG_",
+    "DBUS_",
+    "SSH_",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "WINDIR",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "APPDATA",
+    "PROGRAMFILES",
+    "PROGRAMDATA",
+    "COMPUTERNAME",
+    "HOSTNAME",
+    "LOGNAME",
+    "PWD",
+    "OLDPWD",
+    "COLORTERM",
+    "EDITOR",
+    "VISUAL",
+    "PAGER",
 )
 
 
@@ -79,8 +108,14 @@ _REPORT_TOKEN = os.environ.get("MCP_HUB_TOKEN", "")
 # ── 调用记录 ────────────────────────────────────────────────
 
 
-async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0, status: str = "ok",
-                           user_id: str = "", token_count: int = 0) -> None:
+async def _record_call_safe(
+    server_id: str,
+    tool_name: str,
+    duration_ms: int = 0,
+    status: str = "ok",
+    user_id: str = "",
+    token_count: int = 0,
+) -> None:
     """异步记录一次 MCP 工具调用（不抛异常）。
 
     双模式：
@@ -97,11 +132,18 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
         async with async_session_factory() as session:
             await session.execute(
                 text(
-                    "INSERT INTO usage_stats (server_id, user_id, tool_name, status, duration_ms, token_count) "
+                    "INSERT INTO usage_stats "
+                    "(server_id, user_id, tool_name, status, duration_ms, token_count) "
                     "VALUES (:sid, :uid, :tool, :status, :dur, :tokens)"
                 ),
-                {"sid": server_id, "uid": caller_user_id, "tool": tool_name,
-                 "status": status, "dur": duration_ms, "tokens": token_count},
+                {
+                    "sid": server_id,
+                    "uid": caller_user_id,
+                    "tool": tool_name,
+                    "status": status,
+                    "dur": duration_ms,
+                    "tokens": token_count,
+                },
             )
             await session.commit()
     except Exception as e:
@@ -111,6 +153,7 @@ async def _record_call_safe(server_id: str, tool_name: str, duration_ms: int = 0
     if _REPORT_URL and _REPORT_TOKEN:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5) as client:
                 await client.post(
                     f"{_REPORT_URL}/api/v1/usage/record",
@@ -160,7 +203,9 @@ class ManagedMCP:
         async def _reader():
             while not self._shutdown:
                 try:
-                    line = await asyncio.wait_for(loop.run_in_executor(None, self.stdout.readline), timeout=3600)
+                    line = await asyncio.wait_for(
+                        loop.run_in_executor(None, self.stdout.readline), timeout=3600
+                    )
                 except asyncio.TimeoutError:
                     continue
                 if not line:
@@ -196,11 +241,14 @@ class ManagedMCP:
         await self.start_reader()
         # initialize
         try:
-            result = await self._send_request("initialize", {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "mcp-hub", "version": "0.1.0"},
-            })
+            result = await self._send_request(
+                "initialize",
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "mcp-hub", "version": "0.1.0"},
+                },
+            )
             if result is None:
                 return False
         except Exception:
@@ -241,7 +289,7 @@ class ManagedMCP:
             await self.stdin.drain()
         except (BrokenPipeError, OSError) as e:
             self._pending.pop(req_id, None)
-            raise GatewayError(f"写入失败: {e}", server_id=self.server_id)
+            raise GatewayError(f"写入失败: {e}", server_id=self.server_id) from e
 
         try:
             return await asyncio.wait_for(future, timeout=timeout)
@@ -355,15 +403,14 @@ class McpGateway:
         # 获取启用的 Server ID 列表
         enabled_sids: set[str] = set()
         try:
-            from sqlalchemy import select, text
+            from sqlalchemy import select
 
             from mcp_hub.db.database import async_session_factory
             from mcp_hub.db.models import UserServerModel
 
             async with async_session_factory() as session:
                 result = await session.execute(
-                    select(UserServerModel.server_id)
-                    .where(UserServerModel.enabled == True)  # noqa: E712
+                    select(UserServerModel.server_id).where(UserServerModel.enabled == True)  # noqa: E712
                 )
                 for row in result.fetchall():
                     enabled_sids.add(row[0])
@@ -468,11 +515,14 @@ class McpGateway:
         params = request.get("params", {})
 
         if method == "initialize":
-            return self._respond(req_id, {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                "serverInfo": {"name": "mcp-hub-gateway", "version": "0.2.0"},
-            })
+            return self._respond(
+                req_id,
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+                    "serverInfo": {"name": "mcp-hub-gateway", "version": "0.2.0"},
+                },
+            )
 
         if method == "notifications/initialized":
             return None
@@ -618,10 +668,8 @@ class McpGateway:
         """关闭所有子 Server。"""
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
             self._heartbeat_task = None
         for _sid, server in list(self._servers.items()):
             await self._record_telemetry("server_lifecycle", server_id=_sid, status="warning")

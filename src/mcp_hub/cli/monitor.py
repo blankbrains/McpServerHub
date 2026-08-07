@@ -38,6 +38,7 @@ def monitor(server_name: str | None, scan_all: bool, watch: bool):
       mcp monitor --all                    查看所有 Server
       mcp monitor --watch                  持续刷新
     """
+
     async def _run():
         if scan_all:
             await _show_all_monitor()
@@ -67,20 +68,27 @@ async def _show_server_monitor(server_id: str):
 
     display_name = server_id.split("/")[-1]
     from mcp_hub.core.process_manager import get_process_manager
+
     pm = get_process_manager()
     running = pm.is_running(server_id)
     status_icon = "🟢" if running else "⏹"
 
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as p:  # noqa: E501
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
+    ) as p:  # noqa: E501
         p.add_task(f"🔍 正在获取 {display_name} 监控数据...", total=None)
         report = await Monitor.calculate_reliability(server_id)
 
-    level_icon = "🟢" if report.reliability_score >= 90 else "🟡" if report.reliability_score >= 60 else "🔴"  # noqa: E501
-    console.print(Panel.fit(
-        f"[bold]{level_icon} 可靠性评分: {report.reliability_score}/100[/bold]  "
-        f"{status_icon} {'运行中' if running else '已停止'}",
-        title=f"📊 {display_name}",
-    ))
+    level_icon = (
+        "🟢" if report.reliability_score >= 90 else "🟡" if report.reliability_score >= 60 else "🔴"
+    )  # noqa: E501
+    console.print(
+        Panel.fit(
+            f"[bold]{level_icon} 可靠性评分: {report.reliability_score}/100[/bold]  "
+            f"{status_icon} {'运行中' if running else '已停止'}",
+            title=f"📊 {display_name}",
+        )
+    )
 
     # Uptime 表
     if report.uptime_stats:
@@ -127,14 +135,16 @@ async def _show_all_monitor():
 
     summary = await Monitor.get_summary_stats()
 
-    console.print(Panel.fit(
-        f"[bold]📊 监控概览[/bold]\n"
-        f"  Server 总数: {summary['total_servers']}\n"
-        f"  运行中:      {summary['running']}\n"
-        f"  健康检查:    {summary['total_health_checks']} 条记录\n"
-        f"  24h 错误:    {summary['errors_last_24h']} 次",
-        title="系统状态",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]📊 监控概览[/bold]\n"
+            f"  Server 总数: {summary['total_servers']}\n"
+            f"  运行中:      {summary['running']}\n"
+            f"  健康检查:    {summary['total_health_checks']} 条记录\n"
+            f"  24h 错误:    {summary['errors_last_24h']} 次",
+            title="系统状态",
+        )
+    )
 
     console.print(f"\n[bold]🔍 正在获取 {len(servers)} 个 Server 的健康数据...[/bold]")
 
@@ -146,12 +156,20 @@ async def _show_all_monitor():
     table.add_column("响应时间", justify="right")
     table.add_column("运行中")
 
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as p:  # noqa: E501
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
+    ) as p:  # noqa: E501
         for s in servers:
             sid = s["id"]
             p.add_task(f"  检查 {sid}...", total=None)
             health = await Monitor.get_server_health(sid)
-            level_icon = "🟢" if health.reliability_score >= 90 else "🟡" if health.reliability_score >= 60 else "🔴"  # noqa: E501
+            level_icon = (
+                "🟢"
+                if health.reliability_score >= 90
+                else "🟡"
+                if health.reliability_score >= 60
+                else "🔴"
+            )  # noqa: E501
             table.add_row(
                 sid[:28],
                 f"{level_icon} {health.status}",
@@ -175,6 +193,7 @@ def reliability(limit: int, json_output: bool):
 
     基于历史健康检查数据计算可靠性评分 (0-100)，按评分降序排列。
     """
+
     async def _run():
         console.print("[bold]📊 正在计算 Server 可靠性评分...[/bold]")
         top = await Monitor.get_top_reliable(limit=limit)
@@ -185,6 +204,7 @@ def reliability(limit: int, json_output: bool):
 
         if json_output:
             import json
+
             out = [
                 {
                     "server_id": s.server_id,
@@ -207,7 +227,9 @@ def reliability(limit: int, json_output: bool):
 
         for i, s in enumerate(top, 1):
             medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}")
-            level_icon = "🟢" if s.reliability_score >= 90 else "🟡" if s.reliability_score >= 60 else "🔴"  # noqa: E501
+            level_icon = (
+                "🟢" if s.reliability_score >= 90 else "🟡" if s.reliability_score >= 60 else "🔴"
+            )  # noqa: E501
             table.add_row(
                 medal,
                 s.server_id[:28],

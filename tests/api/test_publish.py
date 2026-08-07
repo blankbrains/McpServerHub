@@ -1,7 +1,8 @@
 """API publish 路由模块测试 — 不依赖 LifespanManager。"""
+
 from __future__ import annotations
 
-from mcp_hub.api.routes_publish import router, PublishRequest
+from mcp_hub.api.routes_publish import PublishRequest, router
 
 
 def test_router_registered():

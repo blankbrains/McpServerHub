@@ -23,20 +23,20 @@ async def list_notifications(
 ):
     """获取当前用户的通知列表（未读优先）。"""
     async with async_session_factory() as session:
-        stmt = select(NotificationModel).where(
-            NotificationModel.user_id == user_id
-        )
+        stmt = select(NotificationModel).where(NotificationModel.user_id == user_id)
         if unread_only:
             stmt = stmt.where(NotificationModel.is_read == False)  # noqa: E712
 
         # 总数（使用 SQL COUNT，避免全量加载）
         total_result = await session.execute(
-            select(func.count()).select_from(NotificationModel).where(
-                NotificationModel.user_id == user_id
-            )
+            select(func.count())
+            .select_from(NotificationModel)
+            .where(NotificationModel.user_id == user_id)
         )
         unread_result = await session.execute(
-            select(func.count()).select_from(NotificationModel).where(
+            select(func.count())
+            .select_from(NotificationModel)
+            .where(
                 NotificationModel.user_id == user_id,
                 NotificationModel.is_read == False,  # noqa: E712
             )
@@ -51,16 +51,18 @@ async def list_notifications(
 
         items = []
         for r in rows:
-            items.append({
-                "id": r.id,
-                "type": r.type,
-                "title": r.title,
-                "message": r.message,
-                "server_id": r.server_id,
-                "link": r.link,
-                "is_read": r.is_read,
-                "created_at": str(r.created_at) if r.created_at else "",
-            })
+            items.append(
+                {
+                    "id": r.id,
+                    "type": r.type,
+                    "title": r.title,
+                    "message": r.message,
+                    "server_id": r.server_id,
+                    "link": r.link,
+                    "is_read": r.is_read,
+                    "created_at": str(r.created_at) if r.created_at else "",
+                }
+            )
 
     return {
         "success": True,
@@ -141,14 +143,16 @@ async def create_notification(
     """内部函数：创建一条通知。不抛异常。"""
     try:
         async with async_session_factory() as session:
-            session.add(NotificationModel(
-                user_id=user_id,
-                type=notif_type,
-                title=title,
-                message=message,
-                server_id=server_id,
-                link=link,
-            ))
+            session.add(
+                NotificationModel(
+                    user_id=user_id,
+                    type=notif_type,
+                    title=title,
+                    message=message,
+                    server_id=server_id,
+                    link=link,
+                )
+            )
             await session.commit()
     except Exception as e:
         logger.warning("notif.create_failed", user_id=user_id, error=str(e))

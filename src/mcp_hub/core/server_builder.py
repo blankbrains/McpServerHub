@@ -24,12 +24,15 @@ Language = Literal["python", "typescript"]
 @dataclass
 class ToolTemplate:
     """单个工具的模板定义。"""
+
     name: str
     description: str
     enabled: bool = True
-    params: list[dict] = field(default_factory=lambda: [
-        {"name": "message", "type": "string", "description": "输入消息", "required": True},
-    ])
+    params: list[dict] = field(
+        default_factory=lambda: [
+            {"name": "message", "type": "string", "description": "输入消息", "required": True},
+        ]
+    )
     python_code: str = ""
     typescript_code: str = ""
 
@@ -51,12 +54,10 @@ class ToolTemplate:
 
 def _make_python_tool_code(name: str, description: str, params: list[dict]) -> str:
     """生成 Python 工具实现代码。"""
-    param_docs = "\n        ".join(
-        f"{p['name']} ({p['type']}): {p['description']}"
-        for p in params
-    )
+    param_docs = "\n        ".join(f"{p['name']} ({p['type']}): {p['description']}" for p in params)
+    signature = ", ".join(f"{p['name']}: {p['type']}" for p in params)
     return f'''@app.tool()
-async def {name}({', '.join(f'{p["name"]}: {p["type"]}' for p in params)}) -> list[types.TextContent]:
+async def {name}({signature}) -> list[types.TextContent]:
     """{description}
 
     Args:
@@ -65,19 +66,15 @@ async def {name}({', '.join(f'{p["name"]}: {p["type"]}' for p in params)}) -> li
         包含处理结果的 TextContent 列表。
     """
     # TODO: 实现实际的工具逻辑
-    result = f"处理完成: {', '.join(str(p['name']) + '=' + str(locals().get(p['name'], '')) for p in params)}"
+    result = "处理完成: " + ", ".join(f"{{key}}={{value}}" for key, value in locals().items())
     return [types.TextContent(type="text", text=result)]'''  # noqa: E501
 
 
 def _make_ts_tool_code(name: str, _description: str, params: list[dict]) -> str:
     """生成 TypeScript 工具实现代码。"""
-    param_interface = "\n  ".join(
-        f'{p["name"]}: {p["type"]};'
-        for p in params
-    )
+    param_interface = "\n  ".join(f"{p['name']}: {p['type']};" for p in params)
     param_access = "\n      ".join(
-        f'const {p["name"]} = String(args.{p["name"]} || "");'
-        for p in params
+        f'const {p["name"]} = String(args.{p["name"]} || "");' for p in params
     )
     return f'''server.setRequestHandler(CallToolRequestSchema, async (request) => {{
   if (request.params.name === "{name}") {{
@@ -97,6 +94,7 @@ def _make_ts_tool_code(name: str, _description: str, params: list[dict]) -> str:
 @dataclass
 class GeneratedProject:
     """生成的完整项目。"""
+
     root_dir: Path
     language: Language
     server_name: str
@@ -156,7 +154,12 @@ class ServerBuilder:
             name="echo",
             description="原样返回输入消息",
             params=[
-                {"name": "message", "type": "string", "description": "要回显的消息", "required": True},  # noqa: E501
+                {
+                    "name": "message",
+                    "type": "string",
+                    "description": "要回显的消息",
+                    "required": True,
+                },  # noqa: E501
             ],
         ),
         "calculator": ToolTemplate(
@@ -165,7 +168,12 @@ class ServerBuilder:
             params=[
                 {"name": "a", "type": "number", "description": "第一个数字", "required": True},
                 {"name": "b", "type": "number", "description": "第二个数字", "required": True},
-                {"name": "operation", "type": "string", "description": "运算: add/sub/mul/div", "required": True},  # noqa: E501
+                {
+                    "name": "operation",
+                    "type": "string",
+                    "description": "运算: add/sub/mul/div",
+                    "required": True,
+                },  # noqa: E501
             ],
         ),
         "greet": ToolTemplate(
@@ -173,8 +181,18 @@ class ServerBuilder:
             description="生成个性化问候",
             params=[
                 {"name": "name", "type": "string", "description": "姓名", "required": True},
-                {"name": "language", "type": "string", "description": "语言 (zh/en/ja)", "required": False},  # noqa: E501
-                {"name": "style", "type": "string", "description": "风格 (formal/casual)", "required": False},  # noqa: E501
+                {
+                    "name": "language",
+                    "type": "string",
+                    "description": "语言 (zh/en/ja)",
+                    "required": False,
+                },  # noqa: E501
+                {
+                    "name": "style",
+                    "type": "string",
+                    "description": "风格 (formal/casual)",
+                    "required": False,
+                },  # noqa: E501
             ],
         ),
         "weather": ToolTemplate(
@@ -182,16 +200,31 @@ class ServerBuilder:
             description="获取城市天气信息",
             params=[
                 {"name": "city", "type": "string", "description": "城市名称", "required": True},
-                {"name": "unit", "type": "string", "description": "温度单位 (celsius/fahrenheit)", "required": False},  # noqa: E501
+                {
+                    "name": "unit",
+                    "type": "string",
+                    "description": "温度单位 (celsius/fahrenheit)",
+                    "required": False,
+                },  # noqa: E501
             ],
         ),
         "memo": ToolTemplate(
             name="memo",
             description="备忘录管理，支持保存和查询笔记",
             params=[
-                {"name": "action", "type": "string", "description": "操作: save/get/list/delete", "required": True},  # noqa: E501
+                {
+                    "name": "action",
+                    "type": "string",
+                    "description": "操作: save/get/list/delete",
+                    "required": True,
+                },  # noqa: E501
                 {"name": "title", "type": "string", "description": "笔记标题", "required": False},
-                {"name": "content", "type": "string", "description": "笔记内容（save 时填写）", "required": False},  # noqa: E501
+                {
+                    "name": "content",
+                    "type": "string",
+                    "description": "笔记内容（save 时填写）",
+                    "required": False,
+                },  # noqa: E501
             ],
         ),
         "search": ToolTemplate(
@@ -199,7 +232,12 @@ class ServerBuilder:
             description="搜索本地文档或记录",
             params=[
                 {"name": "query", "type": "string", "description": "搜索关键词", "required": True},
-                {"name": "max_results", "type": "number", "description": "最大返回结果数", "required": False},  # noqa: E501
+                {
+                    "name": "max_results",
+                    "type": "number",
+                    "description": "最大返回结果数",
+                    "required": False,
+                },  # noqa: E501
             ],
         ),
         "translate": ToolTemplate(
@@ -207,8 +245,18 @@ class ServerBuilder:
             description="翻译文本到目标语言",
             params=[
                 {"name": "text", "type": "string", "description": "要翻译的文本", "required": True},
-                {"name": "target_lang", "type": "string", "description": "目标语言代码 (zh/en/ja/fr/de)", "required": True},  # noqa: E501
-                {"name": "source_lang", "type": "string", "description": "源语言代码（自动检测留空）", "required": False},  # noqa: E501
+                {
+                    "name": "target_lang",
+                    "type": "string",
+                    "description": "目标语言代码 (zh/en/ja/fr/de)",
+                    "required": True,
+                },  # noqa: E501
+                {
+                    "name": "source_lang",
+                    "type": "string",
+                    "description": "源语言代码（自动检测留空）",
+                    "required": False,
+                },  # noqa: E501
             ],
         ),
     }
@@ -267,7 +315,9 @@ class ServerBuilder:
         # 验证工具名称
         invalid = [t for t in tools if t not in self.TOOL_TEMPLATES]
         if invalid:
-            raise ValueError(f"未知的工具模板: {', '.join(invalid)}。可用: {', '.join(self.available_tools())}")  # noqa: E501
+            raise ValueError(
+                f"未知的工具模板: {', '.join(invalid)}。可用: {', '.join(self.available_tools())}"
+            )  # noqa: E501
 
         selected_tools = [self.TOOL_TEMPLATES[t] for t in tools]
 
@@ -334,25 +384,34 @@ __version__ = "0.1.0"
             for _p in t.params:
                 tool_params_list.append(t)
 
-
         # 构建 tool definitions 列表
         tool_defs_list = []
         for t in tools:
             props = {}
             required = []
             for p in t.params:
-                ts_type = {"string": "string", "number": "number", "integer": "integer", "boolean": "boolean"}.get(p["type"], "string")  # noqa: E501
+                ts_type = {
+                    "string": "string",
+                    "number": "number",
+                    "integer": "integer",
+                    "boolean": "boolean",
+                }.get(p["type"], "string")  # noqa: E501
                 prop = {"type": ts_type, "description": p["description"]}
                 props[p["name"]] = prop
                 if p.get("required", True):
                     required.append(p["name"])
-            json.dumps({
-                "type": "object",
-                "properties": props,
-                "required": required,
-            }, indent=8, ensure_ascii=False)
+            json.dumps(
+                {
+                    "type": "object",
+                    "properties": props,
+                    "required": required,
+                },
+                indent=8,
+                ensure_ascii=False,
+            )
+            signature = ", ".join(f"{p['name']}: {p['type']}" for p in t.params)
             tool_defs_list.append(f"""@app.tool()
-async def {t.name}({', '.join(f'{p["name"]}: {p["type"]}' for p in t.params)}) -> list[TextContent]:
+async def {t.name}({signature}) -> list[TextContent]:
     \"\"\"{t.description}\"\"\"
     result = f"[{display_name}] {t.description}: " + ", ".join(
         f"{{k}}={{v}}" for k, v in locals().items() if k != "self"
@@ -361,7 +420,9 @@ async def {t.name}({', '.join(f'{p["name"]}: {p["type"]}' for p in t.params)}) -
 
         tool_code_combined = "\n\n".join(tool_defs_list)
 
-        files[f"src/{safe_name}/server.py"] = f'''"""MCP Server {display_name} — 由 MCP Server Hub 生成。"""
+        files[
+            f"src/{safe_name}/server.py"
+        ] = f'''"""MCP Server {display_name} — 由 MCP Server Hub 生成。"""
 
 from __future__ import annotations
 
@@ -387,10 +448,7 @@ if __name__ == "__main__":
 '''  # noqa: E501
 
         # README.md
-        tool_table = "\n".join(
-            f"| `{t.name}` | {t.description} |"
-            for t in tools
-        )
+        tool_table = "\n".join(f"| `{t.name}` | {t.description} |" for t in tools)
 
         files["README.md"] = f"""# {display_name}
 
@@ -510,8 +568,13 @@ Thumbs.db
         for t in tools:
             props_parts = []
             for p in t.params:
-                ts_type = {"string": "z.string()", "number": "z.number()", "integer": "z.number().int()", "boolean": "z.boolean()"}.get(p["type"], "z.string()")  # noqa: E501
-                props_parts.append(f"      {p['name']}: {ts_type}.describe(\"{p['description']}\")")
+                ts_type = {
+                    "string": "z.string()",
+                    "number": "z.number()",
+                    "integer": "z.number().int()",
+                    "boolean": "z.boolean()",
+                }.get(p["type"], "z.string()")  # noqa: E501
+                props_parts.append(f'      {p["name"]}: {ts_type}.describe("{p["description"]}")')
 
             required_schema = {}
             for p in t.params:
@@ -526,7 +589,7 @@ Thumbs.db
       properties: {{
 {chr(10).join(props_parts)}
       }},
-      required: [{', '.join(f'"{p["name"]}"' for p in t.params if p.get("required", True))}],
+      required: [{", ".join(f'"{p["name"]}"' for p in t.params if p.get("required", True))}],
     }},
   }}""")
 
@@ -535,7 +598,7 @@ Thumbs.db
         tool_handlers = []
         for t in tools:
             param_names = ", ".join(f'"{p["name"]}"' for p in t.params)
-            ", ".join(f'{p["name"]}: args.{p["name"]}' for p in t.params)
+            ", ".join(f"{p['name']}: args.{p['name']}" for p in t.params)
             tool_handlers.append(f"""    if (request.params.name === "{t.name}") {{
       const args = request.params.arguments as any;
       return {{
@@ -548,43 +611,55 @@ Thumbs.db
         files: dict[str, str] = {}
 
         # package.json
-        files["package.json"] = json.dumps({
-            "name": name,
-            "version": "0.1.0",
-            "description": description,
-            "type": "module",
-            "main": "dist/index.js",
-            "scripts": {
-                "build": "tsc",
-                "start": "node dist/index.js",
-                "prepare": "npm run build",
-            },
-            "dependencies": {
-                "@modelcontextprotocol/sdk": "^1.0.0",
-                "zod": "^3.22.0",
-            },
-            "devDependencies": {
-                "typescript": "^5.4.0",
-                "@types/node": "^20.0.0",
-            },
-        }, indent=2) + "\n"
+        files["package.json"] = (
+            json.dumps(
+                {
+                    "name": name,
+                    "version": "0.1.0",
+                    "description": description,
+                    "type": "module",
+                    "main": "dist/index.js",
+                    "scripts": {
+                        "build": "tsc",
+                        "start": "node dist/index.js",
+                        "prepare": "npm run build",
+                    },
+                    "dependencies": {
+                        "@modelcontextprotocol/sdk": "^1.0.0",
+                        "zod": "^3.22.0",
+                    },
+                    "devDependencies": {
+                        "typescript": "^5.4.0",
+                        "@types/node": "^20.0.0",
+                    },
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
         # tsconfig.json
-        files["tsconfig.json"] = json.dumps({
-            "compilerOptions": {
-                "target": "ES2022",
-                "module": "NodeNext",
-                "moduleResolution": "NodeNext",
-                "esModuleInterop": True,
-                "strict": True,
-                "outDir": "dist",
-                "rootDir": "src",
-                "declaration": True,
-                "sourceMap": True,
-                "skipLibCheck": True,
-            },
-            "include": ["src/**/*"],
-        }, indent=2) + "\n"
+        files["tsconfig.json"] = (
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "target": "ES2022",
+                        "module": "NodeNext",
+                        "moduleResolution": "NodeNext",
+                        "esModuleInterop": True,
+                        "strict": True,
+                        "outDir": "dist",
+                        "rootDir": "src",
+                        "declaration": True,
+                        "sourceMap": True,
+                        "skipLibCheck": True,
+                    },
+                    "include": ["src/**/*"],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
 
         # src/index.ts
         files["src/index.ts"] = f"""#!/usr/bin/env node
@@ -639,10 +714,7 @@ main().catch((error) => {{
 """
 
         # README.md
-        tool_table = "\n".join(
-            f"| `{t.name}` | {t.description} |"
-            for t in tools
-        )
+        tool_table = "\n".join(f"| `{t.name}` | {t.description} |" for t in tools)
         files["README.md"] = f"""# {display_name}
 
 {description}
@@ -732,10 +804,11 @@ Thumbs.db
         params_str = ",\n".join(params_list)
         if tool.params:
             params_str = f"\n{params_str}\n    "
+        signature = ", ".join(f"{p['name']}: {p['type']}" for p in tool.params)
 
         return f"""@app.tool()
 async def {tool.name}(
-    {', '.join(f'{p["name"]}: {p["type"]}' for p in tool.params)}
+    {signature}
 ) -> list[TextContent]:
     \"\"\"{tool.description}\"\"\"
     return [TextContent(

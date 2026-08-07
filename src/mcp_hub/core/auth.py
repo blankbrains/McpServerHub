@@ -22,14 +22,14 @@ def simple_jwt_encode(payload: dict) -> str:
     import hmac
 
     secret = settings.SECRET_KEY
-    header = base64.urlsafe_b64encode(
-        json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
-    ).rstrip(b"=").decode()
+    header = (
+        base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+        .rstrip(b"=")
+        .decode()
+    )
     payload["iat"] = int(time.time())
     payload["exp"] = int(time.time()) + 86400 * 7  # 7 天有效期
-    payload_b64 = base64.urlsafe_b64encode(
-        json.dumps(payload).encode()
-    ).rstrip(b"=").decode()
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     message = f"{header}.{payload_b64}"
     sig = hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
     sig_b64 = base64.urlsafe_b64encode(sig).rstrip(b"=").decode()
@@ -48,9 +48,7 @@ def simple_jwt_decode(token: str) -> dict | None:
         return None
     header_b64, payload_b64, sig_b64 = parts
     message = f"{header_b64}.{payload_b64}"
-    expected_sig = hmac.new(
-        secret.encode(), message.encode(), hashlib.sha256
-    ).digest()
+    expected_sig = hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
     actual_sig = base64.urlsafe_b64decode(sig_b64 + "==")
     if not hmac.compare_digest(expected_sig, actual_sig):
         return None
@@ -72,6 +70,7 @@ class AuthService:
     def get_github_login_url(self, state: str = "") -> str:
         """生成 GitHub OAuth 授权 URL（自动生成 CSRF state）。"""
         import secrets
+
         if not state:
             state = secrets.token_urlsafe(32)
         self._oauth_states[state] = state
@@ -140,17 +139,21 @@ class AuthService:
         # Step 3: create/get user in local DB
         async with async_session_factory() as session:
             repo = UserRepository(session)
-            user = await repo.get_or_create({
-                "id": github_user.get("login", ""),
-                "name": github_user.get("name", ""),
-                "avatar_url": github_user.get("avatar_url", ""),
-            })
+            user = await repo.get_or_create(
+                {
+                    "id": github_user.get("login", ""),
+                    "name": github_user.get("name", ""),
+                    "avatar_url": github_user.get("avatar_url", ""),
+                }
+            )
 
         # Step 4: generate JWT
-        token = simple_jwt_encode({
-            "sub": user["id"],
-            "role": user.get("role", "user"),
-        })
+        token = simple_jwt_encode(
+            {
+                "sub": user["id"],
+                "role": user.get("role", "user"),
+            }
+        )
 
         return {
             "success": True,
@@ -165,10 +168,12 @@ class AuthService:
         async with async_session_factory() as session:
             repo = UserRepository(session)
             user = await repo.get_or_create(user_data)
-        token = simple_jwt_encode({
-            "sub": user["id"],
-            "role": user.get("role", "user"),
-        })
+        token = simple_jwt_encode(
+            {
+                "sub": user["id"],
+                "role": user.get("role", "user"),
+            }
+        )
         return {
             "success": True,
             "token": token,

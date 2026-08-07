@@ -108,9 +108,7 @@ class ServerRepository:
         return [self._server_to_dict(s) for s in servers], total
 
     async def get_by_id(self, server_id: str) -> dict | None:
-        result = await self.session.execute(
-            select(ServerModel).where(ServerModel.id == server_id)
-        )
+        result = await self.session.execute(select(ServerModel).where(ServerModel.id == server_id))
         server = result.scalar_one_or_none()
         return self._server_to_dict(server) if server else None
 
@@ -190,9 +188,7 @@ class ServerRepository:
 
     async def get_all(self) -> list[dict]:
         """获取所有 Server 记录（包含未安装的）。"""
-        result = await self.session.execute(
-            select(ServerModel).order_by(ServerModel.name)
-        )
+        result = await self.session.execute(select(ServerModel).order_by(ServerModel.name))
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
     async def get_by_author(self, author: str) -> list[dict]:
@@ -206,9 +202,7 @@ class ServerRepository:
 
     async def delete_server(self, server_id: str) -> bool:
         """删除 Server 记录（级联删除关联数据）。"""
-        result = await self.session.execute(
-            select(ServerModel).where(ServerModel.id == server_id)
-        )
+        result = await self.session.execute(select(ServerModel).where(ServerModel.id == server_id))
         server = result.scalar_one_or_none()
         if not server:
             return False
@@ -216,12 +210,11 @@ class ServerRepository:
         from sqlalchemy import delete as sa_delete
 
         from mcp_hub.db.models import FavoriteModel, ReviewModel, UsageStatsModel
+
         await self.session.execute(
             sa_delete(FavoriteModel).where(FavoriteModel.server_id == server_id)
         )
-        await self.session.execute(
-            sa_delete(ReviewModel).where(ReviewModel.server_id == server_id)
-        )
+        await self.session.execute(sa_delete(ReviewModel).where(ReviewModel.server_id == server_id))
         await self.session.execute(
             sa_delete(UsageStatsModel).where(UsageStatsModel.server_id == server_id)
         )
@@ -234,12 +227,22 @@ class ReviewRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def rate(self, server_id: str, user_id: str, rating: int, content: str = "", parent_id: int | None = None) -> dict:  # noqa: E501
+    async def rate(
+        self,
+        server_id: str,
+        user_id: str,
+        rating: int,
+        content: str = "",
+        parent_id: int | None = None,
+    ) -> dict:  # noqa: E501
         if parent_id:
             # 回复已有评价
             review = ReviewModel(
-                server_id=server_id, user_id=user_id, rating=rating,
-                content=content, parent_id=parent_id,
+                server_id=server_id,
+                user_id=user_id,
+                rating=rating,
+                content=content,
+                parent_id=parent_id,
             )
             self.session.add(review)
             await self.session.commit()
@@ -265,8 +268,9 @@ class ReviewRepository:
 
         # Update average rating
         avg_result = await self.session.execute(
-            select(func.avg(ReviewModel.rating), func.count(ReviewModel.id))
-            .where(ReviewModel.server_id == server_id)
+            select(func.avg(ReviewModel.rating), func.count(ReviewModel.id)).where(
+                ReviewModel.server_id == server_id
+            )
         )
         row = avg_result.one()
         avg_rating = round(float(row[0]), 1) if row[0] else 0.0
@@ -335,12 +339,12 @@ class ReviewRepository:
         return top
 
     async def get_review(self, review_id: int) -> ReviewModel | None:
-        result = await self.session.execute(
-            select(ReviewModel).where(ReviewModel.id == review_id)
-        )
+        result = await self.session.execute(select(ReviewModel).where(ReviewModel.id == review_id))
         return result.scalar_one_or_none()
 
-    async def can_delete_review(self, review: ReviewModel, user_id: str, user_role: str) -> tuple[bool, str]:  # noqa: E501
+    async def can_delete_review(
+        self, review: ReviewModel, user_id: str, user_role: str
+    ) -> tuple[bool, str]:  # noqa: E501
         """检查用户是否有权限删除评价。"""
         if user_role in ("admin", "owner"):
             return True, ""
@@ -367,8 +371,9 @@ class ReviewRepository:
         await self.session.commit()
         # 更新平均评分
         avg_result = await self.session.execute(
-            select(func.avg(ReviewModel.rating), func.count(ReviewModel.id))
-            .where(ReviewModel.server_id == server_id)
+            select(func.avg(ReviewModel.rating), func.count(ReviewModel.id)).where(
+                ReviewModel.server_id == server_id
+            )
         )
         row = avg_result.one()
         avg_rating = round(float(row[0]), 1) if row[0] else 0.0
@@ -388,9 +393,7 @@ class UserRepository:
 
     async def get_by_id(self, user_id: str) -> dict | None:
         """根据 ID 查找用户（不创建）。"""
-        result = await self.session.execute(
-            select(UserModel).where(UserModel.id == user_id)
-        )
+        result = await self.session.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
             return None
@@ -403,9 +406,7 @@ class UserRepository:
 
     async def get_or_create(self, user_data: dict) -> dict:
         user_id = user_data.get("id") or user_data.get("login", "")
-        result = await self.session.execute(
-            select(UserModel).where(UserModel.id == user_id)
-        )
+        result = await self.session.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
 
         if not user:
@@ -446,15 +447,11 @@ class UserRepository:
 
         # Update count
         count_result = await self.session.execute(
-            select(func.count(FavoriteModel.id)).where(
-                FavoriteModel.server_id == server_id
-            )
+            select(func.count(FavoriteModel.id)).where(FavoriteModel.server_id == server_id)
         )
         count = count_result.scalar() or 0
         await self.session.execute(
-            update(ServerModel)
-            .where(ServerModel.id == server_id)
-            .values(favorite_count=count)
+            update(ServerModel).where(ServerModel.id == server_id).values(favorite_count=count)
         )
         await self.session.commit()
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import tempfile
@@ -9,19 +10,18 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, select, text
 
 from mcp_hub.api.dependencies import get_current_user
-from mcp_hub.logging_config import get_logger
-
-logger = get_logger(__name__)
-
 from mcp_hub.core.registry import Registry
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import UserServerModel
 from mcp_hub.exceptions import ConfigError
+from mcp_hub.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["config"])
 
@@ -38,11 +38,11 @@ def _extract_package_name(command: str) -> str | None:
     """
     cmd = command.strip()
     # npx/uvx 后面跟的就是包名
-    m = re.match(r'^(npx|uvx)\s+(@?[\w][\w.-]*(?:/[\w][\w.-]*)?)', cmd)
+    m = re.match(r"^(npx|uvx)\s+(@?[\w][\w.-]*(?:/[\w][\w.-]*)?)", cmd)
     if m:
         return m.group(2)
     # pip install 后面跟的是包名
-    m = re.match(r'^pip\s+install\s+(@?[\w][\w.-]*(?:/[\w][\w.-]*)?)', cmd)
+    m = re.match(r"^pip\s+install\s+(@?[\w][\w.-]*(?:/[\w][\w.-]*)?)", cmd)
     if m:
         return m.group(1)
     return None
@@ -102,7 +102,8 @@ async def _resolve_package_online(pkg_name: str) -> dict | None:
                     "name": pkg_name,
                     "description": data.get("summary", ""),
                     "version": data.get("version", ""),
-                    "homepage": data.get("home_page", "") or f"https://pypi.org/project/{pkg_name}/",
+                    "homepage": data.get("home_page", "")
+                    or f"https://pypi.org/project/{pkg_name}/",
                 }
     except Exception:
         pass
@@ -158,14 +159,16 @@ async def get_user_servers(user_id: str = Depends(get_current_user)):
         )
         servers = []
         for row in result.scalars().all():
-            servers.append({
-                "name": row.server_id,
-                "hub_id": row.server_id,
-                "matched": row.matched,
-                "enabled": row.enabled if row.enabled is not None else True,
-                "agent": row.agent or "",
-                "group_name": row.group_name or "",
-            })
+            servers.append(
+                {
+                    "name": row.server_id,
+                    "hub_id": row.server_id,
+                    "matched": row.matched,
+                    "enabled": row.enabled if row.enabled is not None else True,
+                    "agent": row.agent or "",
+                    "group_name": row.group_name or "",
+                }
+            )
     return {"success": True, "data": servers}
 
 
@@ -178,21 +181,21 @@ async def save_user_servers(data: dict, user_id: str = Depends(get_current_user)
 
     async with async_session_factory() as session:
         # 删除旧记录
-        await session.execute(
-            delete(UserServerModel).where(UserServerModel.user_id == user_id)
-        )
+        await session.execute(delete(UserServerModel).where(UserServerModel.user_id == user_id))
         # 写入新记录
         for s in servers:
             sid = s.get("hub_id") or s.get("name", "")
             if sid:
-                session.add(UserServerModel(
-                    user_id=user_id,
-                    server_id=sid,
-                    matched=s.get("matched", True),
-                    enabled=s.get("enabled", True),
-                    agent=s.get("agent", ""),
-                    group_name=s.get("group_name", ""),
-                ))
+                session.add(
+                    UserServerModel(
+                        user_id=user_id,
+                        server_id=sid,
+                        matched=s.get("matched", True),
+                        enabled=s.get("enabled", True),
+                        agent=s.get("agent", ""),
+                        group_name=s.get("group_name", ""),
+                    )
+                )
         await session.commit()
 
     return {"success": True, "message": f"已保存 {len(servers)} 个 Server"}
@@ -209,10 +212,7 @@ async def toggle_server_enabled(data: dict, user_id: str = Depends(get_current_u
 
     async with async_session_factory() as session:
         await session.execute(
-            text(
-                "UPDATE user_servers SET enabled = :en "
-                "WHERE user_id = :uid AND server_id = :sid"
-            ),
+            text("UPDATE user_servers SET enabled = :en WHERE user_id = :uid AND server_id = :sid"),
             {"en": enabled, "uid": user_id, "sid": server_id},
         )
         await session.commit()
@@ -228,9 +228,10 @@ async def toggle_server_enabled(data: dict, user_id: str = Depends(get_current_u
 async def remove_user_server(server_id: str, user_id: str = Depends(get_current_user)):
     """从用户配置中移除单个 Server。"""
     async with async_session_factory() as session:
-        result = await session.execute(
-            delete(UserServerModel)
-            .where(UserServerModel.user_id == user_id, UserServerModel.server_id == server_id)
+        await session.execute(
+            delete(UserServerModel).where(
+                UserServerModel.user_id == user_id, UserServerModel.server_id == server_id
+            )
         )
         await session.commit()
 
@@ -271,9 +272,10 @@ async def upload_config(
         }
 
     # 在市场中匹配每个 Server
+    from sqlalchemy import delete
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import UserServerModel
-    from sqlalchemy import delete
 
     registry = Registry()
     matched = []
@@ -332,21 +334,28 @@ async def upload_config(
                     all_tracked.append({"server_id": sid, "matched": True})
                     if track_servers:
                         try:
-                            await registry.register_server({
-                            "id": sid,
-                            "name": resolved["name"],
-                            "description": resolved.get("description",
-                                                        f"从 {resolved['source']} 发现的 MCP Server"),
-                            "install_command": cmd,
-                            "install_type": resolved["source"],
-                            "categories": json.dumps(["tools"]),
-                            "tags": json.dumps([resolved["source"], "discovered"]),
-                            "homepage": resolved.get("homepage", ""),
-                            "author": resolved["source"],
-                            "security_level": "reviewed",
-                        })
+                            await registry.register_server(
+                                {
+                                    "id": sid,
+                                    "name": resolved["name"],
+                                    "description": resolved.get(
+                                        "description", f"从 {resolved['source']} 发现的 MCP Server"
+                                    ),
+                                    "install_command": cmd,
+                                    "install_type": resolved["source"],
+                                    "categories": json.dumps(["tools"]),
+                                    "tags": json.dumps([resolved["source"], "discovered"]),
+                                    "homepage": resolved.get("homepage", ""),
+                                    "author": resolved["source"],
+                                    "security_level": "reviewed",
+                                }
+                            )
                         except Exception:
-                            logger.warning("config.register_discovered_failed", name=name, source=resolved.get("source"))
+                            logger.warning(
+                                "config.register_discovered_failed",
+                                name=name,
+                                source=resolved.get("source"),
+                            )
                 else:
                     # 线上也查不到，才标为自定义
                     unmatched.append(entry)
@@ -354,16 +363,18 @@ async def upload_config(
                     all_tracked.append({"server_id": sid, "matched": False})
                     if track_servers:
                         try:
-                            await registry.register_server({
-                            "id": sid,
-                            "name": name,
-                            "description": f"自定义 Server: {name}",
-                            "install_command": cmd,
-                            "install_type": cmd.split()[0] if cmd else "custom",
-                            "categories": json.dumps(["custom"]),
-                            "tags": json.dumps(["user-uploaded"]),
-                            "author": "user",
-                        })
+                            await registry.register_server(
+                                {
+                                    "id": sid,
+                                    "name": name,
+                                    "description": f"自定义 Server: {name}",
+                                    "install_command": cmd,
+                                    "install_type": cmd.split()[0] if cmd else "custom",
+                                    "categories": json.dumps(["custom"]),
+                                    "tags": json.dumps(["user-uploaded"]),
+                                    "author": "user",
+                                }
+                            )
                             entry["registered_id"] = sid
                         except Exception:
                             logger.warning("config.register_custom_failed", name=name)
@@ -373,25 +384,23 @@ async def upload_config(
 
     if track_servers:
         async with async_session_factory() as session:
-        # 先清理当前用户的旧记录
-            await session.execute(
-                delete(UserServerModel).where(UserServerModel.user_id == user_id)
-            )
-        # 写入新记录
+            # 先清理当前用户的旧记录
+            await session.execute(delete(UserServerModel).where(UserServerModel.user_id == user_id))
+            # 写入新记录
             for ts in all_tracked:
-                session.add(UserServerModel(
-                user_id=user_id,
-                server_id=ts["server_id"],
-                matched=ts["matched"],
-                agent=x_agent_id if x_agent_id else "",
-                ))
+                session.add(
+                    UserServerModel(
+                        user_id=user_id,
+                        server_id=ts["server_id"],
+                        matched=ts["matched"],
+                        agent=x_agent_id if x_agent_id else "",
+                    )
+                )
             await session.commit()
 
         for ts in all_tracked:
-            try:
+            with contextlib.suppress(Exception):
                 await registry.update_status(ts["server_id"], "stopped")
-            except Exception:
-                pass
 
     return {
         "success": True,
@@ -496,7 +505,7 @@ async def config_from_local():
     # 从 AGENT_CONFIGS 收集所有已知路径，去重
     seen = set()
     paths: list[tuple[str, Path]] = []  # (agent_label, path)
-    for agent_key, cfg in AGENT_CONFIGS.items():
+    for _agent_key, cfg in AGENT_CONFIGS.items():
         for p in cfg["paths"]:
             p_str = str(p)
             if p_str not in seen:
@@ -520,26 +529,32 @@ async def config_from_local():
             try:
                 content = json.loads(p.read_text())
                 servers = list(content.get("mcpServers", {}).keys())
-                results.append({
-                    "path": str(p),
-                    "agent": agent_label,
-                    "exists": True,
-                    "server_count": len(servers),
-                    "servers": servers,
-                })
+                results.append(
+                    {
+                        "path": str(p),
+                        "agent": agent_label,
+                        "exists": True,
+                        "server_count": len(servers),
+                        "servers": servers,
+                    }
+                )
             except Exception:
-                results.append({
+                results.append(
+                    {
+                        "path": str(p),
+                        "agent": agent_label,
+                        "exists": True,
+                        "error": "无法解析",
+                    }
+                )
+        else:
+            results.append(
+                {
                     "path": str(p),
                     "agent": agent_label,
-                    "exists": True,
-                    "error": "无法解析",
-                })
-        else:
-            results.append({
-                "path": str(p),
-                "agent": agent_label,
-                "exists": False,
-            })
+                    "exists": False,
+                }
+            )
 
     return {"success": True, "data": results}
 
@@ -746,7 +761,9 @@ async def server_dependency_analyze(data: dict):
 async def list_groups(user_id: str = Depends(get_current_user)):
     """列出当前用户的所有分组及其包含的 Server。"""
     from sqlalchemy import text
+
     from mcp_hub.db.database import async_session_factory
+
     async with async_session_factory() as session:
         result = await session.execute(
             text(
@@ -779,7 +796,9 @@ async def list_groups(user_id: str = Depends(get_current_user)):
 async def set_server_group(data: dict, user_id: str = Depends(get_current_user)):
     """为指定 Server 设置分组。"""
     from sqlalchemy import text
+
     from mcp_hub.db.database import async_session_factory
+
     server_id = data.get("server_id", "")
     group_name = data.get("group_name", "")
 
@@ -803,7 +822,9 @@ async def set_server_group(data: dict, user_id: str = Depends(get_current_user))
 async def batch_set_group(data: dict, user_id: str = Depends(get_current_user)):
     """批量设置多个 Server 的分组（启用/禁用整个分组时用）。"""
     from sqlalchemy import text
+
     from mcp_hub.db.database import async_session_factory
+
     group_name = data.get("group_name", "")
     action = data.get("action", "")  # "enable" or "disable"
     enabled = True if action == "enable" else (False if action == "disable" else None)

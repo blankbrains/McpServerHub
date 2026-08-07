@@ -77,6 +77,7 @@ SUSPICIOUS_PATTERNS = [
 @dataclass
 class ScanFinding:
     """单个发现项。"""
+
     severity: str  # critical / high / suspicious / info
     category: str  # command / package / reputation / code
     title: str
@@ -87,6 +88,7 @@ class ScanFinding:
 @dataclass
 class ScanReport:
     """完整扫描报告。"""
+
     server_id: str
     level: SecurityLevel
     score: int  # 0-100
@@ -132,64 +134,76 @@ class CommandAnalyzer:
         # 检查高危模式
         for pattern, desc in CRITICAL_PATTERNS:
             if re.search(pattern, install_command, re.IGNORECASE):
-                findings.append(ScanFinding(
-                    severity="critical",
-                    category="command",
-                    title=f"检测到危险模式: {desc}",
-                    description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
-                    score_impact=-40,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="critical",
+                        category="command",
+                        title=f"检测到危险模式: {desc}",
+                        description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
+                        score_impact=-40,
+                    )
+                )
 
         # 检查高危模式
         for pattern, desc in HIGH_RISK_PATTERNS:
             if re.search(pattern, install_command, re.IGNORECASE):
-                findings.append(ScanFinding(
-                    severity="high",
-                    category="command",
-                    title=f"绕过安全机制: {desc}",
-                    description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
-                    score_impact=-20,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="high",
+                        category="command",
+                        title=f"绕过安全机制: {desc}",
+                        description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
+                        score_impact=-20,
+                    )
+                )
 
         # 检查可疑模式
         for pattern, desc in SUSPICIOUS_PATTERNS:
             if re.search(pattern, install_command, re.IGNORECASE):
-                findings.append(ScanFinding(
-                    severity="suspicious",
-                    category="command",
-                    title=f"可疑操作: {desc}",
-                    description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
-                    score_impact=-10,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="suspicious",
+                        category="command",
+                        title=f"可疑操作: {desc}",
+                        description=f"安装命令 '{install_command[:80]}' 包含 '{pattern}'",
+                        score_impact=-10,
+                    )
+                )
 
         # 按安装类型检测
         if install_type == "pip":
             if "/" in install_command and "@" not in install_command.split("/")[0]:
-                findings.append(ScanFinding(
-                    severity="suspicious",
-                    category="command",
-                    title="从直接 URL 安装 pip 包",
-                    description=f"pip 从非 PyPI 源直接安装: {install_command[:80]}",
-                    score_impact=-8,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="suspicious",
+                        category="command",
+                        title="从直接 URL 安装 pip 包",
+                        description=f"pip 从非 PyPI 源直接安装: {install_command[:80]}",
+                        score_impact=-8,
+                    )
+                )
         elif install_type == "npm":
-            if re.search(r'\bnpm\s+(i|install)\b.*(-g|--global)(?:\s|$)', install_command):
-                findings.append(ScanFinding(
-                    severity="suspicious",
-                    category="command",
-                    title="全局安装 npm 包",
-                    description=f"npm install -g 可能导致全局污染: {install_command[:80]}",
-                    score_impact=-5,
-                ))
+            if re.search(r"\bnpm\s+(i|install)\b.*(-g|--global)(?:\s|$)", install_command):
+                findings.append(
+                    ScanFinding(
+                        severity="suspicious",
+                        category="command",
+                        title="全局安装 npm 包",
+                        description=f"npm install -g 可能导致全局污染: {install_command[:80]}",
+                        score_impact=-5,
+                    )
+                )
         elif install_type == "docker":
             # Docker 安装一般需要网络和系统权限
-            findings.append(ScanFinding(
-                severity="suspicious",
-                category="command",
-                title="Docker 安装",
-                description="Docker 容器需要网络和系统级访问",
-                score_impact=-15,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="suspicious",
+                    category="command",
+                    title="Docker 安装",
+                    description="Docker 容器需要网络和系统级访问",
+                    score_impact=-15,
+                )
+            )
 
         return findings
 
@@ -266,68 +280,86 @@ class PackageChecker:
 
                     # 检查包发布时间
                     time_data = full_data.get("time", {})
-                    first_release = time_data.get(version, "") or list(time_data.values())[0] if time_data else ""  # noqa: E501
+                    first_release = (
+                        time_data.get(version, "") or list(time_data.values())[0]
+                        if time_data
+                        else ""
+                    )  # noqa: E501
                     if first_release:
                         try:
-                            release_date = datetime.fromisoformat(first_release.replace("Z", "+00:00"))  # noqa: E501
+                            release_date = datetime.fromisoformat(
+                                first_release.replace("Z", "+00:00")
+                            )  # noqa: E501
                             age_days = (datetime.now(timezone.utc) - release_date).days
                             if age_days < 30:
-                                findings.append(ScanFinding(
-                                    severity="high",
-                                    category="package",
-                                    title="包发布时间不足 30 天",
-                                    description=f"npm 包 '{package}' 发布于 {age_days} 天前，风险较高",  # noqa: E501
-                                    score_impact=-15,
-                                ))
+                                findings.append(
+                                    ScanFinding(
+                                        severity="high",
+                                        category="package",
+                                        title="包发布时间不足 30 天",
+                                        description=f"npm 包 '{package}' 发布于 {age_days} 天前，风险较高",  # noqa: E501
+                                        score_impact=-15,
+                                    )
+                                )
                             elif age_days > 365:
-                                findings.append(ScanFinding(
-                                    severity="info",
-                                    category="package",
-                                    title="包已发布超过 1 年",
-                                    description=f"npm 包 '{package}' 已发布 {age_days} 天，相对成熟",  # noqa: E501
-                                    score_impact=5,
-                                ))
+                                findings.append(
+                                    ScanFinding(
+                                        severity="info",
+                                        category="package",
+                                        title="包已发布超过 1 年",
+                                        description=f"npm 包 '{package}' 已发布 {age_days} 天，相对成熟",  # noqa: E501
+                                        score_impact=5,
+                                    )
+                                )
                         except (ValueError, IndexError):
                             pass
 
                     # 检查版本数量（越多越成熟）
                     versions = len(full_data.get("versions", {}))
                     if versions >= 10:
-                        findings.append(ScanFinding(
-                            severity="info",
-                            category="package",
-                            title="版本历史丰富",
-                            description=f"npm 包 '{package}' 有 {versions} 个版本",
-                            score_impact=5,
-                        ))
+                        findings.append(
+                            ScanFinding(
+                                severity="info",
+                                category="package",
+                                title="版本历史丰富",
+                                description=f"npm 包 '{package}' 有 {versions} 个版本",
+                                score_impact=5,
+                            )
+                        )
                     elif versions == 1:
-                        findings.append(ScanFinding(
-                            severity="suspicious",
-                            category="package",
-                            title="只有一个版本",
-                            description=f"npm 包 '{package}' 只有 1 个版本",
-                            score_impact=-8,
-                        ))
+                        findings.append(
+                            ScanFinding(
+                                severity="suspicious",
+                                category="package",
+                                title="只有一个版本",
+                                description=f"npm 包 '{package}' 只有 1 个版本",
+                                score_impact=-8,
+                            )
+                        )
 
                     # 检查维护者数量
                     maintainers = full_data.get("maintainers", [])
                     if len(maintainers) >= 3:
-                        findings.append(ScanFinding(
-                            severity="info",
-                            category="package",
-                            title="多维护者",
-                            description=f"npm 包 '{package}' 有 {len(maintainers)} 位维护者",
-                            score_impact=5,
-                        ))
+                        findings.append(
+                            ScanFinding(
+                                severity="info",
+                                category="package",
+                                title="多维护者",
+                                description=f"npm 包 '{package}' 有 {len(maintainers)} 位维护者",
+                                score_impact=5,
+                            )
+                        )
 
         except (httpx.TimeoutException, httpx.RequestError):
-            findings.append(ScanFinding(
-                severity="info",
-                category="package",
-                title="无法连接 npm 注册表",
-                description=f"无法获取 npm 包 '{package}' 的元数据",
-                score_impact=0,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="info",
+                    category="package",
+                    title="无法连接 npm 注册表",
+                    description=f"无法获取 npm 包 '{package}' 的元数据",
+                    score_impact=0,
+                )
+            )
         except Exception:
             pass
 
@@ -365,35 +397,43 @@ class PackageChecker:
 
                 if release_date_str:
                     try:
-                        release_date = datetime.fromisoformat(release_date_str.replace("Z", "+00:00"))  # noqa
+                        release_date = datetime.fromisoformat(
+                            release_date_str.replace("Z", "+00:00")
+                        )  # noqa
                         age_days = (datetime.now(timezone.utc) - release_date).days
                         if age_days < 30:
-                            findings.append(ScanFinding(
-                                severity="high",
-                                category="package",
-                                title="包发布时间不足 30 天",
-                                description=f"PyPI 包 '{package}' 发布于 {age_days} 天前",
-                                score_impact=-15,
-                            ))
+                            findings.append(
+                                ScanFinding(
+                                    severity="high",
+                                    category="package",
+                                    title="包发布时间不足 30 天",
+                                    description=f"PyPI 包 '{package}' 发布于 {age_days} 天前",
+                                    score_impact=-15,
+                                )
+                            )
                         elif age_days > 365:
-                            findings.append(ScanFinding(
-                                severity="info",
-                                category="package",
-                                title="包已发布超过 1 年",
-                                description=f"PyPI 包 '{package}' 已发布 {age_days} 天",
-                                score_impact=5,
-                            ))
+                            findings.append(
+                                ScanFinding(
+                                    severity="info",
+                                    category="package",
+                                    title="包已发布超过 1 年",
+                                    description=f"PyPI 包 '{package}' 已发布 {age_days} 天",
+                                    score_impact=5,
+                                )
+                            )
                     except (ValueError, IndexError):
                         pass
 
         except (httpx.TimeoutException, httpx.RequestError):
-            findings.append(ScanFinding(
-                severity="info",
-                category="package",
-                title="无法连接 PyPI 注册表",
-                description=f"无法获取 PyPI 包 '{package}' 的元数据",
-                score_impact=0,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="info",
+                    category="package",
+                    title="无法连接 PyPI 注册表",
+                    description=f"无法获取 PyPI 包 '{package}' 的元数据",
+                    score_impact=0,
+                )
+            )
         except Exception:
             pass
 
@@ -413,59 +453,71 @@ class ReputationChecker:
         findings: list[ScanFinding] = []
 
         if not author:
-            findings.append(ScanFinding(
-                severity="suspicious",
-                category="reputation",
-                title="无发布者信息",
-                description="Server 没有发布者信息，来源不明",
-                score_impact=-10,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="suspicious",
+                    category="reputation",
+                    title="无发布者信息",
+                    description="Server 没有发布者信息，来源不明",
+                    score_impact=-10,
+                )
+            )
             return findings
 
         author_lower = author.lower()
 
         if author_lower in KNOWN_OFFICIAL_AUTHORS:
-            findings.append(ScanFinding(
-                severity="info",
-                category="reputation",
-                title="官方发布者",
-                description=f"{author} 是官方认证发布者",
-                score_impact=20,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="info",
+                    category="reputation",
+                    title="官方发布者",
+                    description=f"{author} 是官方认证发布者",
+                    score_impact=20,
+                )
+            )
         elif author_lower in VERIFIED_COMMUNITY_AUTHORS:
-            findings.append(ScanFinding(
-                severity="info",
-                category="reputation",
-                title="已验证社区发布者",
-                description=f"{author} 是已知的社区发布者",
-                score_impact=10,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="info",
+                    category="reputation",
+                    title="已验证社区发布者",
+                    description=f"{author} 是已知的社区发布者",
+                    score_impact=10,
+                )
+            )
         elif publisher_verified:
-            findings.append(ScanFinding(
-                severity="info",
-                category="reputation",
-                title="已验证发布者",
-                description=f"{author} 已经过平台验证",
-                score_impact=10,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="info",
+                    category="reputation",
+                    title="已验证发布者",
+                    description=f"{author} 已经过平台验证",
+                    score_impact=10,
+                )
+            )
         else:
             # 检查发布者是否是 GitHub 组织
             if "/" in author and not author.startswith("@"):
-                findings.append(ScanFinding(
-                    severity="info",
-                    category="reputation",
-                    title="组织级发布者",
-                    description=f"{author} 可能来自组织账号",
-                    score_impact=5,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="info",
+                        category="reputation",
+                        title="组织级发布者",
+                        description=f"{author} 可能来自组织账号",
+                        score_impact=5,
+                    )
+                )
             else:
-                findings.append(ScanFinding(
-                    severity="suspicious",
-                    category="reputation",
-                    title="未知发布者",
-                    description=f"{author} 不是已知的发布者，需要谨慎",
-                    score_impact=-5,
-                ))
+                findings.append(
+                    ScanFinding(
+                        severity="suspicious",
+                        category="reputation",
+                        title="未知发布者",
+                        description=f"{author} 不是已知的发布者，需要谨慎",
+                        score_impact=-5,
+                    )
+                )
 
         return findings
 
@@ -480,51 +532,61 @@ class CodePatternChecker:
         # 检查网络访问
         network_keywords = ["web", "api", "http", "search", "network", "fetch", "download"]
         if any(w in desc_lower for w in network_keywords):
-            findings.append(ScanFinding(
-                severity="suspicious",
-                category="code",
-                title="Server 需要网络访问",
-                description="描述中包含网络相关关键词",
-                score_impact=-5,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="suspicious",
+                    category="code",
+                    title="Server 需要网络访问",
+                    description="描述中包含网络相关关键词",
+                    score_impact=-5,
+                )
+            )
 
         # 检查文件访问
         file_keywords = ["file", "filesystem", "fs ", "read", "write", "create", "delete"]
         if any(w in desc_lower for w in file_keywords):
-            findings.append(ScanFinding(
-                severity="suspicious",
-                category="code",
-                title="Server 需要文件系统访问",
-                description="描述中包含文件操作相关关键词",
-                score_impact=-5,
-            ))
+            findings.append(
+                ScanFinding(
+                    severity="suspicious",
+                    category="code",
+                    title="Server 需要文件系统访问",
+                    description="描述中包含文件操作相关关键词",
+                    score_impact=-5,
+                )
+            )
 
         # 检查 homePage 是否有效
         if homepage:
             if not homepage.startswith(("https://", "http://")):
-                findings.append(ScanFinding(
+                findings.append(
+                    ScanFinding(
+                        severity="suspicious",
+                        category="code",
+                        title="主页 URL 异常",
+                        description=f"主页 '{homepage}' 不是有效的 URL",
+                        score_impact=-3,
+                    )
+                )
+            elif "github.com" not in homepage and "gitlab.com" not in homepage:
+                findings.append(
+                    ScanFinding(
+                        severity="info",
+                        category="code",
+                        title="非 GitHub 托管",
+                        description="主页不在 GitHub 上，代码透明度较低",
+                        score_impact=-3,
+                    )
+                )
+        else:
+            findings.append(
+                ScanFinding(
                     severity="suspicious",
                     category="code",
-                    title="主页 URL 异常",
-                    description=f"主页 '{homepage}' 不是有效的 URL",
-                    score_impact=-3,
-                ))
-            elif "github.com" not in homepage and "gitlab.com" not in homepage:
-                findings.append(ScanFinding(
-                    severity="info",
-                    category="code",
-                    title="非 GitHub 托管",
-                    description="主页不在 GitHub 上，代码透明度较低",
-                    score_impact=-3,
-                ))
-        else:
-            findings.append(ScanFinding(
-                severity="suspicious",
-                category="code",
-                title="无主页信息",
-                description="Server 没有提供主页，来源难以追溯",
-                score_impact=-5,
-            ))
+                    title="无主页信息",
+                    description="Server 没有提供主页，来源难以追溯",
+                    score_impact=-5,
+                )
+            )
 
         return findings
 
@@ -556,14 +618,10 @@ class SecurityScanner:
         install_type = server_data.get("install_type", "")
 
         # 1. 命令安全检测
-        command_findings = self.command_analyzer.analyze(
-            install_command, install_type
-        )
+        command_findings = self.command_analyzer.analyze(install_command, install_type)
 
         # 2. 包信誉检查
-        package_findings = await self.package_checker.check(
-            install_command, install_type
-        )
+        package_findings = await self.package_checker.check(install_command, install_type)
 
         # 3. 发布者信誉检查
         reputation_findings = self.reputation_checker.check(
@@ -594,9 +652,7 @@ class SecurityScanner:
         score = self._calculate_score(all_findings)
 
         # 评分维度最低分机制：命令安全性 < 25 时总分上限 40
-        command_safety_penalty = sum(
-            f.score_impact for f in command_findings if f.score_impact < 0
-        )
+        command_safety_penalty = sum(f.score_impact for f in command_findings if f.score_impact < 0)
         command_safety_score = max(0, 40 + command_safety_penalty)
         if command_safety_score < 25:
             score = min(score, 40)
@@ -606,13 +662,9 @@ class SecurityScanner:
 
         # 网络/文件访问标记
         network_access = any(
-            f.category == "code" and "network" in f.description
-            for f in code_findings
+            f.category == "code" and "network" in f.description for f in code_findings
         )
-        file_access = any(
-            f.category == "code" and "file" in f.description
-            for f in code_findings
-        )
+        file_access = any(f.category == "code" and "file" in f.description for f in code_findings)
 
         # 如果命令分析发现有网络相关操作
         if any("network" in str(f).lower() for f in command_findings):

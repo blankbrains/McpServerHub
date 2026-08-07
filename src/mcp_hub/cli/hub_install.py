@@ -26,8 +26,18 @@ def _install_mcp() -> bool:
     console.print("[yellow]📦 正在安装 MCP Hub CLI...[/yellow]")
 
     methods = [
-        ([sys.executable, "-m", "pip", "install", "-i",
-          "https://pypi.tuna.tsinghua.edu.cn/simple", "mcp-hub"], "pip (清华源)"),
+        (
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-i",
+                "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "mcp-hub",
+            ],
+            "pip (清华源)",
+        ),
         ([sys.executable, "-m", "pip", "install", "mcp-hub"], "pip"),
         (["pipx", "install", "mcp-hub"], "pipx"),
     ]
@@ -54,6 +64,7 @@ def hub_install(server_id: str | None, force: bool):
       mcp hub-install                                  # 只安装 MCP Hub
       mcp hub-install @org/server-name                 # 安装 Hub + 指定 Server
     """
+
     async def _run():
         console.print(Panel.fit("[bold blue]🔵 MCP Hub Installer[/bold blue]"))
 
@@ -82,14 +93,18 @@ def hub_install(server_id: str | None, force: bool):
             try:
                 result = subprocess.run(
                     [mcp_path, "install", server_id],
-                    capture_output=True, text=True, timeout=60,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 if result.returncode == 0:
                     console.print(f"  ✅ [green]{server_id} 安装成功[/green]")
                     # Show config
                     info = subprocess.run(
                         [mcp_path, "info", server_id],
-                        capture_output=True, text=True, timeout=10,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
                     if info.stdout:
                         console.print(info.stdout)
@@ -111,6 +126,7 @@ def hub_install(server_id: str | None, force: bool):
                     }
                 }
                 import json
+
                 console.print(json.dumps(config, indent=2, ensure_ascii=False))
                 console.print("\n[yellow]  配置文件路径:[/yellow]")
                 console.print("  ~/.config/Claude/claude_desktop_config.json")

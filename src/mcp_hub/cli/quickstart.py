@@ -17,11 +17,14 @@ console = Console()
 @click.option("--port", default=3987, type=int, help="监听端口")
 def quickstart(port: int):
     """🚀 零配置启动 MCP Server Hub（30 秒上线）。"""
+
     async def _run():
-        console.print(Panel.fit(
-            "[bold blue]🔵 MCP Server Hub Quickstart[/bold blue]\n"
-            "零配置模式 · 使用 SQLite · 无需 PostgreSQL",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold blue]🔵 MCP Server Hub Quickstart[/bold blue]\n"
+                "零配置模式 · 使用 SQLite · 无需 PostgreSQL",
+            )
+        )
 
         config_dir = Path.home() / ".config" / "mcp-hub"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -44,6 +47,7 @@ MCP_HUB_WORKERS=1
         # 初始化数据库
         try:
             from mcp_hub.db.database import init_db
+
             await init_db()
             console.print("  ✅ [green]数据库已初始化 (SQLite)[/green]")
         except Exception as e:

@@ -68,6 +68,13 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG", "C4", "T20"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Body", "fastapi.Depends", "fastapi.Query"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/mcp_hub/api/routes_admin.py" = ["ARG001"]
+"tests/unit/test_registry.py" = ["ARG002"]
+
 [tool.mypy]
 strict = true
 python_version = "3.10"

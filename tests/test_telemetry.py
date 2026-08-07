@@ -14,8 +14,8 @@ from mcp_hub.api.routes_telemetry import (
     TelemetryBatchRequest,
     TelemetryEventInput,
     create_telemetry_device,
-    get_telemetry_identity,
     get_telemetry_agents,
+    get_telemetry_identity,
     get_telemetry_servers,
     get_telemetry_summary,
     ingest_telemetry_events,
@@ -93,12 +93,8 @@ async def test_telemetry_isolated_and_aggregated_by_agent_type() -> None:
     )
     assert claude["data"]["device"]["agent_type"] == "claude-code"
     assert codex["data"]["device"]["agent_type"] == "codex"
-    claude_identity = await get_telemetry_identity(
-        f"Bearer {claude['data']['token']}"
-    )
-    codex_identity = await get_telemetry_identity(
-        f"Bearer {codex['data']['token']}"
-    )
+    claude_identity = await get_telemetry_identity(f"Bearer {claude['data']['token']}")
+    codex_identity = await get_telemetry_identity(f"Bearer {codex['data']['token']}")
 
     await ingest_telemetry_events(
         TelemetryBatchRequest(events=[_event("agent-event-000001", "@example/claude")]),

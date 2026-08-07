@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Header
-from sqlalchemy import select, func, text
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select, text
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
@@ -39,18 +39,20 @@ async def list_presets(page: int = 1, page_size: int = 12, sort: str = "hot"):
                 servers = json.loads(r.servers)
             except Exception:
                 servers = []
-            items.append({
-                "id": r.id,
-                "user_id": r.user_id,
-                "name": r.name,
-                "description": r.description,
-                "tags": [t.strip() for t in r.tags.split(",") if t.strip()] if r.tags else [],
-                "servers": servers,
-                "server_count": len(servers),
-                "download_count": r.download_count,
-                "rating": r.rating,
-                "created_at": str(r.created_at) if r.created_at else "",
-            })
+            items.append(
+                {
+                    "id": r.id,
+                    "user_id": r.user_id,
+                    "name": r.name,
+                    "description": r.description,
+                    "tags": [t.strip() for t in r.tags.split(",") if t.strip()] if r.tags else [],
+                    "servers": servers,
+                    "server_count": len(servers),
+                    "download_count": r.download_count,
+                    "rating": r.rating,
+                    "created_at": str(r.created_at) if r.created_at else "",
+                }
+            )
 
     return {
         "success": True,
@@ -63,9 +65,7 @@ async def list_presets(page: int = 1, page_size: int = 12, sort: str = "hot"):
 async def get_preset(preset_id: int):
     """获取单个方案详情。"""
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(PresetModel).where(PresetModel.id == preset_id)
-        )
+        result = await session.execute(select(PresetModel).where(PresetModel.id == preset_id))
         r = result.scalar_one_or_none()
         if not r:
             return {"success": False, "error": "方案不存在"}
@@ -123,9 +123,7 @@ async def import_preset(preset_id: int, user_id: str = Depends(get_current_user)
     from mcp_hub.db.models import UserServerModel
 
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(PresetModel).where(PresetModel.id == preset_id)
-        )
+        result = await session.execute(select(PresetModel).where(PresetModel.id == preset_id))
         preset = result.scalar_one_or_none()
         if not preset:
             return {"success": False, "error": "方案不存在"}
@@ -144,18 +142,20 @@ async def import_preset(preset_id: int, user_id: str = Depends(get_current_user)
                 UserServerModel.server_id.in_(all_sids),
             )
         )
-        existing_ids = set(row[0] for row in existing_result.fetchall())
+        existing_ids = {row[0] for row in existing_result.fetchall()}
 
         imported = 0
         for srv in servers:
             sid = srv.get("server_id", srv.get("hub_id", srv.get("name", "")))
             if not sid or sid in existing_ids:
                 continue
-            session.add(UserServerModel(
-                user_id=user_id,
-                server_id=sid,
-                matched=srv.get("matched", True),
-            ))
+            session.add(
+                UserServerModel(
+                    user_id=user_id,
+                    server_id=sid,
+                    matched=srv.get("matched", True),
+                )
+            )
             imported += 1
             existing_ids.add(sid)  # 防止同方案中重复的 server_id
 

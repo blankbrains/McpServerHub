@@ -31,6 +31,7 @@ class McpHubError(Exception):
 
 # ── 资源类异常 ────────────────────────────────────────────
 
+
 class ServerNotFoundError(McpHubError):
     """Server 不存在。"""
 
@@ -72,6 +73,7 @@ class ServerNotRunningError(McpHubError):
 
 # ── 安装类异常 ────────────────────────────────────────────
 
+
 class InstallError(McpHubError):
     """安装失败。"""
 
@@ -101,6 +103,7 @@ class UnsupportedInstallTypeError(McpHubError):
 
 # ── 配置类异常 ────────────────────────────────────────────
 
+
 class ConfigError(McpHubError):
     """配置相关错误。"""
 
@@ -114,6 +117,7 @@ class ConfigError(McpHubError):
 
 
 # ── 认证类异常 ────────────────────────────────────────────
+
 
 class AuthError(McpHubError):
     """认证/授权失败。"""
@@ -149,6 +153,7 @@ class TokenInvalidError(AuthError):
 
 # ── 进程类异常 ────────────────────────────────────────────
 
+
 class ProcessError(McpHubError):
     """进程管理相关错误。"""
 
@@ -182,6 +187,7 @@ class ProcessStartupError(ProcessError):
 
 # ── 网关类异常 ────────────────────────────────────────────
 
+
 class GatewayError(McpHubError):
     """MCP 网关相关错误。"""
 
@@ -204,6 +210,7 @@ class GatewayError(McpHubError):
 
 # ── 验证类异常 ────────────────────────────────────────────
 
+
 class ValidationError(McpHubError):
     """输入验证失败。"""
 
@@ -217,6 +224,7 @@ class ValidationError(McpHubError):
 
 
 # ── 版本管理类异常 ────────────────────────────────────────
+
 
 class VersionError(McpHubError):
     """版本管理相关错误。"""

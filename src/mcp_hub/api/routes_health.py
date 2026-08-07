@@ -37,9 +37,7 @@ async def servers_health():
     installed = await registry.get_installed()
 
     async with async_session_factory() as session:
-        total = (await session.execute(
-            select(func.count(ServerModel.id))
-        )).scalar() or 0
+        total = (await session.execute(select(func.count(ServerModel.id)))).scalar() or 0
 
     running = len(pm.list_running())
 

@@ -1,7 +1,8 @@
 """发布 API — 含安全检查。"""
+
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from mcp_hub.api.dependencies import get_current_user
@@ -40,7 +41,10 @@ async def publish_server(req: PublishRequest, user_id: str = Depends(get_current
     if report.score < 50:
         return {
             "success": False,
-            "error": f"安全评分 {report.score}/100（{report.level}），发布被阻止。请修复安装命令中的安全问题后再试。",
+            "error": (
+                f"安全评分 {report.score}/100（{report.level}），发布被阻止。"
+                "请修复安装命令中的安全问题后再试。"
+            ),
             "security_report": {
                 "score": report.score,
                 "level": report.level,
@@ -49,19 +53,25 @@ async def publish_server(req: PublishRequest, user_id: str = Depends(get_current
         }
 
     registry = Registry()
-    result_id = await registry.register_server({
-        "id": server_id,
-        "name": req.name,
-        "description": req.description,
-        "categories": [req.category],
-        "tags": req.tags,
-        "install_type": req.install_type,
-        "install_command": req.install_command,
-        "homepage": req.homepage,
-        "security_level": report.level,
-        "author": user_id if user_id != "api-user" else "",
-    })
-    return {"success": True, "data": {"id": result_id}, "security": {"score": report.score, "level": report.level}}
+    result_id = await registry.register_server(
+        {
+            "id": server_id,
+            "name": req.name,
+            "description": req.description,
+            "categories": [req.category],
+            "tags": req.tags,
+            "install_type": req.install_type,
+            "install_command": req.install_command,
+            "homepage": req.homepage,
+            "security_level": report.level,
+            "author": user_id if user_id != "api-user" else "",
+        }
+    )
+    return {
+        "success": True,
+        "data": {"id": result_id},
+        "security": {"score": report.score, "level": report.level},
+    }
 
 
 @router.get("/publish/mine")

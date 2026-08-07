@@ -56,14 +56,16 @@ async def record_usage(
                 sid = rec.get("server_id", "")
                 if not sid:
                     continue
-                session.add(UsageStatsModel(
-                    server_id=sid,
-                    user_id=user_id,
-                    tool_name=rec.get("tool_name", ""),
-                    status=rec.get("status", "ok"),
-                    duration_ms=rec.get("duration_ms", 0),
-                    token_count=rec.get("token_count", 0),
-                ))
+                session.add(
+                    UsageStatsModel(
+                        server_id=sid,
+                        user_id=user_id,
+                        tool_name=rec.get("tool_name", ""),
+                        status=rec.get("status", "ok"),
+                        duration_ms=rec.get("duration_ms", 0),
+                        token_count=rec.get("token_count", 0),
+                    )
+                )
                 saved += 1
             await session.commit()
     except Exception as e:
@@ -79,6 +81,7 @@ async def record_usage(
                 error_servers.add(sid)
                 try:
                     from mcp_hub.api.routes_notifications import create_notification
+
                     await create_notification(
                         user_id=user_id,
                         notif_type="alert",
@@ -131,12 +134,10 @@ async def get_usage_stats(
                 func.count().label("total_calls"),
                 func.avg(UsageStatsModel.duration_ms).label("avg_duration_ms"),
                 func.sum(UsageStatsModel.token_count).label("total_tokens"),
-                func.sum(
-                    case((UsageStatsModel.status == "ok", 1), else_=0)
-                ).label("ok_count"),
-                func.sum(
-                    case((UsageStatsModel.status == "error", 1), else_=0)
-                ).label("error_count"),
+                func.sum(case((UsageStatsModel.status == "ok", 1), else_=0)).label("ok_count"),
+                func.sum(case((UsageStatsModel.status == "error", 1), else_=0)).label(
+                    "error_count"
+                ),
             )
             .where(*filters)
             .group_by(UsageStatsModel.server_id)
@@ -149,15 +150,17 @@ async def get_usage_stats(
         for row in rows:
             total = row[1] or 0
             ok = row[4] or 0
-            stats.append({
-                "server_id": row[0],
-                "total_calls": total,
-                "avg_duration_ms": round(row[2] or 0, 1),
-                "total_tokens": row[3] or 0,
-                "ok_count": ok,
-                "error_count": row[5] or 0,
-                "success_rate": round(ok / total * 100, 1) if total > 0 else 0,
-            })
+            stats.append(
+                {
+                    "server_id": row[0],
+                    "total_calls": total,
+                    "avg_duration_ms": round(row[2] or 0, 1),
+                    "total_tokens": row[3] or 0,
+                    "ok_count": ok,
+                    "error_count": row[5] or 0,
+                    "success_rate": round(ok / total * 100, 1) if total > 0 else 0,
+                }
+            )
 
     return {
         "success": True,

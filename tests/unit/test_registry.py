@@ -1,4 +1,5 @@
 """单元测试 — Registry（ServerRepository 代理层）。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,6 +34,7 @@ async def db_session(temp_dir: Path, monkeypatch: pytest.MonkeyPatch):
 
     # Inject seed data
     from mcp_hub.db.repositories import ServerRepository
+
     async with factory() as session:
         repo = ServerRepository(session)
         for s in _SEED_SERVERS:
@@ -188,12 +190,14 @@ class TestRegistryLists:
 class TestRegistryRegister:
     async def test_register_server_new(self, registry: Registry, db_session) -> None:
         """注册新 Server 返回其 ID。"""
-        sid = await registry.register_server({
-            "id": "@test/new-server",
-            "name": "new-server",
-            "description": "全新 Server",
-            "author": "test",
-        })
+        sid = await registry.register_server(
+            {
+                "id": "@test/new-server",
+                "name": "new-server",
+                "description": "全新 Server",
+                "author": "test",
+            }
+        )
         assert sid == "@test/new-server"
         result = await registry.get_by_id("@test/new-server")
         assert result is not None
@@ -201,11 +205,13 @@ class TestRegistryRegister:
 
     async def test_register_server_update(self, registry: Registry, db_session) -> None:
         """注册已存在的 ID 应更新字段。"""
-        sid = await registry.register_server({
-            "id": "@anthropic/web-search",
-            "name": "web-search",
-            "description": "更新后的描述",
-        })
+        sid = await registry.register_server(
+            {
+                "id": "@anthropic/web-search",
+                "name": "web-search",
+                "description": "更新后的描述",
+            }
+        )
         assert sid == "@anthropic/web-search"
         result = await registry.get_by_id("@anthropic/web-search")
         assert result is not None

@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
-from mcp_hub.core.installer import Installer
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import (
     ConfigError,
-    InstallError,
     ProcessStartupError,
     ServerAlreadyRunningError,
     ServerNotFoundError,
 )
-from mcp_hub.models.server import InstallConfig, ServerMeta
 from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -48,27 +46,31 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
     display_name = server_data.get("display_name", req.server_id.split("/")[-1])
 
     # 1. 添加到 user_servers（标记为已追踪、已启用）
+    from sqlalchemy import select
+
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import UserServerModel
-    from sqlalchemy import delete, select
 
     async with async_session_factory() as session:
         # 检查是否已存在
         existing = await session.execute(
-            select(UserServerModel)
-            .where(UserServerModel.user_id == user_id, UserServerModel.server_id == req.server_id)
+            select(UserServerModel).where(
+                UserServerModel.user_id == user_id, UserServerModel.server_id == req.server_id
+            )
         )
         row = existing.scalar_one_or_none()
         if row:
             row.enabled = True
             row.matched = True
         else:
-            session.add(UserServerModel(
-                user_id=user_id,
-                server_id=req.server_id,
-                matched=True,
-                enabled=True,
-            ))
+            session.add(
+                UserServerModel(
+                    user_id=user_id,
+                    server_id=req.server_id,
+                    matched=True,
+                    enabled=True,
+                )
+            )
         await session.commit()
 
     # 2. 更新状态和下载计数
@@ -85,9 +87,12 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
     try:
         async with async_session_factory() as session:
             from sqlalchemy import text
+
             await session.execute(
-                text("INSERT INTO install_history (server_id, version, action, status) "
-                     "VALUES (:sid, :ver, 'install', 'success')"),
+                text(
+                    "INSERT INTO install_history (server_id, version, action, status) "
+                    "VALUES (:sid, :ver, 'install', 'success')"
+                ),
                 {"sid": req.server_id, "ver": server_data.get("version", "?")},
             )
             await session.commit()
@@ -141,9 +146,11 @@ async def start_server(server_id: str, user_id: str = Depends(get_current_user))
     """启动 Server。"""
     # 检查是否已被当前用户禁用
     try:
+        from sqlalchemy import select
+
         from mcp_hub.db.database import async_session_factory
         from mcp_hub.db.models import UserServerModel
-        from sqlalchemy import select
+
         async with async_session_factory() as session:
             result = await session.execute(
                 select(UserServerModel.enabled)
@@ -155,7 +162,9 @@ async def start_server(server_id: str, user_id: str = Depends(get_current_user))
             )
             row = result.fetchone()
             if row is not None and row[0] is False:
-                raise ConfigError(f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动")
+                raise ConfigError(
+                    f"Server '{server_id}' 已被禁用，请在「我的 Server」中启用后再启动"
+                )
     except ConfigError:
         raise
     except Exception as e:
@@ -213,9 +222,11 @@ async def uninstall_server(server_id: str, user_id: str = Depends(get_current_us
 
     # 从 user_servers 中移除（避免卸载后仍显示"已追踪"）
     try:
+        from sqlalchemy import delete
+
         from mcp_hub.db.database import async_session_factory
         from mcp_hub.db.models import UserServerModel
-        from sqlalchemy import delete
+
         async with async_session_factory() as session:
             await session.execute(
                 delete(UserServerModel).where(
@@ -225,7 +236,9 @@ async def uninstall_server(server_id: str, user_id: str = Depends(get_current_us
             )
             await session.commit()
     except Exception as e:
-        logger.warning("manage.uninstall.user_servers_cleanup_failed", server_id=server_id, error=str(e))
+        logger.warning(
+            "manage.uninstall.user_servers_cleanup_failed", server_id=server_id, error=str(e)
+        )
 
     # 清理残留
     try:
@@ -234,8 +247,12 @@ async def uninstall_server(server_id: str, user_id: str = Depends(get_current_us
             pkg = server.get("install_package", "")
             if pkg:
                 import asyncio
+
                 proc = await asyncio.create_subprocess_exec(
-                    "pip", "uninstall", "-y", pkg,
+                    "pip",
+                    "uninstall",
+                    "-y",
+                    pkg,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -259,6 +276,7 @@ async def get_server_config(
 
     command = server.get("install_command", "")
     from mcp_hub.core.config_manager import get_config_for_agent
+
     return {
         "success": True,
         "data": get_config_for_agent(
@@ -310,6 +328,7 @@ async def get_logs(
 ):
     """获取 Server 日志。"""
     from pathlib import Path
+
     safe_name = server_id.replace("/", "_").replace("@", "")
     log_file = Path.home() / ".config" / "mcp-hub" / "logs" / f"{safe_name}.log"
     if not log_file.exists():
@@ -383,13 +402,15 @@ async def search_logs(
                     for j in range(i + 1, min(len(file_lines), i + 3))
                     if j < len(file_lines)
                 ]
-                results.append({
-                    "server": srv_name,
-                    "line_number": i + 1,
-                    "match": line.rstrip("\n"),
-                    "context_before": ctx_before,
-                    "context_after": ctx_after,
-                })
+                results.append(
+                    {
+                        "server": srv_name,
+                        "line_number": i + 1,
+                        "match": line.rstrip("\n"),
+                        "context_before": ctx_before,
+                        "context_after": ctx_after,
+                    }
+                )
 
         if len(results) >= lines:
             break
@@ -432,17 +453,20 @@ async def check_updates(user_id: str = Depends(get_current_user)):
         current = server.get("current_version", "")
         latest = server.get("latest_version", "")
         if latest and current and latest != current:
-            updates.append({
-                "server_id": us.server_id,
-                "name": server.get("name", us.server_id),
-                "current_version": current,
-                "latest_version": latest,
-            })
+            updates.append(
+                {
+                    "server_id": us.server_id,
+                    "name": server.get("name", us.server_id),
+                    "current_version": current,
+                    "latest_version": latest,
+                }
+            )
 
     # 自动为有更新的 Server 创建通知
     if updates:
         try:
             from mcp_hub.api.routes_notifications import create_notification
+
             for u in updates[:3]:  # 最多 3 条通知
                 await create_notification(
                     user_id=user_id,

@@ -19,6 +19,7 @@ console = Console()
 @click.option("--check", is_flag=True, help="只检查不更新")
 def update(server_name: str | None, check: bool):
     """检查/执行 MCP Server 版本更新。"""
+
     async def _run():
         vm = VersionManager()
         console.print("[bold]🔍 正在检查版本更新...[/bold]")
@@ -53,6 +54,7 @@ def update(server_name: str | None, check: bool):
 @click.argument("server_name", required=True)
 def upgrade(server_name: str):
     """升级指定 Server 到最新版本。"""
+
     async def _run():
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         vm = VersionManager()
@@ -80,6 +82,7 @@ def upgrade(server_name: str):
 @click.option("--to", "version", help="回滚到指定版本")
 def rollback(server_name: str, version: str | None):
     """回滚 Server 到上一版本或指定版本。"""
+
     async def _run():
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         vm = VersionManager()

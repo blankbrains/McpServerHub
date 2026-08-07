@@ -53,7 +53,9 @@ class TelemetryEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
-    event_type: Literal["heartbeat", "server_lifecycle", "tool_call", "resource_sample", "error_event"]
+    event_type: Literal[
+        "heartbeat", "server_lifecycle", "tool_call", "resource_sample", "error_event"
+    ]
     server_id: str = Field(default="", max_length=255)
     tool_name: str = Field(default="", max_length=255)
     status: Literal["ok", "error", "warning"] = "ok"
@@ -355,7 +357,9 @@ async def get_telemetry_servers(
                     func.sum(case((TelemetryEventModel.status == "error", 1), else_=0)),
                     0,
                 ).label("error_calls"),
-                func.coalesce(func.avg(TelemetryEventModel.duration_ms), 0).label("avg_duration_ms"),
+                func.coalesce(func.avg(TelemetryEventModel.duration_ms), 0).label(
+                    "avg_duration_ms"
+                ),
                 func.coalesce(
                     func.sum(TelemetryEventModel.input_tokens + TelemetryEventModel.output_tokens),
                     0,
@@ -418,27 +422,18 @@ async def get_telemetry_agents(
                 TelemetryDeviceModel.agent_type,
                 func.count(TelemetryEventModel.id).label("total_calls"),
                 func.coalesce(
-                    func.sum(
-                        case((TelemetryEventModel.status == "ok", 1), else_=0)
-                    ),
+                    func.sum(case((TelemetryEventModel.status == "ok", 1), else_=0)),
                     0,
                 ).label("ok_calls"),
                 func.coalesce(
-                    func.sum(
-                        case((TelemetryEventModel.status == "error", 1), else_=0)
-                    ),
+                    func.sum(case((TelemetryEventModel.status == "error", 1), else_=0)),
                     0,
                 ).label("error_calls"),
                 func.coalesce(
-                    func.sum(
-                        TelemetryEventModel.input_tokens
-                        + TelemetryEventModel.output_tokens
-                    ),
+                    func.sum(TelemetryEventModel.input_tokens + TelemetryEventModel.output_tokens),
                     0,
                 ).label("total_tokens"),
-                func.count(func.distinct(TelemetryDeviceModel.id)).label(
-                    "device_count"
-                ),
+                func.count(func.distinct(TelemetryDeviceModel.id)).label("device_count"),
                 func.max(TelemetryDeviceModel.last_seen_at).label("last_seen_at"),
             )
             .select_from(TelemetryDeviceModel)
@@ -462,16 +457,10 @@ async def get_telemetry_agents(
                 "total_calls": total_calls,
                 "ok_calls": ok_calls,
                 "error_calls": int(row.error_calls or 0),
-                "success_rate": (
-                    round(ok_calls / total_calls * 100, 1)
-                    if total_calls
-                    else 0
-                ),
+                "success_rate": (round(ok_calls / total_calls * 100, 1) if total_calls else 0),
                 "total_tokens": int(row.total_tokens or 0),
                 "device_count": int(row.device_count or 0),
-                "last_seen_at": (
-                    row.last_seen_at.isoformat() if row.last_seen_at else None
-                ),
+                "last_seen_at": (row.last_seen_at.isoformat() if row.last_seen_at else None),
             }
         )
     return {"success": True, "data": {"days": days, "agents": agents}}

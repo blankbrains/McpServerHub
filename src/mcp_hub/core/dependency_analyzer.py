@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 from dataclasses import dataclass, field
-from pathlib import Path
 
 # 已知的 MCP Server 常见环境变量需求模式
 KNOWN_ENV_PATTERNS: dict[str, dict] = {
@@ -153,6 +152,7 @@ KNOWN_ENV_PATTERNS: dict[str, dict] = {
 @dataclass
 class EnvVarRequirement:
     """单个环境变量需求。"""
+
     name: str
     description: str = ""
     required: bool = False
@@ -164,7 +164,8 @@ class EnvVarRequirement:
 @dataclass
 class RuntimeRequirement:
     """运行时依赖。"""
-    name: str               # e.g. "python", "node", "go", "docker"
+
+    name: str  # e.g. "python", "node", "go", "docker"
     min_version: str = ""
     installed: bool = False
     installed_version: str = ""
@@ -174,9 +175,10 @@ class RuntimeRequirement:
 @dataclass
 class DependencyReport:
     """完整的依赖分析报告。"""
+
     server_id: str
     command: str
-    install_tool: str = ""           # pip / npx / uvx / go / docker
+    install_tool: str = ""  # pip / npx / uvx / go / docker
     runtime_requirements: list[RuntimeRequirement] = field(default_factory=list)
     env_var_requirements: list[EnvVarRequirement] = field(default_factory=list)
     system_tools: list[str] = field(default_factory=list)
@@ -207,7 +209,9 @@ class DependencyAnalyzer:
         self.server_id = server_id
         self.command = command
 
-    async def analyze(self, server_id: str | None = None, command: str | None = None) -> DependencyReport:
+    async def analyze(
+        self, server_id: str | None = None, command: str | None = None
+    ) -> DependencyReport:
         """运行完整分析。"""
         sid = server_id or self.server_id
         cmd = command or self.command
@@ -232,9 +236,7 @@ class DependencyAnalyzer:
         self._analyze_command(cmd, report)
 
         # 4. 汇总
-        report.missing_count = sum(
-            1 for r in report.runtime_requirements if not r.installed
-        ) + sum(
+        report.missing_count = sum(1 for r in report.runtime_requirements if not r.installed) + sum(
             1 for e in report.env_var_requirements if e.required and not e.is_set
         )
         report.warning_count = sum(
@@ -251,7 +253,11 @@ class DependencyAnalyzer:
         """扫描一条命令中引用的环境变量名。"""
         found = set()
         # 匹配 $VAR_NAME 或 ${VAR_NAME} 或 %VAR_NAME%
-        for pattern in [r'\$([A-Z_][A-Z0-9_]*)', r'\$\{([A-Z_][A-Z0-9_]*)\}', r'%([A-Z_][A-Z0-9_]*)%']:
+        for pattern in [
+            r"\$([A-Z_][A-Z0-9_]*)",
+            r"\$\{([A-Z_][A-Z0-9_]*)\}",
+            r"%([A-Z_][A-Z0-9_]*)%",
+        ]:
             for match in re.finditer(pattern, command):
                 found.add(match.group(1))
         return sorted(found)
@@ -272,12 +278,16 @@ class DependencyAnalyzer:
 
         if name == "python":
             import sys
+
             installed_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
             installed = sys.version_info >= tuple(int(x) for x in min_ver.split("."))
         elif name == "node":
             import subprocess
+
             try:
-                result = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(
+                    ["node", "--version"], capture_output=True, text=True, timeout=10
+                )
                 installed_ver = result.stdout.strip().lstrip("v")
                 installed = bool(installed_ver)
             except Exception:
@@ -286,9 +296,12 @@ class DependencyAnalyzer:
             go_path = shutil.which("go")
             if go_path:
                 import subprocess
+
                 try:
-                    result = subprocess.run(["go", "version"], capture_output=True, text=True, timeout=10)
-                    m = re.search(r'go(\d+\.\d+)', result.stdout)
+                    result = subprocess.run(
+                        ["go", "version"], capture_output=True, text=True, timeout=10
+                    )
+                    m = re.search(r"go(\d+\.\d+)", result.stdout)
                     installed_ver = m.group(1) if m else ""
                     installed = bool(installed_ver)
                 except Exception:
@@ -296,21 +309,24 @@ class DependencyAnalyzer:
         elif name == "docker":
             installed = shutil.which("docker") is not None
 
-        report.runtime_requirements.append(RuntimeRequirement(
-            name=name,
-            min_version=min_ver,
-            installed=installed,
-            installed_version=installed_ver,
-            message=f"{name} >= {min_ver}" if not installed else f"{name} {installed_ver} (>= {min_ver}) OK",
-        ))
+        report.runtime_requirements.append(
+            RuntimeRequirement(
+                name=name,
+                min_version=min_ver,
+                installed=installed,
+                installed_version=installed_ver,
+                message=f"{name} >= {min_ver}"
+                if not installed
+                else f"{name} {installed_ver} (>= {min_ver}) OK",
+            )
+        )
 
     def _scan_env_vars(self, report: DependencyReport) -> None:
         """扫描命令和环境，识别所需的环境变量。"""
-        import sys
 
         # 首先从命令字符串中提取环境变量引用
         cmd_env_vars = set()
-        for pattern in [r'\$([A-Z_][A-Z0-9_]*)', r'\$\{([A-Z_][A-Z0-9_]*)\}']:
+        for pattern in [r"\$([A-Z_][A-Z0-9_]*)", r"\$\{([A-Z_][A-Z0-9_]*)\}"]:
             for match in re.finditer(pattern, report.command):
                 cmd_env_vars.add(match.group(1))
 
@@ -322,14 +338,16 @@ class DependencyAnalyzer:
             # 如果命令中明确引用了这个变量，或属于常见类别
             if var_name in cmd_env_vars or var_info.get("category") in categories_to_check:
                 is_set = var_name in os.environ
-                report.env_var_requirements.append(EnvVarRequirement(
-                    name=var_name,
-                    description=var_info.get("description", ""),
-                    required=var_info.get("required", False),
-                    category=var_info.get("category", ""),
-                    is_set=is_set,
-                    help_url=var_info.get("url", ""),
-                ))
+                report.env_var_requirements.append(
+                    EnvVarRequirement(
+                        name=var_name,
+                        description=var_info.get("description", ""),
+                        required=var_info.get("required", False),
+                        category=var_info.get("category", ""),
+                        is_set=is_set,
+                        help_url=var_info.get("url", ""),
+                    )
+                )
 
     def _analyze_command(self, command: str, report: DependencyReport) -> None:
         """从命令参数中分析系统工具依赖。"""
@@ -370,7 +388,11 @@ class DependencyAnalyzer:
             report.suggestions.append(f"需要设置以下环境变量: {names}")
 
         # 工具特定建议
-        if report.install_tool == "uvx" and any(r.name == "python" and not r.installed for r in report.runtime_requirements):
+        if report.install_tool == "uvx" and any(
+            r.name == "python" and not r.installed for r in report.runtime_requirements
+        ):
             report.suggestions.append("安装 uvx: pip install uv")
-        if report.install_tool == "npx" and any(r.name == "node" and not r.installed for r in report.runtime_requirements):
+        if report.install_tool == "npx" and any(
+            r.name == "node" and not r.installed for r in report.runtime_requirements
+        ):
             report.suggestions.append("安装 Node.js: https://nodejs.org/")

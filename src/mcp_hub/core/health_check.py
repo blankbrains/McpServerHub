@@ -203,9 +203,7 @@ class HealthChecker:
                         )
                 # 对每个失败的 Server 触发自动恢复
                 for sid in failed_ids:
-                    should_restart = await self._auto_restart(
-                        sid, process_manager, registry
-                    )
+                    should_restart = await self._auto_restart(sid, process_manager, registry)
                     if should_restart:
                         # 重新 spawn 进程
                         proc = process_manager.get(sid)
@@ -283,6 +281,7 @@ class HealthChecker:
         """将健康检查结果记录到 Monitor 数据库。"""
         try:
             from mcp_hub.core.monitor import Monitor
+
             status = "ok" if result.passed else "error"
             await Monitor.record_check(
                 server_id=server_id,

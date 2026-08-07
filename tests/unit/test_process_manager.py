@@ -2,6 +2,7 @@
 
 仅测试 ProcessManager 的逻辑层（spawn/kill/list/单例），
 通过 mock 避免创建真实子进程。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +23,7 @@ from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
 def reset_singleton():
     """每个测试前重置全局单例，避免测试间互相干扰。"""
     import mcp_hub.core.process_manager as pm
+
     pm._PM_INSTANCE = None
     yield
     pm._PM_INSTANCE = None
@@ -89,7 +91,9 @@ class TestProcessManagerSpawn:
         assert fetched.pid == 10001
 
     @patch("asyncio.create_subprocess_exec")
-    async def test_spawn_process_log_created(self, mock_spawn: MagicMock, pm: ProcessManager, temp_dir: Path) -> None:
+    async def test_spawn_process_log_created(
+        self, mock_spawn: MagicMock, pm: ProcessManager, temp_dir: Path
+    ) -> None:
         """spawn 后日志文件应被创建。"""
         mock_spawn.return_value = _make_mock_process(pid=20001)
         await pm.spawn("test/server", "echo")

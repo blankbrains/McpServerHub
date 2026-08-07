@@ -33,11 +33,13 @@ def config():
 @click.argument("server_name", required=True)
 def list_config(server_name: str):
     """查看 Server 配置。"""
+
     async def _run():
         cm = ConfigManager()
         server_id = f"@community/{server_name}" if "/" not in server_name else server_name
         cfg = await cm.list_config(server_id)
         click.echo(json.dumps(cfg, indent=2, ensure_ascii=False))
+
     asyncio.run(_run())
 
 
@@ -47,6 +49,7 @@ def list_config(server_name: str):
 @click.argument("value", required=True)
 def set_config(server_name: str, key: str, value: str):
     """设置环境变量。"""
+
     async def _run():
         cm = ConfigManager()
         server_id = f"@community/{server_name}" if "/" not in server_name else server_name
@@ -55,6 +58,7 @@ def set_config(server_name: str, key: str, value: str):
             click.echo(f"✅ {key}={value} 已设置")
         else:
             click.echo(f"❌ {server_id} 未找到")
+
     asyncio.run(_run())
 
 
@@ -63,6 +67,7 @@ def set_config(server_name: str, key: str, value: str):
 def export_config(file: str | None):
     """导出配置。"""
     from mcp_hub.core.config_manager import ConfigManager
+
     async def _run():
         cm = ConfigManager()
         cfg = await cm._load_config()
@@ -73,6 +78,7 @@ def export_config(file: str | None):
             click.echo(f"✅ 配置已导出到 {file}")
         else:
             click.echo(output)
+
     asyncio.run(_run())
 
 
@@ -97,6 +103,7 @@ def import_config(file: str):
 @click.option("--path", default=None, help="写入路径，默认 ~/.config/mcp-hub/mcp.json")
 def apply_config(path: str | None):
     """将 Hub 配置写入本地文件（自动配置）。"""
+
     async def _run():
         cm = ConfigManager()
         result = await cm.apply_config(path)
@@ -105,12 +112,15 @@ def apply_config(path: str | None):
             _console.print(f"[green]   包含 {result['server_count']} 个 Server[/green]")
         else:
             _console.print("[red]❌ 配置写入失败[/red]")
+
     asyncio.run(_run())
 
 
 @config.command("sync")
 @click.option("--server", "hub_url", default="http://localhost:3987", help="Hub 服务器地址")
-@click.option("--agent", default="claude-code", help="目标 Agent (claude-code/cursor/codex/generic)")  # noqa: E501
+@click.option(
+    "--agent", default="claude-code", help="目标 Agent (claude-code/cursor/codex/generic)"
+)  # noqa: E501
 @click.option("--server-ids", help="要同步的 Server ID 列表（逗号分隔），默认同步所有已安装")
 def sync_config(hub_url: str, agent: str, server_ids: str | None):
     """从 Hub 同步配置到本地。
@@ -123,6 +133,7 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
       mcp config sync --agent cursor                     # 同步到 Cursor
       mcp config sync --server-ids @anth/web,@git/hub    # 只同步指定 Server
     """
+
     async def _run():
         import httpx
 
@@ -164,6 +175,7 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
 
         # 确定目标路径
         from pathlib import Path
+
         agent_paths = {
             "claude-code": Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
             "cursor": Path.home() / ".cursor" / "mcp.json",

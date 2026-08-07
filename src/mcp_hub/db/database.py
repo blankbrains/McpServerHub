@@ -7,8 +7,6 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -16,6 +14,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("MCP_HUB_DATABASE_URL")
 if not DATABASE_URL:
@@ -74,28 +74,29 @@ async def _run_migrations():
         try:
             # PostgreSQL
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='reviews' AND column_name='parent_id'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='reviews' AND column_name='parent_id'"
+                )
             )
             if not result.fetchone():
                 await conn.execute(
-                    text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER "
-                         "REFERENCES reviews(id) ON DELETE CASCADE")
+                    text(
+                        "ALTER TABLE reviews ADD COLUMN parent_id INTEGER "
+                        "REFERENCES reviews(id) ON DELETE CASCADE"
+                    )
                 )
                 await conn.commit()
                 import structlog
+
                 structlog.get_logger().info("migration.added_parent_id")
         except Exception:
             # SQLite fallback
             try:
-                result = await conn.execute(
-                    text("PRAGMA table_info(reviews)")
-                )
+                result = await conn.execute(text("PRAGMA table_info(reviews)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "parent_id" not in cols:
-                    await conn.execute(
-                        text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER")
-                    )
+                    await conn.execute(text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER"))
                     await conn.commit()
             except Exception:
                 logger.debug("迁移步骤 reviews.parent_id 失败", exc_info=True)
@@ -104,11 +105,15 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='user_servers' AND column_name='enabled'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='user_servers' AND column_name='enabled'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
+                await conn.execute(
+                    text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -116,7 +121,9 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "enabled" not in cols:
-                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE"))
+                    await conn.execute(
+                        text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE")
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 user_servers.enabled 失败", exc_info=True)
@@ -125,11 +132,15 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='user_servers' AND column_name='agent'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='user_servers' AND column_name='agent'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''"))
+                await conn.execute(
+                    text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -137,7 +148,9 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "agent" not in cols:
-                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''"))
+                    await conn.execute(
+                        text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''")
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 user_servers.agent 失败", exc_info=True)
@@ -146,12 +159,18 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='usage_stats' AND column_name='user_id'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='usage_stats' AND column_name='user_id'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE usage_stats ADD COLUMN user_id VARCHAR(255) DEFAULT ''"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage_stats(user_id)"))
+                await conn.execute(
+                    text("ALTER TABLE usage_stats ADD COLUMN user_id VARCHAR(255) DEFAULT ''")
+                )
+                await conn.execute(
+                    text("CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage_stats(user_id)")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -159,8 +178,12 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(usage_stats)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "user_id" not in cols:
-                    await conn.execute(text("ALTER TABLE usage_stats ADD COLUMN user_id VARCHAR(255) DEFAULT ''"))
-                    await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage_stats(user_id)"))
+                    await conn.execute(
+                        text("ALTER TABLE usage_stats ADD COLUMN user_id VARCHAR(255) DEFAULT ''")
+                    )
+                    await conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS idx_usage_user_id ON usage_stats(user_id)")
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 usage_stats.user_id 失败", exc_info=True)
@@ -169,11 +192,15 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='usage_stats' AND column_name='token_count'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='usage_stats' AND column_name='token_count'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0"))
+                await conn.execute(
+                    text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -181,7 +208,9 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(usage_stats)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "token_count" not in cols:
-                    await conn.execute(text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0"))
+                    await conn.execute(
+                        text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0")
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 usage_stats.token_count 失败", exc_info=True)
@@ -190,11 +219,15 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='install_history' AND column_name='user_id'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='install_history' AND column_name='user_id'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE install_history ADD COLUMN user_id VARCHAR(255) DEFAULT ''"))
+                await conn.execute(
+                    text("ALTER TABLE install_history ADD COLUMN user_id VARCHAR(255) DEFAULT ''")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -202,7 +235,11 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(install_history)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "user_id" not in cols:
-                    await conn.execute(text("ALTER TABLE install_history ADD COLUMN user_id VARCHAR(255) DEFAULT ''"))
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE install_history ADD COLUMN user_id VARCHAR(255) DEFAULT ''"
+                        )
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 install_history.user_id 失败", exc_info=True)
@@ -210,7 +247,9 @@ async def _run_migrations():
     # 添加 usage_stats.created_at 索引
     try:
         async with engine.connect() as conn:
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_created_at ON usage_stats(created_at)"))
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_usage_created_at ON usage_stats(created_at)")
+            )
             await conn.commit()
     except Exception:
         logger.debug("迁移步骤 idx_usage_created_at 索引失败", exc_info=True)
@@ -219,11 +258,15 @@ async def _run_migrations():
     try:
         async with engine.connect() as conn:
             result = await conn.execute(
-                text("SELECT column_name FROM information_schema.columns "
-                     "WHERE table_name='user_servers' AND column_name='group_name'")
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='user_servers' AND column_name='group_name'"
+                )
             )
             if not result.fetchone():
-                await conn.execute(text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"))
+                await conn.execute(
+                    text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''")
+                )
                 await conn.commit()
     except Exception:
         try:
@@ -231,94 +274,114 @@ async def _run_migrations():
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
                 cols = [row[1] for row in await result.fetchall()]
                 if "group_name" not in cols:
-                    await conn.execute(text("ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"))
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE user_servers ADD COLUMN group_name VARCHAR(100) DEFAULT ''"
+                        )
+                    )
                     await conn.commit()
         except Exception:
             logger.debug("迁移步骤 user_servers.group_name 失败", exc_info=True)
 
-
     # 创建 notifications 表（如果不存在）
     try:
         async with engine.connect() as conn:
-            await conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS notifications ("
-                "id SERIAL PRIMARY KEY, "
-                "user_id VARCHAR(255) NOT NULL, "
-                "type VARCHAR(50) NOT NULL, "
-                "title VARCHAR(255) NOT NULL, "
-                "message TEXT DEFAULT '', "
-                "server_id VARCHAR(255) DEFAULT '', "
-                "link VARCHAR(500) DEFAULT '', "
-                "is_read BOOLEAN DEFAULT FALSE, "
-                "created_at TIMESTAMP DEFAULT NOW()"
-                ")"
-            ))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notif_user_id ON notifications(user_id)"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, is_read)"))
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS notifications ("
+                    "id SERIAL PRIMARY KEY, "
+                    "user_id VARCHAR(255) NOT NULL, "
+                    "type VARCHAR(50) NOT NULL, "
+                    "title VARCHAR(255) NOT NULL, "
+                    "message TEXT DEFAULT '', "
+                    "server_id VARCHAR(255) DEFAULT '', "
+                    "link VARCHAR(500) DEFAULT '', "
+                    "is_read BOOLEAN DEFAULT FALSE, "
+                    "created_at TIMESTAMP DEFAULT NOW()"
+                    ")"
+                )
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_notif_user_id ON notifications(user_id)")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, is_read)")
+            )
             await conn.commit()
     except Exception:
         # SQLite fallback
         try:
             async with engine.connect() as conn:
-                await conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS notifications ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "user_id TEXT NOT NULL, "
-                    "type TEXT NOT NULL, "
-                    "title TEXT NOT NULL, "
-                    "message TEXT DEFAULT '', "
-                    "server_id TEXT DEFAULT '', "
-                    "link TEXT DEFAULT '', "
-                    "is_read INTEGER DEFAULT 0, "
-                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                    ")"
-                ))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notif_user_id ON notifications(user_id)"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, is_read)"))
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS notifications ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "user_id TEXT NOT NULL, "
+                        "type TEXT NOT NULL, "
+                        "title TEXT NOT NULL, "
+                        "message TEXT DEFAULT '', "
+                        "server_id TEXT DEFAULT '', "
+                        "link TEXT DEFAULT '', "
+                        "is_read INTEGER DEFAULT 0, "
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                        ")"
+                    )
+                )
+                await conn.execute(
+                    text("CREATE INDEX IF NOT EXISTS idx_notif_user_id ON notifications(user_id)")
+                )
+                await conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_notif_read "
+                        "ON notifications(user_id, is_read)"
+                    )
+                )
                 await conn.commit()
         except Exception:
             logger.debug("迁移步骤 notifications 表失败", exc_info=True)
 
-
     # 创建 presets 表（如果不存在）
     try:
         async with engine.connect() as conn:
-            await conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS presets ("
-                "id SERIAL PRIMARY KEY, "
-                "user_id VARCHAR(255) NOT NULL, "
-                "name VARCHAR(255) NOT NULL, "
-                "description TEXT DEFAULT '', "
-                "tags VARCHAR(500) DEFAULT '', "
-                "servers TEXT NOT NULL, "
-                "download_count INTEGER DEFAULT 0, "
-                "rating FLOAT DEFAULT 0.0, "
-                "created_at TIMESTAMP DEFAULT NOW(), "
-                "updated_at TIMESTAMP DEFAULT NOW()"
-                ")"
-            ))
+            await conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS presets ("
+                    "id SERIAL PRIMARY KEY, "
+                    "user_id VARCHAR(255) NOT NULL, "
+                    "name VARCHAR(255) NOT NULL, "
+                    "description TEXT DEFAULT '', "
+                    "tags VARCHAR(500) DEFAULT '', "
+                    "servers TEXT NOT NULL, "
+                    "download_count INTEGER DEFAULT 0, "
+                    "rating FLOAT DEFAULT 0.0, "
+                    "created_at TIMESTAMP DEFAULT NOW(), "
+                    "updated_at TIMESTAMP DEFAULT NOW()"
+                    ")"
+                )
+            )
             await conn.commit()
     except Exception:
         try:
             async with engine.connect() as conn:
-                await conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS presets ("
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    "user_id TEXT NOT NULL, "
-                    "name TEXT NOT NULL, "
-                    "description TEXT DEFAULT '', "
-                    "tags TEXT DEFAULT '', "
-                    "servers TEXT NOT NULL, "
-                    "download_count INTEGER DEFAULT 0, "
-                    "rating REAL DEFAULT 0.0, "
-                    "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                    ")"
-                ))
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS presets ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "user_id TEXT NOT NULL, "
+                        "name TEXT NOT NULL, "
+                        "description TEXT DEFAULT '', "
+                        "tags TEXT DEFAULT '', "
+                        "servers TEXT NOT NULL, "
+                        "download_count INTEGER DEFAULT 0, "
+                        "rating REAL DEFAULT 0.0, "
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                        "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                        ")"
+                    )
+                )
                 await conn.commit()
         except Exception:
             logger.debug("迁移步骤 presets 表失败", exc_info=True)
-
 
     # 为已存在的遥测设备增加 Agent 类型。历史设备默认归为 generic。
     try:
@@ -381,4 +444,5 @@ async def init_db():
     await _run_migrations()
 
     from mcp_hub.db.seed import seed_database
+
     await seed_database()

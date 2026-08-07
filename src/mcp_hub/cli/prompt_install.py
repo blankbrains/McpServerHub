@@ -71,26 +71,31 @@ def prompt_install(server_id: str, copy: bool, json_out: bool):
         return
 
     # Display
-    console.print(Panel.fit(
-        "[bold blue]🔵 安装提示词生成器[/bold blue]\n"
-        f"Server: {resolved}\n"
-        f"MCP Hub: {'✅ 已安装' if is_installed else '❌ 未安装'}",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]🔵 安装提示词生成器[/bold blue]\n"
+            f"Server: {resolved}\n"
+            f"MCP Hub: {'✅ 已安装' if is_installed else '❌ 未安装'}",
+        )
+    )
 
     console.print("\n[bold]📋 复制以下提示词发给 AI：[/bold]\n")
 
     prompt = _generate_prompt(resolved, is_installed)
 
-    console.print(Panel(
-        prompt,
-        border_style="cyan",
-        title="安装提示词",
-        title_align="left",
-    ))
+    console.print(
+        Panel(
+            prompt,
+            border_style="cyan",
+            title="安装提示词",
+            title_align="left",
+        )
+    )
 
     if copy:
         try:
             import pyperclip
+
             pyperclip.copy(prompt)
             console.print("\n[green]✅ 已复制到剪贴板[/green]")
         except ImportError:

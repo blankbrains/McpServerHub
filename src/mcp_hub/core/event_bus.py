@@ -85,7 +85,9 @@ class EventBus:
         # 从数据库查询历史事件数
         try:
             from sqlalchemy import text
+
             from mcp_hub.db.database import async_session_factory
+
             async with async_session_factory() as session:
                 result = await session.execute(text("SELECT COUNT(*) FROM events"))
                 count = result.scalar()
@@ -98,7 +100,9 @@ class EventBus:
         """从数据库查询事件历史。"""
         try:
             from sqlalchemy import text
+
             from mcp_hub.db.database import async_session_factory
+
             async with async_session_factory() as session:
                 result = await session.execute(
                     text(
@@ -125,7 +129,9 @@ class EventBus:
         """从数据库恢复订阅关系（启动时调用）。"""
         try:
             from sqlalchemy import text
+
             from mcp_hub.db.database import async_session_factory
+
             async with async_session_factory() as session:
                 result = await session.execute(
                     text("SELECT server_id, topic FROM subscriptions ORDER BY created_at")
@@ -148,7 +154,9 @@ class EventBus:
         """将事件写入 events 表。"""
         try:
             from sqlalchemy import text
+
             from mcp_hub.db.database import async_session_factory
+
             async with async_session_factory() as session:
                 await session.execute(
                     text(
@@ -170,7 +178,9 @@ class EventBus:
         """将订阅关系写入 subscriptions 表（幂等）。"""
         try:
             from sqlalchemy import text
+
             from mcp_hub.db.database import async_session_factory
+
             async with async_session_factory() as session:
                 # 幂等插入：已存在则跳过
                 await session.execute(
@@ -186,7 +196,9 @@ class EventBus:
             # SQLite 不支持 ON CONFLICT，用 OR IGNORE 回退
             try:
                 from sqlalchemy import text
+
                 from mcp_hub.db.database import async_session_factory
+
                 async with async_session_factory() as session:
                     await session.execute(
                         text(

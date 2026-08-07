@@ -20,19 +20,34 @@ console = Console()
 @click.argument("query", required=False, default="")
 @click.option("-c", "--category", help="按分类筛选")
 @click.option("--tag", help="按标签筛选")
-@click.option("--security-level", type=click.Choice(["verified", "reviewed", "unreviewed", "blocked"]),
-              help="按安全等级筛选")
+@click.option(
+    "--security-level",
+    type=click.Choice(["verified", "reviewed", "unreviewed", "blocked"]),
+    help="按安全等级筛选",
+)
 @click.option("--sort", type=click.Choice(["hot", "rating", "downloads", "new"]), default="hot")
 @click.option("--page", default=1, type=int)
 @click.option("--json-output", "json", is_flag=True, help="JSON 格式输出")
-def search(query: str, category: str | None, tag: str | None,
-           security_level: str | None, sort: str, page: int, json: bool):
+def search(
+    query: str,
+    category: str | None,
+    tag: str | None,
+    security_level: str | None,
+    sort: str,
+    page: int,
+    json: bool,
+):
     """搜索 MCP Server。"""
+
     async def _run():
         registry = Registry()
         results, total = await registry.search(
-            q=query, category=category, tag=tag, sort=sort,
-            page=page, page_size=20,
+            q=query,
+            category=category,
+            tag=tag,
+            sort=sort,
+            page=page,
+            page_size=20,
             security_level=security_level,
         )
 
@@ -59,8 +74,10 @@ def search(query: str, category: str | None, tag: str | None,
             stars = "⭐" * filled + "☆" * empty
             status = s.get("status", "not_installed")
             status_map = {
-                "running": "🟢", "stopped": "⏹",
-                "error": "🔴", "not_installed": "📥",
+                "running": "🟢",
+                "stopped": "⏹",
+                "error": "🔴",
+                "not_installed": "📥",
             }
             status_icon = status_map.get(status, "❓")
             cats = ", ".join(s.get("categories", [])[:2])
@@ -82,6 +99,7 @@ def search(query: str, category: str | None, tag: str | None,
 @click.option("--json", "json_output", is_flag=True)
 def info(server_id: str, json_output: bool):
     """查看 Server 详情。"""
+
     async def _run():
         registry = Registry()
         s = await registry.get_by_id(server_id)
@@ -94,18 +112,19 @@ def info(server_id: str, json_output: bool):
             return
 
         st_map = {
-            "running": "🟢 运行中", "stopped": "⏹ 已停止",
-            "error": "🔴 异常", "not_installed": "📥 未安装",
+            "running": "🟢 运行中",
+            "stopped": "⏹ 已停止",
+            "error": "🔴 异常",
+            "not_installed": "📥 未安装",
         }
         status_icon = st_map.get(s.get("status", ""), s.get("status", "未知"))
         stars = "⭐" * min(int(s.get("rating", 0)), 5)
         sec_map = {
-            "verified": "🔒 安全认证", "reviewed": "⚪ 已审查",
+            "verified": "🔒 安全认证",
+            "reviewed": "⚪ 已审查",
             "unreviewed": "⚠️ 未审查",
         }
-        security = sec_map.get(
-            s.get("security_level", ""), s.get("security_level", "")
-        )
+        security = sec_map.get(s.get("security_level", ""), s.get("security_level", ""))
 
         info_text = Text()
         info_text.append(f"\n📦 {s['id']}", style="bold cyan")
@@ -122,10 +141,17 @@ def info(server_id: str, json_output: bool):
         # Token 消耗估算
         try:
             from mcp_hub.core.token_analyzer import TokenAnalyzer, Tokenizer
+
             _r = TokenAnalyzer().analyze_server(s)
             _tk = Tokenizer.format_tokens(_r.total_tokens)
             _pct = Tokenizer.format_pct(_r.context_usage_pct)
-            _c = "green" if _r.context_usage_pct < 10 else "yellow" if _r.context_usage_pct < 16 else "red"  # noqa: E501
+            _c = (
+                "green"
+                if _r.context_usage_pct < 10
+                else "yellow"
+                if _r.context_usage_pct < 16
+                else "red"
+            )  # noqa: E501
             info_text.append(f"   [bold {_c}]Token: {_tk} ({_pct} 上下文)[/bold {_c}]\n")
         except Exception:
             pass
@@ -139,6 +165,7 @@ def info(server_id: str, json_output: bool):
 @click.argument("server_b", required=True)
 def compare(server_a: str, server_b: str):
     """对比两个 Server。"""
+
     async def _run():
         registry = Registry()
         a = await registry.get_by_id(server_a)
@@ -156,8 +183,12 @@ def compare(server_a: str, server_b: str):
         table.add_column(f"📦 {b['id']}", style="yellow")
 
         compare_keys = [
-            "version", "rating", "review_count", "download_count",
-            "security_level", "license",
+            "version",
+            "rating",
+            "review_count",
+            "download_count",
+            "security_level",
+            "license",
         ]
         for key in compare_keys:
             table.add_row(key, str(a.get(key, "")), str(b.get(key, "")))

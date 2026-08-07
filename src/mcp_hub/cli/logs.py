@@ -9,7 +9,6 @@ import click
 
 def safe_log_path(log_dir: str, server_id: str) -> Path:
     """安全构造日志文件路径，防止路径遍历攻击。"""
-    import os
     safe_name = "".join(c for c in server_id if c.isalnum() or c in "_-")
     if not safe_name:
         raise ValueError(f"无效的 server_id: {server_id}")
