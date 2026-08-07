@@ -15,7 +15,7 @@
 ---
 
 <p align="center">
-  <b>983+ 个 MCP Server</b> · <b>23 个 Web 页面</b> · <b>16 个分类</b> · <b>286 个测试</b><br>
+  <b>983+ 个 MCP Server</b> · <b>23 个 Web 页面</b> · <b>16 个分类</b> · <b>315 个测试</b><br>
   搜索 → 安装 → 配置 → 监控。一个平台搞定。
 </p>
 
@@ -62,7 +62,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 ### ⚡ 配置管理
 - **上传配置**：上传本地 `claude_desktop_config.json`，自动匹配市场 Server
 - **上传/取消**：明确选择是否将配置上传到 Hub 进行监控追踪
-- **Agent 选择**：支持 Claude Code / Cursor / Codex / Trae / Windsurf 等 8 种 Agent
+- **Agent 选择**：支持 Claude Code / Codex / Cursor / Windsurf / VS Code Copilot / Trae 和通用 MCP 客户端
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
 - **下载 & 同步**：一键下载配置文件，CLI 同步到本地
@@ -77,12 +77,13 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 ### 📊 监控 & 分析
 - **个人概览**：已追踪/已收藏/有更新/安全风险 四维统计
 - **监控大屏**：实时运行状态、调用次数、Token 消耗、可靠性排行榜
+- **多 Agent 遥测**：为 Claude Code、Codex 等客户端创建独立设备令牌，调用、延迟、错误和 Token 按 Agent 隔离汇总与筛选
 - **使用统计**：个人中心展示 30 日调用趋势（柱状图）、成功率、按 Server 分组的详情表
 - **Token 分析**：工具定义 Token 消耗分析 + 优化建议
 - **安全评分**：四维评分引擎（命令/包/发布者/代码模式），危险 Server 阻止安装
 
 ### 🔔 通知 & 体验
-- **通知中心**：铃铛角标 + 通知列表（告警/更新/回复/系统），自动告警、全部标为已读
+- **通知中心**：铃铛角标 + 通知列表（告警/更新/回复/系统），支持单条删除、标为已读和全部标为已读
 - **Dark Mode**：深色/亮色主题切换，记住偏好
 - **全局搜索**：侧边栏搜索框，实时搜索所有 Server
 - **面包屑导航**：自动生成页面层级路径
@@ -156,9 +157,9 @@ mcp status
 mcp logs server-filesystem -f
 ```
 
-### 🔌 接入 Claude Code
+### 🔌 接入 Agent 与按 Agent 隔离遥测
 
-在 `claude_desktop_config.json` 中添加：
+将 Hub Gateway 添加到 Claude Code、Codex 或其他 MCP 客户端的配置中：
 
 ```json
 {
@@ -171,7 +172,22 @@ mcp logs server-filesystem -f
 }
 ```
 
-**通过 Hub Gateway 安装的任何 Server 都会自动在 Claude Code 中可用。调用次数、响应时长、Token 消耗自动记录到监控大屏。**
+仅添加 Gateway 不会自动上传本地调用数据。请在监控页为每个使用的 Agent 分别创建设备，再复制该设备生成的 Gateway 配置。设备令牌在服务端绑定 Agent 类型，事件体不能自行声明或伪造归属。
+
+也可以通过 CLI 生成对应配置：
+
+```bash
+# 在监控页为 Codex 创建设备后，使用该设备的一次性遥测令牌
+mcp agent config \
+  --agent codex \
+  --hub-url https://<your-hub-host> \
+  --telemetry-token mcpht_<device-token>
+
+# 查看 Codex 自己的离线队列状态
+mcp agent status --agent codex
+```
+
+每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和 Token。
 
 ### 🌐 Web 仪表盘
 
@@ -180,6 +196,14 @@ http://localhost:3987
 ```
 
 实时监控、日志查看、搜索、安装、管理 — 全部在浏览器中完成。
+
+---
+
+## 🔐 生产部署凭证
+
+真实凭证不得写入仓库、文档或 systemd 单元。生产环境使用服务器本地的 `/etc/mcp-hub/mcp-hub.env`，可从 `deploy/mcp-hub.env.example` 创建后填写实际值，并设置为仅管理员可读。
+
+`deploy/mcp-hub.service` 只引用该本地环境文件；部署前请按实际服务器用户、Python 环境和项目路径调整服务单元。不要提交 `deploy/mcp-hub.env`、`.env`、计划文档或运维说明。
 
 ---
 
@@ -209,9 +233,9 @@ http://localhost:3987
 | 📦 我的 Server | 批量操作/重启/调用数据/更新提醒 |
 | ⚙️ 配置中心 | 上传匹配/Agent选择/配置下载/草稿 |
 | 📋 方案市场 | 发布方案/浏览/一键导入 |
-| 📊 监控大屏 | 实时状态/调用/Token/可靠性 |
+| 📊 监控大屏 | 实时状态/调用/Token/可靠性/按 Agent 筛选 |
 | 👤 个人中心 | 资料/统计/趋势图 |
-| 🔔 通知中心 | 告警/更新/回复/系统通知 |
+| 🔔 通知中心 | 告警/更新/回复/系统通知/单条删除 |
 | 🌙 体验 | Dark Mode/全局搜索/面包屑/移动端 |
 | 🛡️ 管理后台 | 用户/Server/分析/审核/审计/导出 |
 | 🔑 安全 | JWT 认证 + OAuth CSRF + 路径注入防护 + 环境变量白名单 |
