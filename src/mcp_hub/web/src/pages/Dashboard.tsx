@@ -328,7 +328,11 @@ export default function Dashboard() {
             <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
               <div className="flex justify-between items-start">
                 <p>{uploadResult.message || '配置上传成功'}</p>
-                <button onClick={() => { setUploadResult(null); localStorage.removeItem('mcp_hub_upload_result') }}
+                <button onClick={() => {
+                  if (!window.confirm('确定清除本次上传结果吗？这不会删除已经保存的 Server。')) return
+                  setUploadResult(null)
+                  localStorage.removeItem('mcp_hub_upload_result')
+                }}
                   className="text-blue-400 hover:text-blue-600 text-xs ml-2">✕ 清除</button>
               </div>
               {uploadResult.data?.matched?.length > 0 && (
@@ -357,7 +361,11 @@ export default function Dashboard() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">🕐 最近查看</h2>
-            <button onClick={() => { localStorage.removeItem('mcp_hub_recent'); setRecent([]) }} className="text-sm text-gray-400 hover:text-gray-600">
+            <button onClick={() => {
+              if (!window.confirm('确定清除本浏览器中的最近查看记录吗？')) return
+              localStorage.removeItem('mcp_hub_recent')
+              setRecent([])
+            }} className="text-sm text-gray-400 hover:text-gray-600">
               清除记录
             </button>
           </div>
@@ -489,7 +497,10 @@ export default function Dashboard() {
                 {r.context_after?.map((l: string, j: number) => <div key={`a${j}`} className="text-gray-300 pl-4">{l}</div>)}
               </div>
             ))}
-            <button onClick={() => setLogResults([])} className="text-xs text-gray-400 hover:text-gray-600">清除结果</button>
+            <button onClick={() => {
+              if (!window.confirm('确定清除当前日志搜索结果吗？')) return
+              setLogResults([])
+            }} className="text-xs text-gray-400 hover:text-gray-600">清除结果</button>
           </div>
         )}
         {selectedLog ? <LogViewer serverId={selectedLog} /> : (

@@ -80,6 +80,7 @@ export default function NotificationsPage() {
 
   const deleteNotification = async (notification: NotifItem, event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
+    if (!window.confirm(`确定要删除通知“${notification.title}”吗？此操作无法撤销。`)) return
     setDeletingIds(previous => new Set(previous).add(notification.id))
     setError('')
     try {

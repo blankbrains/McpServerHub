@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAuthHeaders, getAuthState, uploadConfig, downloadConfig } from '../api/client'
+import InfoTooltip from '../components/InfoTooltip'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', path: '~/.config/Claude/claude_desktop_config.json', icon: '🤖' },
@@ -108,13 +109,26 @@ export default function ConfigPage() {
       ...(uploadResult?.data?.matched?.map((m: any) => m.hub_id || m.local_name) || []),
       ...(uploadResult?.data?.unmatched?.map((u: any) => u.registered_id || u.local_name) || []),
     ]
-    for (const sid of allSids) {
+    const serverIds = [...new Set(allSids.filter(Boolean))]
+    if (serverIds.length > 0 && !window.confirm(
+      `确定要取消追踪这 ${serverIds.length} 个 Server 吗？它们会从你的个人追踪列表中移除。`,
+    )) return
+
+    const failedIds: string[] = []
+    for (const sid of serverIds) {
       try {
-        await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
+        const response = await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
           method: 'DELETE',
           headers: getAuthHeaders(),
         })
-      } catch {}
+        if (!response.ok) failedIds.push(sid)
+      } catch {
+        failedIds.push(sid)
+      }
+    }
+    if (failedIds.length > 0) {
+      setMessage(`取消追踪未完成：${failedIds.length} 个 Server 未能移除，请稍后重试`)
+      return
     }
     setTrackingDecision('cancelled')
     localStorage.removeItem('mcp_hub_upload_result')
@@ -315,9 +329,9 @@ export default function ConfigPage() {
 
       {/* ── 步骤 4：启用监控 ── */}
       <div className="bg-white rounded-xl border border-green-200 bg-green-50 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：配置本地遥测（可选）</h2>
+        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：配置本地 <InfoTooltip description="遥测是在不上传原始请求或响应内容的前提下，记录调用次数、延迟、错误和估算 Token 等运行指标。">遥测</InfoTooltip>（可选）</h2>
         <p className="text-sm text-gray-600 mb-4">
-          追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应设备密钥配置到本地 Gateway；调用、延迟和 Token 统计才会上报且会按 Agent 隔离。
+          追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应 <InfoTooltip description="设备令牌只用于本地 Gateway 上报指标，服务端会将它绑定到创建时选择的 Agent 类型。">设备令牌</InfoTooltip> 配置到本地 <InfoTooltip description="Gateway 是连接本地 Agent 与 MCP Server 的转发程序，负责在调用时采集最小化指标。">Gateway</InfoTooltip>；调用、延迟和 Token 统计才会上报且会按 Agent 隔离。
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiGet, apiPost } from '../api/client'
+import InfoTooltip from './InfoTooltip'
 
 interface TelemetrySummary {
   days: number
@@ -166,6 +167,7 @@ export default function TelemetryPanel() {
   }
 
   const revokeDevice = async (deviceId: string) => {
+    if (!window.confirm('确定要撤销此设备令牌吗？使用该令牌的本地 Gateway 将无法继续上报，且无法恢复。')) return
     setRevokingId(deviceId)
     setError('')
     try {
@@ -212,7 +214,9 @@ export default function TelemetryPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="telemetry-heading" className="text-xl font-bold text-gray-900">本地 MCP 监控</h2>
-          <p className="mt-1 text-sm text-gray-500">来自已授权本地 Gateway 的真实调用、延迟、错误与估算载荷 Token。</p>
+          <p className="mt-1 text-sm text-gray-500">
+            来自已授权本地 <InfoTooltip description="Gateway 是部署在本地 Agent 与 MCP Server 之间的转发程序，用于在不上传请求内容的前提下采集调用指标。">Gateway</InfoTooltip> 的真实调用、延迟、错误与 <InfoTooltip description="Token 是模型处理文本时使用的计量单位。这里是根据调用载荷估算的数量，不会上传原始提示词或响应内容。">估算载荷 Token</InfoTooltip>。
+          </p>
         </div>
         <button
           type="button"
@@ -235,14 +239,14 @@ export default function TelemetryPanel() {
       ) : (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {[
-            ['调用次数', summary?.total_calls ?? 0, 'text-blue-700'],
-            ['成功率', `${summary?.success_rate ?? 0}%`, 'text-green-700'],
-            ['估算载荷 Token', formatTokens(summary?.total_tokens ?? 0), 'text-violet-700'],
-            ['平均延迟', `${summary?.avg_duration_ms ?? 0}ms`, 'text-amber-700'],
-            ['活跃设备', summary?.active_devices ?? 0, 'text-slate-700'],
-          ].map(([label, value, color]) => (
+            ['调用次数', '过去 7 天内由本地 Gateway 上报的工具调用总数。', summary?.total_calls ?? 0, 'text-blue-700'],
+            ['成功率', '状态为成功的调用占全部调用的比例。', `${summary?.success_rate ?? 0}%`, 'text-green-700'],
+            ['估算载荷 Token', '按调用载荷估算的 Token 总量，不包含原始内容。', formatTokens(summary?.total_tokens ?? 0), 'text-violet-700'],
+            ['平均延迟', '从 Gateway 发起调用到收到结果的平均耗时。', `${summary?.avg_duration_ms ?? 0}ms`, 'text-amber-700'],
+            ['活跃设备', '过去 7 天内至少上报过一次工具调用的设备数量。', summary?.active_devices ?? 0, 'text-slate-700'],
+          ].map(([label, description, value, color]) => (
             <div key={String(label)} className="rounded-lg border border-gray-200 bg-white p-4">
-              <p className="text-xs text-gray-500">{label}</p>
+              <p className="text-xs text-gray-500"><InfoTooltip description={String(description)}>{label}</InfoTooltip></p>
               <p className={`mt-1 text-xl font-semibold ${color}`}>{value}</p>
             </div>
           ))}
@@ -303,9 +307,9 @@ export default function TelemetryPanel() {
                   <tr>
                     <th className="px-4 py-3 font-medium">Server</th>
                     <th className="px-4 py-3 font-medium">调用</th>
-                    <th className="px-4 py-3 font-medium">成功率</th>
-                    <th className="px-4 py-3 font-medium">平均延迟</th>
-                    <th className="px-4 py-3 font-medium">估算 Token</th>
+                    <th className="px-4 py-3 font-medium"><InfoTooltip description="状态为成功的调用占该 Server 全部调用的比例。">成功率</InfoTooltip></th>
+                    <th className="px-4 py-3 font-medium"><InfoTooltip description="该 Server 工具调用从发起到完成的平均耗时。">平均延迟</InfoTooltip></th>
+                    <th className="px-4 py-3 font-medium"><InfoTooltip align="end" description="按调用载荷估算的 Token 总量，不包含原始请求或响应内容。">估算 Token</InfoTooltip></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -325,9 +329,9 @@ export default function TelemetryPanel() {
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="font-semibold text-gray-900">本地 Agent 设备</h3>
+          <h3 className="font-semibold text-gray-900"><InfoTooltip description="设备是某个本地 Agent 的独立遥测身份。它的令牌只可用于上报指标，不能作为网页登录凭证。">本地 Agent 设备</InfoTooltip></h3>
           <p className="mt-1 text-xs text-gray-500">
-            为每个使用的 Agent 分别创建令牌，避免 Claude Code、Codex 等客户端的数据混在一起。
+            为每个使用的 Agent 分别创建 <InfoTooltip description="设备令牌将 Agent 类型绑定在服务端。上报事件无法自行声明或伪造归属。">设备令牌</InfoTooltip>，避免 Claude Code、Codex 等客户端的数据混在一起。
           </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
