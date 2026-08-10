@@ -63,17 +63,17 @@ MCP（Model Context Protocol）生态持续增长，但 Server 的发现、配�
 - **收藏 & 评价**：收藏 Server、评分评价、回复讨论
 
 ### ⚡ 配置管理
-- **上传配置**：上传本地 `claude_desktop_config.json`，自动匹配市场 Server
+- **上传配置**：网页仅接收根节点为 `mcpServers` 的 JSON，并自动匹配市场 Server
 - **确认追踪**：配置检查不会写入账户；用户确认后才更新个人追踪列表
 - **Agent 选择**：支持 Claude Code / Codex / Cursor / Windsurf / VS Code Copilot / Trae 和通用 MCP 客户端
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
-- **多格式生成**：JSON Agent 使用 `mcpServers`/`servers`，Codex 使用 `~/.codex/config.toml`
+- **多格式生成**：导出与 `agent setup` 会按 Agent 生成或迁移 `mcpServers`、`servers` 和 Codex TOML；网页上传不解析 TOML 或根节点为 `servers` 的 JSON
 - **安全迁移**：`mcp-hub agent setup` 先预览和确认，再备份原配置并迁移 stdio、Streamable HTTP 与 SSE Server
 - **完整进程配置**：保留结构化 `command`、`args`、按 Server 授权的 `env`、`cwd` 和启用状态
 
 ### 📦 Server 管理
-- **我的 Server**：个人追踪、Gateway 接入状态、同步开关、真实调用与 Token 指标
+- **我的 Server**：个人追踪、Gateway 接入状态、同步开关、真实调用与估算 Token 指标
 - **配置同步**：首次运行 `agent setup`，后续用 `mcp-hub config sync` 更新 `gateway.json`
 - **进程管理**（自托管）：仅管理员且显式启用后可操作 Hub 主机进程
 - **版本更新提醒**：自动检查已追踪 Server 是否有新版本，标记 🆕
@@ -109,42 +109,176 @@ MCP（Model Context Protocol）生态持续增长，但 Server 的发现、配�
 
 ## 🚀 快速开始
 
-### 1. 安装
+下面先介绍最常见的场景：**Hub 已运行在服务器上，你要在自己的电脑上接入 Codex、Claude Code、Cursor 等 Agent，并监控本地 MCP 调用**。
 
-```bash
-python -m pip install "mcp-hub-cli==0.2.0"
+> 当前 `0.2.0` 尚未发布到 PyPI。不要执行 `pip install mcp-hub-cli==0.2.0`，请按下面步骤从 GitHub 安装。
+
+### A. 使用服务器 Hub 监控本地 MCP
+
+#### 1. 安装 uv
+
+Windows PowerShell：
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-<details>
-<summary><b>🐳 或用 Docker</b></summary>
+macOS / Linux：
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+安装后关闭并重新打开终端，确认 `uv --version` 可以执行。
+
+#### 2. 从 GitHub 安装 mcp-hub CLI
+
+```bash
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+uv tool update-shell
+```
+
+再次关闭并重新打开终端，然后验证：
+
+```bash
+mcp-hub --version
+```
+
+必须保证 `mcp-hub` 在系统 `PATH` 中，因为接入后 Agent 配置会使用 `mcp-hub serve` 启动本地 Gateway。若命令仍找不到，重新运行 `uv tool update-shell` 并重开终端。
+
+#### 3. 检查本机能访问 Hub
+
+将下面的地址替换成浏览器正在访问的 Hub 地址：
+
+Windows PowerShell：
+
+```powershell
+$HubUrl = "http://<Hub地址>:3987"
+Invoke-RestMethod "$HubUrl/api/v1/health"
+```
+
+macOS / Linux：
+
+```bash
+export HUB_URL="http://<Hub地址>:3987"
+curl "$HUB_URL/api/v1/health"
+```
+
+响应中的 `status` 必须为 `healthy`。如果无法访问，先处理局域网、VPN、防火墙、端口或服务器地址问题；服务器能够打开网页不代表运行 Agent 的电脑一定能访问它。
+
+#### 4. 确认 Agent 已有 MCP Server
+
+`mcp-hub agent setup` 负责迁移现有连接，不负责创建第一个 MCP Server。开始前，目标 Agent 至少要有一个可以正常使用的 stdio、Streamable HTTP 或 SSE Server。
+
+常见配置路径：
+
+| Agent | 默认配置路径 |
+|------|-------------|
+| Codex | `~/.codex/config.toml` |
+| Claude Code | `~/.claude.json`、`~/.claude/mcp.json` 或项目 `.mcp.json` |
+| Claude Desktop | `Claude/claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code Copilot | 项目 `.vscode/mcp.json` |
+| Trae | `~/.trae/mcp.json` |
+
+#### 5. 在网页创建设备
+
+1. 在 Hub 网页完成 GitHub 登录。
+2. 打开“监控”页面。
+3. 选择你实际使用的 Agent，例如 `Codex`。
+4. 输入可识别的设备名称并点击“创建”。
+5. 保留页面，不要刷新。设备令牌只显示一次。
+
+每个 Agent 使用一个独立设备令牌。令牌不要截图、写入文档、提交到 Git 或发送给他人；一旦泄露，应立即在监控页撤销并重新创建。
+
+#### 6. 运行页面生成的完整接入命令
+
+监控页会显示包含真实 Hub 地址和设备令牌的完整命令。优先复制页面生成的命令，不要照抄下面的示例令牌：
+
+```bash
+mcp-hub agent setup --agent codex --hub-url http://<Hub地址>:3987 --telemetry-token mcpht_<设备令牌>
+```
+
+CLI 会先展示迁移预览。确认后才会：
+
+1. 为原 Agent 配置创建带时间戳的备份。
+2. 把可代理 Server 的完整本地配置写入 Agent 独立的 `gateway.json`。
+3. 在 Agent 主配置中用 `mcp-hub serve` 替换受支持的直接连接。
+4. 保留无法安全迁移的条目，不会静默删除。
+5. 上报脱敏设备清单；不会上传环境变量值、请求头值、完整命令、URL、工具参数或响应正文。
+
+如果提示“没有可迁移到 Gateway 的 MCP Server”，先检查第 4 步中的 Agent 配置路径和 Server 传输格式；必要时使用 `--source-config <配置文件路径>` 明确指定源文件。
+
+#### 7. 完全重启 Agent
+
+关闭目标 Agent 的所有进程后重新打开。仅刷新界面、关闭当前对话或新建会话通常不够。重启后的 Agent 进程必须能从 `PATH` 找到 `mcp-hub`。
+
+#### 8. 触发真实调用并验证
+
+让 Agent 实际调用一次已迁移 MCP Server 的工具，然后回到监控页点击“刷新”。
+
+应至少看到：
+
+- 设备“最后在线”时间更新。
+- Server 调用数增加。
+- 工具调用、延迟、成功率或错误分类出现数据。
+- 估算 Token 随调用变化。
+
+只打开 Agent、查看工具列表或进行未调用 MCP 工具的普通对话，不会产生 `tool_call` 数据。未经过本地 Gateway 的直接连接也不会被监控。
+
+#### 9. 没有数据时排查
+
+```bash
+mcp-hub agent status --agent codex
+mcp-hub agent doctor --agent codex
+```
+
+按顺序检查：
+
+1. `mcp-hub --version` 是否能在新终端执行。
+2. Hub 健康接口是否能从运行 Agent 的电脑访问。
+3. 设备是否仍有效，Agent 类型是否选对。
+4. `agent setup` 是否成功生成 `gateway.json` 和原配置备份。
+5. Agent 是否完全重启并读取了新配置。
+6. 是否实际调用了 MCP 工具，而不是只打开 Agent。
+7. Agent 配置是否仍保留绕过 Gateway 的同名直接连接。
+8. 本地队列是否有待上传事件；网络恢复后会自动重试。
+
+当前站点若通过 HTTP 访问，浏览器可能限制标准剪贴板 API。页面会自动尝试兼容复制；若浏览器仍拒绝，完整命令会保持可见并可选中，可手动按 `Ctrl+C`，macOS 使用 `Cmd+C`。
+
+### B. 在本机自托管整个 Hub
+
+仅在你要同时运行 Web、API 和数据库时使用这一方式。它与“连接服务器 Hub 监控本地 MCP”不是同一件事。
+
+SQLite 快速启动：
+
+```bash
+mcp-hub quickstart
+# 打开 http://localhost:3987
+```
+
+Quickstart 配置保存在 `~/.config/mcp-hub/.env`。默认生成的 GitHub OAuth 占位值不能用于真实登录；需要登录时，请在该文件中填写 GitHub OAuth App 的 Client ID、Client Secret 和回调地址后重新启动。
+
+PostgreSQL 初始化：
+
+```bash
+mcp-hub init
+mcp-hub daemon start
+# 打开 http://localhost:3987
+```
+
+Docker：
 
 ```bash
 git clone https://github.com/blankbrains/McpServerHub
 cd McpServerHub
 cp .env.example .env
-# 在 .env 中填写 POSTGRES_PASSWORD、MCP_HUB_SECRET 和 GitHub OAuth 配置
+# 在 .env 中填写数据库、MCP_HUB_SECRET 和 GitHub OAuth 配置
 docker compose up -d
-# 打开 http://localhost:3987
-```
-</details>
-
-### 2. 本机快速启动
-
-```bash
-mcp-hub quickstart
 ```
 
-该命令使用 SQLite，并在用户配置目录生成本机配置。启动后打开 `http://localhost:3987`。
-
-GitHub 登录仍需要配置 OAuth Client ID、Client Secret 和回调地址；不登录时可以浏览市场和公开页面。
-
-### 3. 完整初始化（PostgreSQL）
-
-```bash
-mcp-hub init
-mcp-hub daemon start
-# 仪表盘: http://localhost:3987
-```
+GitHub 登录需要正确配置 OAuth Client ID、Client Secret 和回调地址；不登录时只能浏览市场和公开页面。
 
 ---
 
@@ -177,33 +311,15 @@ mcp-hub logs server-filesystem -f
 
 ### 🔌 一键接入 Agent 与本地监控
 
-在监控页为正在使用的 Agent 创建设备，然后运行页面生成的一次性接入命令：
-
-```bash
-mcp-hub agent setup \
-  --agent codex \
-  --hub-url https://<your-hub-host> \
-  --telemetry-token mcpht_<device-token>
-```
-
-CLI 会执行以下操作：
-
-1. 自动查找 Agent 配置，或通过 `--source-config` 指定文件。
-2. 展示将迁移的 stdio、Streamable HTTP 和 SSE Server。
-3. 获得确认后创建带时间戳的原文件备份。
-4. 将完整本地连接配置写入 Agent 独立的 `gateway.json`。
-5. 用唯一的 `mcp-hub` 入口替换受支持的直接连接。
-6. 上报不含 URL、请求头值、参数、响应、环境变量值和完整命令的设备清单。
-
-后续在网页调整个人 Server 后，同步 Gateway：
+完整首次接入流程见上面的“使用服务器 Hub 监控本地 MCP”。首次接入后，在网页调整个人 Server 清单时，可以同步 Gateway：
 
 ```bash
 mcp-hub config sync \
   --agent codex \
-  --server https://<your-hub-host>
+  --server http://<Hub地址>:3987
 ```
 
-同步会备份 `gateway.json`，保留本地环境变量、请求头和工作目录，不覆盖 Agent 主配置。
+同步个人配置前需要先完成网页登录与 CLI 登录。同步会备份 `gateway.json`，保留本地环境变量、请求头和工作目录，不覆盖 Agent 主配置；同步完成后需要重启 Agent。
 
 本地诊断：
 
@@ -214,7 +330,7 @@ mcp-hub agent doctor --agent codex
 
 每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和估算 Token。
 
-> 浏览器不能直接扫描用户电脑。只有用户本地 CLI/Gateway 主动发现、代理和上报的数据才会出现在 SaaS Hub 中。
+> 浏览器不能直接扫描用户电脑。只有用户本地 CLI/Gateway 主动发现、代理和上报的数据才会出现在 SaaS Hub 中。Agent 直连 Server 的调用不会经过 Gateway，因此无法监控。
 
 ### 🌐 Web 仪表盘
 
@@ -246,7 +362,7 @@ http://localhost:3987
 | **CLI** | Click + Rich |
 | **认证** | GitHub OAuth + JWT |
 | **安全** | 四维评分引擎 |
-| **监控** | 三级健康检查 + 可靠性评分 |
+| **监控** | 市场健康检查与可靠性评分 + 本地 Gateway 调用、延迟、错误、资源和估算 Token 遥测 |
 
 ---
 
@@ -260,7 +376,7 @@ http://localhost:3987
 | 📦 我的 Server | 追踪列表/同步开关/Gateway 状态/调用数据/更新提醒 |
 | ⚙️ 配置中心 | 上传匹配/确认追踪/原生配置导出/Gateway 同步/草稿 |
 | 📋 方案市场 | 发布方案/浏览/一键导入 |
-| 📊 监控大屏 | 调用趋势/P95 延迟/Token/字节/工具/协议/CPU/内存/错误分类 |
+| 📊 监控大屏 | 调用趋势/P95 延迟/估算 Token/字节/工具/协议/CPU/内存/错误分类 |
 | 👤 个人中心 | 资料/统计/趋势图 |
 | 🔔 通知中心 | 告警/更新/回复/系统通知/单条删除 |
 | 🌙 体验 | Dark Mode/全局搜索/面包屑/移动端 |

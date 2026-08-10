@@ -1,97 +1,120 @@
 import { Link } from 'react-router-dom'
 
-const STEPS = [
-  {
-    num: 1,
-    title: '准备你的 MCP 配置文件',
-    icon: '📂',
-    description: '从你的 AI Agent 中找到 MCP 配置文件',
-    details: [
-      { agent: 'Claude Code', path: '~/.claude.json 或项目 .mcp.json' },
-      { agent: 'Claude Desktop', path: 'Claude/claude_desktop_config.json' },
-      { agent: 'Cursor', path: '~/.cursor/mcp.json' },
-      { agent: 'Codex', path: '~/.codex/config.toml' },
-      { agent: 'Trae', path: '~/.trae/mcp.json' },
-      { agent: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json' },
-      { agent: 'VS Code Copilot', path: '.vscode/mcp.json' },
-    ],
-  },
-  {
-    num: 2,
-    title: '检查本地配置',
-    icon: '📤',
-    description: '在「配置中心」选择 JSON 配置文件后，Hub 会解析其中的 MCP Server 并展示匹配结果。检查阶段不会保存追踪记录，也不会改变 Server 状态。',
-    action: { text: '前往配置中心 →', to: '/config' },
-  },
-  {
-    num: 3,
-    title: '检查 MCP 服务匹配结果',
-    icon: '🔍',
-    description: 'Hub 会自动在市场数据库中搜索你配置里的每个 MCP Server，并显示匹配/未匹配的结果：',
-    highlights: [
-      { label: '已匹配', desc: '在 Hub 市场中找到对应的 Server，自动关联版本、评分、安全等级等信息', color: 'green' },
-      { label: '未匹配', desc: '未在市场找到的 Server 会标记为待处理；仅在确认追踪后才会注册为自定义 Server。', color: 'yellow' },
-    ],
-  },
-  {
-    num: 4,
-    title: '确认是否追踪',
-    icon: '⚡',
-    description: '检查完成后，由你决定是否将这份配置保存到个人追踪列表：',
-    highlights: [
-      { label: '✅ 确认追踪', desc: '将匹配到的 Server 保存到你的个人追踪列表。完成本地 Gateway 接入后，监控页会显示设备上报的真实运行状态和调用统计。', color: 'blue' },
-      { label: '❌ 取消', desc: '丢弃本次检查结果，不会创建追踪记录或注册自定义 Server。你可以随时重新检查。', color: 'gray' },
-    ],
-  },
-  {
-    num: 5,
-    title: '选择你的 AI Agent 工具',
-    icon: '🎯',
-    description: '选择你正在使用的 AI Agent（Claude Code / Cursor / Codex / Trae 等）。原生配置用于直接连接；需要监控时请继续接入本地 Gateway。',
-  },
-  {
-    num: 6,
-    title: '配置 MCP 网关以启用监控',
-    icon: '📊',
-    description: '在监控页创建设备后运行一键接入命令。CLI 会先备份现有配置，再把 stdio、Streamable HTTP 和 SSE Server 迁移到本地 Gateway。',
-    code: `mcp-hub agent setup --agent codex \\
-  --hub-url https://你的Hub地址 \\
-  --telemetry-token mcpht_设备令牌`,
-    note: '完整 URL、请求头值、命令参数和环境变量值仅保存在用户本地；Hub 只接收传输类型、字段名称、配置指纹与运行指标。',
-  },
-  {
-    num: 7,
-    title: '同步后续配置变更',
-    icon: '🔄',
-    description: '首次接入完成后，在网页调整追踪或同步开关，再运行以下命令更新 Gateway。命令只修改 gateway.json，并保留本地密钥、请求头和工作目录。',
-    code: `mcp-hub config sync --agent codex \\
-  --server https://你的Hub地址`,
-  },
-  {
-    num: 8,
-    title: '查看监控数据',
-    icon: '📈',
-    description: '配置完成并产生调用后，在监控页查看当前账户设备上报的运行状态、调用、延迟、错误和估算 Token。',
-    action: { text: '前往监控大屏 →', to: '/monitor' },
-    subActions: [
-      { text: '查看我的 Server →', to: '/my-servers' },
-    ],
-  },
-]
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"'
+
+interface GuideStep {
+  num: number
+  title: string
+  icon: string
+  description: string
+  details?: Array<{ agent: string; path: string }>
+  code?: string
+  note?: string
+  action?: { text: string; to: string }
+}
+
+function buildSteps(hubUrl: string): GuideStep[] {
+  return [
+    {
+      num: 1,
+      title: '确认运行方式',
+      icon: '🧭',
+      description: '网页 Hub 运行在服务器上；mcp-hub CLI、Gateway、AI Agent 和 MCP Server 运行在你的电脑上。服务器不能主动读取你的本地调用，必须由本地 Gateway 代理并上报指标。',
+    },
+    {
+      num: 2,
+      title: '安装 uv 和 mcp-hub CLI',
+      icon: '⬇️',
+      description: '当前 0.2.0 尚未发布到 PyPI，请从 GitHub 安装。先安装 uv，再执行以下命令；运行 uv tool update-shell 后必须关闭并重新打开终端。',
+      code: `${CLI_INSTALL_COMMAND}
+uv tool update-shell
+mcp-hub --version`,
+      note: 'Windows 可用官方 PowerShell 安装脚本安装 uv；macOS/Linux 可用官方 shell 安装脚本。若 mcp-hub 仍找不到，先重开终端，再确认 uv 的工具目录已加入 PATH。',
+    },
+    {
+      num: 3,
+      title: '确认电脑可以访问 Hub',
+      icon: '🌐',
+      description: '在运行 Agent 的同一台电脑上检查 Hub 健康接口。返回 status 为 healthy 才继续；无法访问时先处理局域网、VPN、防火墙或服务器地址问题。',
+      code: `curl ${hubUrl}/api/v1/health`,
+    },
+    {
+      num: 4,
+      title: '准备现有 Agent MCP 配置',
+      icon: '📂',
+      description: 'agent setup 负责迁移已有连接，不负责替你创建第一个 MCP Server。先确认目标 Agent 已至少配置一个可用的 stdio、Streamable HTTP 或 SSE Server。',
+      details: [
+        { agent: 'Claude Code', path: '~/.claude.json 或项目 .mcp.json' },
+        { agent: 'Claude Desktop', path: 'Claude/claude_desktop_config.json' },
+        { agent: 'Cursor', path: '~/.cursor/mcp.json' },
+        { agent: 'Codex', path: '~/.codex/config.toml' },
+        { agent: 'Trae', path: '~/.trae/mcp.json' },
+        { agent: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json' },
+        { agent: 'VS Code Copilot', path: '.vscode/mcp.json' },
+      ],
+      note: '网页配置上传仅支持根节点为 mcpServers 的 JSON。Codex config.toml 使用 mcp_servers，VS Code Copilot mcp.json 使用 servers；这两类配置请直接使用 agent setup 自动识别、预览和迁移。',
+    },
+    {
+      num: 5,
+      title: '登录网页并创建设备',
+      icon: '🔐',
+      description: '在网页完成 GitHub 登录，进入监控页，选择实际使用的 Agent 并创建设备。每个 Agent 应使用独立设备令牌；令牌只显示一次，不要截图、提交到 Git 或发送给他人。',
+      action: { text: '前往监控页创建设备 →', to: '/monitor' },
+    },
+    {
+      num: 6,
+      title: '运行页面生成的接入命令',
+      icon: '📊',
+      description: '在监控页复制包含真实设备令牌的完整命令并在本地终端运行。下面只是格式示例，不要照抄示例令牌。',
+      code: `mcp-hub agent setup --agent codex --hub-url ${hubUrl} --telemetry-token mcpht_设备令牌`,
+      note: 'CLI 会展示迁移预览。确认后才会备份原 Agent 配置、写入独立 gateway.json，并用 mcp-hub serve 替换可代理的直接连接；不支持的条目会保留。',
+    },
+    {
+      num: 7,
+      title: '完全重启 Agent',
+      icon: '🔁',
+      description: '退出所有目标 Agent 进程后重新打开。仅关闭当前对话或刷新窗口通常不够；Agent 必须重新读取已经写入的 MCP 配置，并且新进程的 PATH 中必须能找到 mcp-hub。',
+    },
+    {
+      num: 8,
+      title: '触发一次真实 MCP 工具调用',
+      icon: '🧪',
+      description: '让 Agent 实际调用一个已迁移 Server 的工具。只启动 Agent、查看工具列表或普通对话不会产生 tool_call 监控数据。',
+    },
+    {
+      num: 9,
+      title: '刷新监控并核对数据',
+      icon: '📈',
+      description: '回到监控页刷新，检查设备最后在线时间、Server 调用数、工具调用、延迟、错误和估算 Token。Token 是 Gateway 根据载荷估算的值，不等于模型供应商账单。',
+      action: { text: '前往监控大屏 →', to: '/monitor' },
+    },
+    {
+      num: 10,
+      title: '无数据时运行诊断',
+      icon: '🩺',
+      description: '先运行本地状态和自检命令，再检查 Agent 是否完全重启、设备是否撤销、Hub 是否可达，以及调用是否仍绕过 Gateway 直连 Server。',
+      code: `mcp-hub agent status --agent codex
+mcp-hub agent doctor --agent codex`,
+      note: '网络中断时，遥测事件会进入本地 SQLite 队列并在恢复后重试。若页面自动复制仍被 HTTP 浏览器策略阻止，可直接选中页面中的完整命令并按 Ctrl+C（macOS 按 Cmd+C）。',
+    },
+  ]
+}
 
 export default function Guide() {
+  const steps = buildSteps(window.location.origin)
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="mb-2">
         <h1 className="text-2xl font-bold text-gray-900">📖 使用指南</h1>
         <p className="text-sm text-gray-500 mt-1">
-          按照以下步骤，从上传配置到监控 MCP 调用，一步步完成设置
+          按照以下步骤，在本地接入 Gateway 并验证第一条 MCP 监控数据
         </p>
       </div>
 
       {/* Step cards */}
       <div className="space-y-4">
-        {STEPS.map((step) => (
+        {steps.map((step) => (
           <div key={step.num} className="bg-white rounded-xl border border-gray-200 p-6 hover:border-gray-300 transition-colors">
             <div className="flex gap-4">
               {/* Step number */}
@@ -120,29 +143,7 @@ export default function Guide() {
                   </div>
                 )}
 
-                {/* Match highlights (Steps 3, 4) */}
-                {step.highlights && (
-                  <div className="space-y-2">
-                    {step.highlights.map((h) => (
-                      <div key={h.label} className={`rounded-lg p-3 border ${
-                        h.color === 'green' ? 'bg-green-50 border-green-200' :
-                        h.color === 'yellow' ? 'bg-yellow-50 border-yellow-200' :
-                        h.color === 'blue' ? 'bg-blue-50 border-blue-200' :
-                        'bg-gray-50 border-gray-200'
-                      }`}>
-                        <p className={`text-sm font-medium ${
-                          h.color === 'green' ? 'text-green-800' :
-                          h.color === 'yellow' ? 'text-yellow-800' :
-                          h.color === 'blue' ? 'text-blue-800' :
-                          'text-gray-600'
-                        }`}>{h.label}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{h.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Code block (Step 6) */}
+                {/* Commands */}
                 {step.code && (
                   <div className="bg-gray-900 rounded-lg p-4">
                     <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
@@ -164,20 +165,6 @@ export default function Guide() {
                   </Link>
                 )}
 
-                {/* Sub actions */}
-                {step.subActions && (
-                  <div className="flex gap-2 flex-wrap">
-                    {step.subActions.map((sa) => (
-                      <Link
-                        key={sa.to}
-                        to={sa.to}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-                      >
-                        {sa.text}
-                      </Link>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -189,17 +176,39 @@ export default function Guide() {
         <h3 className="font-semibold text-gray-900 mb-3">💡 常见问题</h3>
         <div className="space-y-3 text-sm">
           <div>
-            <p className="font-medium text-gray-800">Q: 上传配置后，Hub 能直接看到我本地的 MCP 调用吗？</p>
+            <p className="font-medium text-gray-800">Q: 网页配置上传支持哪些文件？</p>
+            <p className="text-gray-600 mt-0.5">
+              A: 仅支持 JSON，且 MCP Server 必须位于根节点 <code className="font-mono">mcpServers</code>。
+              Codex 的 <code className="font-mono">config.toml</code> 和 VS Code Copilot 根节点为
+              <code className="mx-1 font-mono">servers</code>的配置不要直接上传，请使用 agent setup 自动迁移。
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-800">Q: 保存追踪后，Hub 能直接看到我本地的 MCP 调用吗？</p>
             <p className="text-gray-600 mt-0.5">
               A: 默认不能。你需要在监控页创建设备并运行 agent setup，让本地 Gateway 代理 Agent 与 MCP Server 的通信。
               Agent 直接连接 Server 的调用不会经过 Hub，也不会出现在监控页。
             </p>
           </div>
           <div>
+            <p className="font-medium text-gray-800">Q: 为什么已经创建设备，监控页仍然没有调用？</p>
+            <p className="text-gray-600 mt-0.5">
+              A: 创建设备只生成上报凭证。还必须运行 agent setup、完全重启 Agent，并实际调用一次经过 Gateway 的 MCP 工具。
+              直接连接 Server 的调用、普通聊天和仅查看工具列表都不会产生监控数据。
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-800">Q: 为什么页面提示自动复制失败？</p>
+            <p className="text-gray-600 mt-0.5">
+              A: HTTP 页面可能被浏览器限制剪贴板权限。系统会尝试兼容复制；如果浏览器仍拒绝，
+              命令会完整显示在页面中，可以直接选中后按 Ctrl+C，macOS 使用 Cmd+C。
+            </p>
+          </div>
+          <div>
             <p className="font-medium text-gray-800">Q: 「确认追踪」和「取消」有什么区别？</p>
             <p className="text-gray-600 mt-0.5">
               A: 选择「确认追踪」后，Server 会保存到你的个人追踪列表。选择「取消」不会保存本次检查结果。
-              MCP 调用统计仅在你部署并使用遥测或网关能力后才会产生。
+              MCP 调用统计仅在本地 Gateway 接入并代理真实调用后才会产生。
             </p>
           </div>
           <div>
@@ -212,8 +221,8 @@ export default function Guide() {
           <div>
             <p className="font-medium text-gray-800">Q: Hub 网关会影响 MCP Server 的性能吗？</p>
             <p className="text-gray-600 mt-0.5">
-              A: Hub 网关以 stdio 方式运行并转发请求。实际开销取决于 Server、网络、工具调用和本机资源，
-              部署后应通过监控页的真实调用数据评估。
+              A: 本地 Gateway 通过 stdio 接入 Agent，并可代理 stdio、Streamable HTTP 和 SSE Server。
+              实际开销取决于 Server、网络、工具调用和本机资源，接入后应通过监控页的真实调用数据评估。
             </p>
           </div>
         </div>
@@ -222,10 +231,10 @@ export default function Guide() {
       {/* Bottom CTA */}
       <div className="text-center py-4">
         <Link
-          to="/config"
+          to="/monitor"
           className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm"
         >
-          ⚡ 开始使用
+          📊 前往监控页
         </Link>
       </div>
     </div>

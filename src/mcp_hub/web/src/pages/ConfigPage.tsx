@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAuthHeaders, getAuthState, uploadConfig, downloadConfig } from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
+import { copyStatus, copyText } from '../utils/clipboard'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', path: '~/.claude.json', extension: 'json', icon: '🤖' },
@@ -363,16 +364,16 @@ export default function ConfigPage() {
         <h2 className="font-semibold text-gray-900 mb-2">🔧 本地 Gateway 诊断</h2>
         <p className="mb-3 text-sm text-gray-500">在用户电脑执行，不会读取或修改 Hub 服务器上的 Agent 配置。</p>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={() => {
-            navigator.clipboard.writeText(`mcp-hub agent status --agent ${selectedAgent}`)
-            setMessage('✅ 状态命令已复制')
+          <button onClick={async () => {
+            const copied = await copyText(`mcp-hub agent status --agent ${selectedAgent}`)
+            setMessage(copyStatus(copied, '✅ 状态命令已复制'))
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
           复制状态命令
           </button>
-          <button onClick={() => {
-            navigator.clipboard.writeText(`mcp-hub agent doctor --agent ${selectedAgent}`)
-            setMessage('✅ 自检命令已复制')
+          <button onClick={async () => {
+            const copied = await copyText(`mcp-hub agent doctor --agent ${selectedAgent}`)
+            setMessage(copyStatus(copied, '✅ 自检命令已复制'))
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
           复制自检命令

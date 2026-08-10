@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiGet, apiPost } from '../api/client'
+import { copyStatus, copyText } from '../utils/clipboard'
 import InfoTooltip from './InfoTooltip'
 
 interface TelemetrySummary {
@@ -133,6 +135,8 @@ const AGENT_OPTIONS = [
   { id: 'generic', label: '通用 MCP 客户端' },
 ] as const
 
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"'
+
 function agentLabel(agentType: string): string {
   return AGENT_OPTIONS.find((agent) => agent.id === agentType)?.label || agentType
 }
@@ -163,15 +167,6 @@ function formatUptime(value: number): string {
   return days > 0 ? `${days} 天 ${hours} 小时` : `${hours} 小时`
 }
 
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export default function TelemetryPanel() {
   const [summary, setSummary] = useState<TelemetrySummary | null>(null)
   const [servers, setServers] = useState<TelemetryServer[]>([])
@@ -194,6 +189,30 @@ export default function TelemetryPanel() {
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [createdDevice, setCreatedDevice] = useState<CreatedDevice | null>(null)
   const [copyState, setCopyState] = useState('')
+  const hubUrl = window.location.origin
+  const setupCommand = createdDevice
+    ? [
+        'mcp-hub agent setup',
+        `--agent ${createdDevice.device.agent_type}`,
+        `--hub-url ${hubUrl}`,
+        `--telemetry-token ${createdDevice.token}`,
+      ].join(' ')
+    : ''
+  const gatewayConfigText = createdDevice
+    ? JSON.stringify({
+        mcpServers: {
+          'mcp-hub': {
+            command: 'mcp-hub',
+            args: ['serve'],
+            env: {
+              MCP_HUB_REPORT_URL: hubUrl,
+              MCP_HUB_TELEMETRY_TOKEN: createdDevice.token,
+              MCP_HUB_AGENT_TYPE: createdDevice.device.agent_type,
+            },
+          },
+        },
+      }, null, 2)
+    : ''
 
   useEffect(() => {
     let active = true
@@ -297,38 +316,19 @@ export default function TelemetryPanel() {
   const copyToken = async () => {
     if (!createdDevice) return
     const copied = await copyText(createdDevice.token)
-    setCopyState(copied ? '已复制' : '复制失败')
+    setCopyState(copyStatus(copied, '设备密钥已复制'))
   }
 
   const copyConfig = async () => {
-    if (!createdDevice) return
-    const config = {
-      mcpServers: {
-        'mcp-hub': {
-          command: 'mcp-hub',
-          args: ['serve'],
-          env: {
-            MCP_HUB_REPORT_URL: window.location.origin,
-            MCP_HUB_TELEMETRY_TOKEN: createdDevice.token,
-            MCP_HUB_AGENT_TYPE: createdDevice.device.agent_type,
-          },
-        },
-      },
-    }
-    const copied = await copyText(JSON.stringify(config, null, 2))
-    setCopyState(copied ? '配置已复制' : '复制失败')
+    if (!gatewayConfigText) return
+    const copied = await copyText(gatewayConfigText)
+    setCopyState(copyStatus(copied, 'Gateway 配置已复制'))
   }
 
   const copySetupCommand = async () => {
-    if (!createdDevice) return
-    const command = [
-      'mcp-hub agent setup',
-      `--agent ${createdDevice.device.agent_type}`,
-      `--hub-url ${window.location.origin}`,
-      `--telemetry-token ${createdDevice.token}`,
-    ].join(' ')
-    const copied = await copyText(command)
-    setCopyState(copied ? '接入命令已复制' : '复制失败')
+    if (!setupCommand) return
+    const copied = await copyText(setupCommand)
+    setCopyState(copyStatus(copied, '接入命令已复制'))
   }
 
   const registeredAgentTypes = new Set(agents.map((agent) => agent.agent_type))
@@ -373,6 +373,61 @@ export default function TelemetryPanel() {
           {error}
         </div>
       )}
+
+      <div className="border border-blue-200 bg-blue-50 px-4 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">首次接入：按顺序完成</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Hub 运行在服务器上，但 MCP Server 和 Gateway 必须运行在你的电脑上。只有经过本地 Gateway 的调用才会出现在这里。
+            </p>
+          </div>
+          <Link to="/guide" className="text-sm font-medium text-blue-700 hover:text-blue-800">查看完整使用指南</Link>
+        </div>
+        <ol className="mt-4 grid gap-3 text-sm text-gray-700 md:grid-cols-2 xl:grid-cols-3">
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">1. 检查电脑能访问 Hub</p>
+            <code className="mt-1 block break-all text-xs">curl {hubUrl}/api/v1/health</code>
+          </li>
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">2. 安装本地 CLI</p>
+            <code className="mt-1 block break-all text-xs">{CLI_INSTALL_COMMAND}</code>
+            <p className="mt-1 text-xs text-gray-500">再运行 uv tool update-shell，重开终端后执行 mcp-hub --version。</p>
+          </li>
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">3. 准备 Agent 配置</p>
+            <p className="mt-1 text-xs text-gray-600">先确保 Codex、Claude Code 等 Agent 已经配置至少一个可用 MCP Server。</p>
+          </li>
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">4. 创建独立设备</p>
+            <p className="mt-1 text-xs text-gray-600">在右侧选择实际使用的 Agent 后创建设备。每个 Agent 使用一个独立令牌。</p>
+          </li>
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">5. 执行接入并重启 Agent</p>
+            <p className="mt-1 text-xs text-gray-600">运行生成的 agent setup 命令，核对预览并确认备份，然后完全退出并重新打开 Agent。</p>
+          </li>
+          <li className="border-l-2 border-blue-500 pl-3">
+            <p className="font-medium text-gray-900">6. 产生真实调用并验证</p>
+            <p className="mt-1 text-xs text-gray-600">让 Agent 实际调用一次 MCP 工具，再刷新本页；仅打开 Agent 或查看工具列表不会产生调用数据。</p>
+          </li>
+        </ol>
+        <details className="mt-4 border-t border-blue-200 pt-3">
+          <summary className="cursor-pointer text-sm font-medium text-gray-800">没有数据时如何排查</summary>
+          <div className="mt-3 grid gap-3 text-xs text-gray-600 md:grid-cols-2">
+            <div>
+              <p className="font-medium text-gray-800">本地诊断命令</p>
+              <pre className="mt-1 overflow-x-auto bg-white p-2 font-mono text-gray-700">{`mcp-hub agent status --agent codex
+mcp-hub agent doctor --agent codex`}</pre>
+            </div>
+            <ul className="space-y-1">
+              <li>确认 Agent 已完全重启，并且调用经过 mcp-hub Gateway；直接连接不会被监控。</li>
+              <li>确认设备未撤销、Hub 地址可达，且本机防火墙或 VPN 没有阻止访问。</li>
+              <li>离线事件会保存在本地 SQLite 队列中，网络恢复后自动重试。</li>
+              <li>HTTP 页面若仍无法自动复制，可直接选中页面中的命令并按 Ctrl+C 或 Cmd+C。</li>
+            </ul>
+          </div>
+        </details>
+      </div>
 
       {loading && !summary ? (
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">正在加载遥测数据...</div>
@@ -548,12 +603,22 @@ export default function TelemetryPanel() {
                 已绑定到 {agentLabel(createdDevice.device.agent_type)}，请只配置给这个 Agent。
               </p>
               <code className="mt-2 block break-all rounded bg-white p-2 text-xs text-gray-800">{createdDevice.token}</code>
+              <p className="mt-3 text-xs font-medium text-amber-900">在本地终端执行以下完整命令</p>
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-gray-900 p-2 text-xs text-green-400" tabIndex={0}>
+                {setupCommand}
+              </pre>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void copyToken()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制密钥</button>
                 <button type="button" onClick={() => void copySetupCommand()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制一键接入命令</button>
                 <button type="button" onClick={() => void copyConfig()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制 Gateway 配置</button>
                 {copyState && <span className="self-center text-xs text-amber-900" role="status">{copyState}</span>}
               </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-amber-900">查看可手动复制的 Gateway 配置</summary>
+                <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-white p-2 text-xs text-gray-700" tabIndex={0}>
+                  {gatewayConfigText}
+                </pre>
+              </details>
             </div>
           )}
 

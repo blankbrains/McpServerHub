@@ -7,6 +7,7 @@ import {
 } from '../api/client'
 import StarRating from '../components/StarRating'
 import InfoTooltip from '../components/InfoTooltip'
+import { copyStatus, copyText } from '../utils/clipboard'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', color: 'bg-green-100 text-green-800' },
@@ -131,10 +132,14 @@ export default function ServerDetail() {
     }
   }
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!configData) return
-    navigator.clipboard.writeText(JSON.stringify(configData.config_content, null, 2)).catch(() => {})
-    setCopied(true)
+    const didCopy = await copyText(JSON.stringify(configData.config_content, null, 2))
+    setCopied(didCopy)
+    if (!didCopy) {
+      setMessage(copyStatus(false, ''))
+      setTimeout(() => setMessage(''), 4000)
+    }
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -355,10 +360,15 @@ export default function ServerDetail() {
               {(server as any).install_command || ''}
             </code>
             <button
-              onClick={() => {
+              onClick={async () => {
                 const cmd = (server as any).install_command || ''
                 if (cmd) {
-                  navigator.clipboard?.writeText(cmd).then(() => setCopied(true)).catch(() => {})
+                  const didCopy = await copyText(cmd)
+                  setCopied(didCopy)
+                  if (!didCopy) {
+                    setMessage(copyStatus(false, ''))
+                    setTimeout(() => setMessage(''), 4000)
+                  }
                   setTimeout(() => setCopied(false), 2000)
                 }
               }}
@@ -658,12 +668,12 @@ export default function ServerDetail() {
         </div>
         <div className="mt-3 flex gap-2">
           <button
-            onClick={() => {
+            onClick={async () => {
               const cmd = (server as any).install_command || `npx ${server.name}`
-              navigator.clipboard.writeText(
+              const didCopy = await copyText(
                 `# 在本地终端运行此 Server 后，可通过 MCP 协议调用其工具\n${cmd}`
-              ).catch(() => {})
-              setMessage('✅ 命令已复制')
+              )
+              setMessage(copyStatus(didCopy, '✅ 命令已复制'))
               setTimeout(() => setMessage(''), 2000)
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">

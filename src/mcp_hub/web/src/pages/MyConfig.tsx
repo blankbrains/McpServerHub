@@ -9,6 +9,7 @@ import {
   getAuthState,
   uploadConfig,
 } from '../api/client'
+import { copyStatus, copyText } from '../utils/clipboard'
 
 interface ConfigServer {
   name: string
@@ -454,9 +455,9 @@ export default function MyConfig() {
                 {`mcp-hub config sync --server ${window.location.origin}`}
               </pre>
             </div>
-            <button onClick={() => {
-              navigator.clipboard.writeText(`mcp-hub config sync --server ${window.location.origin}`)
-              setMessage('命令已复制到剪贴板')
+            <button onClick={async () => {
+              const copied = await copyText(`mcp-hub config sync --server ${window.location.origin}`)
+              setMessage(copyStatus(copied, '命令已复制到剪贴板'))
               setTimeout(() => setMessage(''), 3000)
             }} className="mt-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors">
               📋 复制命令
