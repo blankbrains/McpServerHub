@@ -1,4 +1,4 @@
-"""mcp prompt-install — 生成安装提示词，用户可直接发给 AI 执行。"""
+"""mcp-hub prompt-install — 生成安装提示词，用户可直接发给 AI 执行。"""
 
 from __future__ import annotations
 
@@ -43,8 +43,8 @@ def _resolve_alias(name: str) -> str:
 
 
 def _check_hub_installed() -> bool:
-    """检查 mcp 命令是否可用。"""
-    return shutil.which("mcp") is not None
+    """检查 mcp-hub 命令是否可用。"""
+    return shutil.which("mcp-hub") is not None
 
 
 @click.command("prompt-install")
@@ -55,8 +55,8 @@ def prompt_install(server_id: str, copy: bool, json_out: bool):
     """生成安装提示词 — 发给 AI 即可自动安装。
 
     用法:
-      mcp prompt-install filesystem          # 用别名
-      mcp prompt-install @org/server-name    # 用完整 ID
+      mcp-hub prompt-install filesystem          # 用别名
+      mcp-hub prompt-install @org/server-name    # 用完整 ID
     """
     resolved = _resolve_alias(server_id)
     is_installed = _check_hub_installed()
@@ -104,8 +104,8 @@ def prompt_install(server_id: str, copy: bool, json_out: bool):
     # Also show the manual equivalent
     console.print("\n[dim]等效命令（手动执行）:[/dim]")
     if not is_installed:
-        console.print("  pip install mcp-hub")
-    console.print(f"  mcp install {resolved}")
+        console.print("  pip install mcp-hub-cli")
+    console.print(f"  mcp-hub install {resolved}")
 
 
 def _generate_prompt(server_id: str, hub_installed: bool) -> str:

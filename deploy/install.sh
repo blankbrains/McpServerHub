@@ -30,8 +30,8 @@ check_python() {
 
 # Step 2: Install MCP Hub CLI
 install_hub() {
-    if command -v mcp &>/dev/null; then
-        echo -e "${GREEN}✅ MCP Hub 已安装 (mcp $(mcp --version 2>/dev/null || echo ""))${NC}"
+    if command -v mcp-hub &>/dev/null; then
+        echo -e "${GREEN}✅ MCP Hub 已安装 ($(mcp-hub --version 2>/dev/null || echo "mcp-hub"))${NC}"
         return 0
     fi
 
@@ -72,10 +72,10 @@ install_server() {
         echo ""
         echo -e "${BLUE}📋 MCP Hub 已就绪！${NC}"
         echo "   使用方式:"
-        echo "   mcp search              # 搜索 MCP Server"
-        echo "   mcp install @org/server # 安装 Server"
-        echo "   mcp start server-name   # 启动"
-        echo "   mcp agent setup ...     # 备份并接入本地 Gateway 监控"
+        echo "   mcp-hub search              # 搜索 MCP Server"
+        echo "   mcp-hub install @org/server # 安装 Server"
+        echo "   mcp-hub start server-name   # 启动"
+        echo "   mcp-hub agent setup ...     # 备份并接入本地 Gateway 监控"
         echo ""
         echo -e "${YELLOW}或者直接安装推荐 Server:${NC}"
         echo "   curl -fsSL https://mcphub.cn/install.sh | bash -s -- @modelcontextprotocol/server-filesystem"
@@ -85,7 +85,7 @@ install_server() {
     echo -e "${YELLOW}📦 正在安装 ${SERVER_ID}...${NC}"
 
     # 先注册 Server（如果 Hub 市场里没有）
-    mcp install "$SERVER_ID" 2>/dev/null && {
+    mcp-hub install "$SERVER_ID" 2>/dev/null && {
         echo -e "${GREEN}✅ ${SERVER_ID} 安装成功！${NC}"
     } || {
         # 如果 Hub 市场里没有，用 npx 直接装

@@ -336,7 +336,7 @@ export default function ConfigPage() {
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
-{`mcp agent setup --agent ${selectedAgent} \\
+{`mcp-hub agent setup --agent ${selectedAgent} \\
   --hub-url ${window.location.origin} \\
   --telemetry-token mcpht_设备令牌`}
           </pre>
@@ -362,14 +362,14 @@ export default function ConfigPage() {
         <p className="mb-3 text-sm text-gray-500">在用户电脑执行，不会读取或修改 Hub 服务器上的 Agent 配置。</p>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => {
-            navigator.clipboard.writeText(`mcp agent status --agent ${selectedAgent}`)
+            navigator.clipboard.writeText(`mcp-hub agent status --agent ${selectedAgent}`)
             setMessage('✅ 状态命令已复制')
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
           复制状态命令
           </button>
           <button onClick={() => {
-            navigator.clipboard.writeText(`mcp agent doctor --agent ${selectedAgent}`)
+            navigator.clipboard.writeText(`mcp-hub agent doctor --agent ${selectedAgent}`)
             setMessage('✅ 自检命令已复制')
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">

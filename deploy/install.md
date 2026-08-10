@@ -18,16 +18,16 @@ curl -fsSL https://mcphub.cn/install.sh | bash -s -- @modelcontextprotocol/serve
 
 ```bash
 # 安装 CLI
-pip install mcp-hub
+pip install mcp-hub-cli
 
 # 搜索可用的 MCP Server
-mcp search
+mcp-hub search
 
 # 安装你需要的
-mcp install @modelcontextprotocol/server-filesystem
+mcp-hub install @modelcontextprotocol/server-filesystem
 
 # 查看配置（复制到本地 Agent）
-mcp info @modelcontextprotocol/server-filesystem --config
+mcp-hub info @modelcontextprotocol/server-filesystem --config
 ```
 
 ### 方法三：npx 零安装（无需安装任何东西）
@@ -48,7 +48,7 @@ npx -y mcp-hub info @modelcontextprotocol/server-filesystem
 {
   "mcpServers": {
     "mcp-hub": {
-      "command": "mcp",
+      "command": "mcp-hub",
       "args": ["serve"]
     }
   }

@@ -46,7 +46,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 | **SaaS（推荐）** | 搜索/对比/追踪 Server，本地 Gateway 代理与脱敏监控 | 浏览器 + 本地 CLI |
 | **自托管** | 团队/企业集中管理 MCP Server 进程，实时监控 | 需服务器 |
 
-**SaaS 用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp agent setup` → 重启 Agent → 查看监控
+**SaaS 用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp-hub agent setup` → 重启 Agent → 查看监控
 **自托管用户流程**：部署 Hub → 一键安装 → 集中管理所有 MCP Server 进程 + 实时健康监控
 
 ---
@@ -66,7 +66,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
 - **多格式生成**：JSON Agent 使用 `mcpServers`/`servers`，Codex 使用 `~/.codex/config.toml`
-- **安全迁移**：`mcp agent setup` 先预览和确认，再备份原配置并迁移 stdio Server
+- **安全迁移**：`mcp-hub agent setup` 先预览和确认，再备份原配置并迁移 stdio Server
 - **完整进程配置**：保留结构化 `command`、`args`、按 Server 授权的 `env`、`cwd` 和启用状态
 
 ### 📦 Server 管理
@@ -128,7 +128,7 @@ docker compose up -d
 ### 2. 零配置启动（30 秒上线）
 
 ```bash
-mcp quickstart
+mcp-hub quickstart
 ```
 
 自动使用 SQLite，无需安装 PostgreSQL。
@@ -136,8 +136,8 @@ mcp quickstart
 ### 3. 或完整初始化（PostgreSQL）
 
 ```bash
-mcp init
-mcp daemon start
+mcp-hub init
+mcp-hub daemon start
 # 仪表盘: http://localhost:3987
 ```
 
@@ -149,22 +149,22 @@ mcp daemon start
 
 ```bash
 # 浏览市场
-mcp search
+mcp-hub search
 
 # 按关键词搜索
-mcp search database
+mcp-hub search database
 
 # 对比两个 Server
-mcp compare @modelcontextprotocol/server-postgres @modelcontextprotocol/server-sqlite
+mcp-hub compare @modelcontextprotocol/server-postgres @modelcontextprotocol/server-sqlite
 ```
 
 ### 📦 安装与运行
 
 ```bash
-mcp install @modelcontextprotocol/server-filesystem
-mcp start server-filesystem
-mcp status
-mcp logs server-filesystem -f
+mcp-hub install @modelcontextprotocol/server-filesystem
+mcp-hub start server-filesystem
+mcp-hub status
+mcp-hub logs server-filesystem -f
 ```
 
 ### 🔌 一键接入 Agent 与本地监控
@@ -172,7 +172,7 @@ mcp logs server-filesystem -f
 在监控页为正在使用的 Agent 创建设备，然后运行页面生成的一次性接入命令：
 
 ```bash
-mcp agent setup \
+mcp-hub agent setup \
   --agent codex \
   --hub-url https://<your-hub-host> \
   --telemetry-token mcpht_<device-token>
@@ -190,8 +190,8 @@ CLI 会执行以下操作：
 本地诊断：
 
 ```bash
-mcp agent status --agent codex
-mcp agent doctor --agent codex
+mcp-hub agent status --agent codex
+mcp-hub agent doctor --agent codex
 ```
 
 每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和 Token。

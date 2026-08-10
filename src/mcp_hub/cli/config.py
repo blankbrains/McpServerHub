@@ -129,10 +129,10 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
     从 Hub 服务器获取配置，自动写入本地 Agent 配置文件。
 
     用法:
-      mcp config sync                                    # 同步所有已安装
-      mcp config sync --server https://hub.example.com   # 指定 Hub 地址
-      mcp config sync --agent cursor                     # 同步到 Cursor
-      mcp config sync --server-ids @anth/web,@git/hub    # 只同步指定 Server
+      mcp-hub config sync                                    # 同步所有已安装
+      mcp-hub config sync --server https://hub.example.com   # 指定 Hub 地址
+      mcp-hub config sync --agent cursor                     # 同步到 Cursor
+      mcp-hub config sync --server-ids @anth/web,@git/hub    # 只同步指定 Server
     """
 
     async def _run():
@@ -166,7 +166,9 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
                         headers=auth_headers,
                     )
                     if resp.status_code == 401:
-                        _console.print("[red]❌ 请先使用 mcp login 登录后再同步个人配置[/red]")
+                        _console.print(
+                            "[red]❌ 请先使用 mcp-hub login 登录后再同步个人配置[/red]"
+                        )
                         return
                     if resp.status_code != 200:
                         _console.print(f"[red]❌ Hub 返回错误: {resp.status_code}[/red]")

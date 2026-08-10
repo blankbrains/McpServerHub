@@ -34,9 +34,9 @@ def monitor(server_name: str | None, scan_all: bool, watch: bool):
     - 历史 uptime (1h/24h/7d/30d)
 
     用法:
-      mcp monitor @anthropic/web-search    查看指定 Server
-      mcp monitor --all                    查看所有 Server
-      mcp monitor --watch                  持续刷新
+      mcp-hub monitor @anthropic/web-search    查看指定 Server
+      mcp-hub monitor --all                    查看所有 Server
+      mcp-hub monitor --watch                  持续刷新
     """
 
     async def _run():
@@ -50,10 +50,12 @@ def monitor(server_name: str | None, scan_all: bool, watch: bool):
                     break
                 await asyncio.sleep(10)
         else:
-            console.print("[yellow]用法: mcp monitor <server> | mcp monitor --all[/yellow]")
-            console.print("  mcp monitor @anthropic/web-search    查看 Server 健康")
-            console.print("  mcp monitor --all                    查看全部")
-            console.print("  mcp monitor @anthropic/web-search --watch  持续刷新")
+            console.print(
+                "[yellow]用法: mcp-hub monitor <server> | mcp-hub monitor --all[/yellow]"
+            )
+            console.print("  mcp-hub monitor @anthropic/web-search    查看 Server 健康")
+            console.print("  mcp-hub monitor --all                    查看全部")
+            console.print("  mcp-hub monitor @anthropic/web-search --watch  持续刷新")
 
     asyncio.run(_run())
 

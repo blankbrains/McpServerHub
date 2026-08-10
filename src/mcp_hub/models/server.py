@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -104,5 +104,5 @@ class SearchParams(BaseModel):
 
 class SearchResponse(BaseModel):
     success: bool = True
-    data: list[dict]
-    meta: dict
+    data: list[dict[str, Any]]
+    meta: dict[str, Any]

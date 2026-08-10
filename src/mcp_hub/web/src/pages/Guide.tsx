@@ -54,7 +54,7 @@ const STEPS = [
     title: '配置 MCP 网关以启用监控',
     icon: '📊',
     description: '在监控页创建设备后运行一键接入命令。CLI 会先备份现有配置，再把可代理的 stdio Server 迁移到 Gateway。',
-    code: `mcp agent setup --agent codex \\
+    code: `mcp-hub agent setup --agent codex \\
   --hub-url https://你的Hub地址 \\
   --telemetry-token mcpht_设备令牌`,
     note: '远程 HTTP/SSE Server 会保留原连接；完整命令参数和环境变量值仅保存在用户本地，Hub 只接收脱敏清单与运行指标。',

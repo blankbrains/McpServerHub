@@ -111,10 +111,10 @@ def create(
     """交互式创建 MCP Server 项目。
 
     用法:
-      mcp create                         交互式向导
-      mcp create my-server               指定名称 + 交互式选择
-      mcp create my-server -l python -t hello,echo  完全非交互
-      mcp create my-server --language typescript
+      mcp-hub create                         交互式向导
+      mcp-hub create my-server               指定名称 + 交互式选择
+      mcp-hub create my-server -l python -t hello,echo  完全非交互
+      mcp-hub create my-server --language typescript
     """
 
     async def _run():

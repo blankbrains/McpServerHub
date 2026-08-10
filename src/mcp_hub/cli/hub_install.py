@@ -1,4 +1,4 @@
-"""mcp hub-install — 自动检测/安装 MCP Hub + 指定 Server。"""
+"""mcp-hub hub-install — 自动检测/安装 MCP Hub + 指定 Server。"""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from mcp_hub.exceptions import InstallError
 console = Console()
 
 
-def _find_mcp() -> str | None:
-    """查找 mcp 命令路径。"""
-    return shutil.which("mcp")
+def _find_hub_cli() -> str | None:
+    """查找 McpServerHub 的唯一命令路径。"""
+    return shutil.which("mcp-hub")
 
 
-def _install_mcp() -> bool:
+def _install_hub_cli() -> bool:
     """安装 MCP Hub CLI。"""
     console.print("[yellow]📦 正在安装 MCP Hub CLI...[/yellow]")
 
@@ -34,12 +34,12 @@ def _install_mcp() -> bool:
                 "install",
                 "-i",
                 "https://pypi.tuna.tsinghua.edu.cn/simple",
-                "mcp-hub",
+                "mcp-hub-cli",
             ],
             "pip (清华源)",
         ),
-        ([sys.executable, "-m", "pip", "install", "mcp-hub"], "pip"),
-        (["pipx", "install", "mcp-hub"], "pipx"),
+        ([sys.executable, "-m", "pip", "install", "mcp-hub-cli"], "pip"),
+        (["pipx", "install", "mcp-hub-cli"], "pipx"),
     ]
 
     for cmd, label in methods:
@@ -61,28 +61,28 @@ def hub_install(server_id: str | None, force: bool):
     """自动检测/安装 MCP Hub，然后安装指定 Server。
 
     用法:
-      mcp hub-install                                  # 只安装 MCP Hub
-      mcp hub-install @org/server-name                 # 安装 Hub + 指定 Server
+      mcp-hub hub-install                                  # 只安装 MCP Hub
+      mcp-hub hub-install @org/server-name                 # 安装 Hub + 指定 Server
     """
 
     async def _run():
         console.print(Panel.fit("[bold blue]🔵 MCP Hub Installer[/bold blue]"))
 
         # Step 1: Check/Install MCP Hub
-        mcp_path = _find_mcp()
-        if mcp_path and not force:
-            console.print(f"  ✅ [green]MCP Hub 已就绪: {mcp_path}[/green]")
+        cli_path = _find_hub_cli()
+        if cli_path and not force:
+            console.print(f"  ✅ [green]MCP Hub 已就绪: {cli_path}[/green]")
         else:
             if force:
                 console.print("[yellow]  --force: 重新安装...[/yellow]")
-            ok = _install_mcp()
+            ok = _install_hub_cli()
             if not ok:
-                console.print("[red]❌ 安装失败，请手动执行: pip install mcp-hub[/red]")
+                console.print("[red]❌ 安装失败，请手动执行: pip install mcp-hub-cli[/red]")
                 return
             # Re-check
-            mcp_path = _find_mcp()
-            if not mcp_path:
-                console.print("[red]❌ 安装后未找到 mcp 命令，请重启终端[/red]")
+            cli_path = _find_hub_cli()
+            if not cli_path:
+                console.print("[red]❌ 安装后未找到 mcp-hub 命令，请重启终端[/red]")
                 return
 
         # Step 2: Install Server (if specified)
@@ -92,7 +92,7 @@ def hub_install(server_id: str | None, force: bool):
             # Try via Hub CLI
             try:
                 result = subprocess.run(
-                    [mcp_path, "install", server_id],
+                    [cli_path, "install", server_id],
                     capture_output=True,
                     text=True,
                     timeout=60,
@@ -101,7 +101,7 @@ def hub_install(server_id: str | None, force: bool):
                     console.print(f"  ✅ [green]{server_id} 安装成功[/green]")
                     # Show config
                     info = subprocess.run(
-                        [mcp_path, "info", server_id],
+                        [cli_path, "info", server_id],
                         capture_output=True,
                         text=True,
                         timeout=10,

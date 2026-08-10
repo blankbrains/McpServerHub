@@ -1,4 +1,4 @@
-"""mcp init — 一键初始化命令。"""
+"""mcp-hub init — 一键初始化命令。"""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def init_cmd(db_url: str | None, force: bool, no_seed: bool):
                     "MCP_HUB_DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/mcp_hub"
                 )
 
-            env_content = f"""# MCP Server Hub 配置（由 mcp init 生成）
+            env_content = f"""# MCP Server Hub 配置（由 mcp-hub init 生成）
 {db_line}
 MCP_HUB_SECRET={os.urandom(32).hex()}
 MCP_HUB_HOST=0.0.0.0
@@ -99,7 +99,7 @@ MCP_HUB_WORKERS=2
             default_config = {
                 "mcpServers": {
                     "mcp-hub": {
-                        "command": "mcp",
+                        "command": "mcp-hub",
                         "args": ["serve"],
                         "description": "MCP Server Hub — 聚合所有 MCP Server",
                     }
@@ -118,7 +118,7 @@ MCP_HUB_WORKERS=2
                 f"@reboot sleep 5 && cd {os.getcwd()}"
                 f" && {sys.executable} -m uvicorn mcp_hub.api.app:create_app"
                 f" --factory --host 0.0.0.0 --port {mcp_port}"
-                f" --workers 2 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
+                f" --workers 1 --log-level info > /tmp/mcp-hub-prod.log 2>&1"
             )
             import subprocess as _sp
 
@@ -141,7 +141,7 @@ MCP_HUB_WORKERS=2
 
         click.echo("\n" + "=" * 50)
         click.echo("🎉 MCP Server Hub 初始化完成！")
-        click.echo("   启动: mcp daemon start")
+        click.echo("   启动: mcp-hub daemon start")
         click.echo(f"   查看: http://localhost:{os.environ.get('MCP_HUB_PORT', '3987')}")
         click.echo("=" * 50)
 

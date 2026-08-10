@@ -163,7 +163,7 @@ def _gateway_entry(
     gateway_config_path: Path,
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
-        "command": "mcp",
+        "command": "mcp-hub",
         "args": ["serve"],
         "env": {
             "MCP_HUB_REPORT_URL": report_url.rstrip("/"),

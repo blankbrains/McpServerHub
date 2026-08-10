@@ -74,4 +74,4 @@ def whoami():
             data = json.loads(token_file.read_text())
             click.echo(f"👤 当前用户: {data.get('user_id', 'unknown')}")
             return
-    click.echo("👤 未登录 (使用 mcp login 登录)")
+    click.echo("👤 未登录 (使用 mcp-hub login 登录)")

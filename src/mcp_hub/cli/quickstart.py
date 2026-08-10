@@ -1,4 +1,4 @@
-"""mcp quickstart — 零配置一键启动（适用 SQLite）。"""
+"""mcp-hub quickstart — 零配置一键启动（适用 SQLite）。"""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ MCP_HUB_WORKERS=1
         console.print(f"  📍 Dashboard: [underline]http://localhost:{port}[/underline]")
         console.print(f"  📚 Market:    [underline]http://localhost:{port}/market[/underline]")
         console.print(f"  📖 API Docs:  [underline]http://localhost:{port}/docs[/underline]")
-        console.print("  🔌 MCP Gateway: [bold]mcp serve[/bold]")
+        console.print("  🔌 MCP Gateway: [bold]mcp-hub serve[/bold]")
         console.print("\n[yellow]按 Ctrl+C 停止[/yellow]\n")
 
         uvicorn.run(app, host="0.0.0.0", port=port)

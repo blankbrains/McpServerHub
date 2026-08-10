@@ -451,18 +451,18 @@ export default function MyConfig() {
             <p className="text-xs text-gray-500 mb-2">在你的本地机器上运行以下命令，自动下载配置并写入本地文件：</p>
             <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
               <pre className="text-green-400 text-xs font-mono">
-                {`mcp config sync --server ${window.location.origin}`}
+                {`mcp-hub config sync --server ${window.location.origin}`}
               </pre>
             </div>
             <button onClick={() => {
-              navigator.clipboard.writeText(`mcp config sync --server ${window.location.origin}`)
+              navigator.clipboard.writeText(`mcp-hub config sync --server ${window.location.origin}`)
               setMessage('命令已复制到剪贴板')
               setTimeout(() => setMessage(''), 3000)
             }} className="mt-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors">
               📋 复制命令
             </button>
             <p className="text-xs text-gray-400 mt-2">
-              需要在本机安装 mcp-hub-cli 并先使用 mcp login 登录。同步会在覆盖前确认并创建带时间戳备份；随后可在监控页复制 mcp agent setup 命令启用本地监控。
+              需要在本机安装 mcp-hub-cli 并先使用 mcp-hub login 登录。同步会在覆盖前确认并创建带时间戳备份；随后可在监控页复制 mcp-hub agent setup 命令启用本地监控。
             </p>
           </div>
         )}

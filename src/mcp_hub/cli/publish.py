@@ -69,8 +69,8 @@ def my_servers(author: str):
 
     async def _run():
         if not author:
-            click.echo("📦 请指定发布者名称, 例如: mcp my-servers anthropic")
-            click.echo("   或先登录 (mcp login) 后使用")
+            click.echo("📦 请指定发布者名称, 例如: mcp-hub my-servers anthropic")
+            click.echo("   或先登录 (mcp-hub login) 后使用")
             return
         registry = Registry()
         servers = await registry.get_by_author(author)

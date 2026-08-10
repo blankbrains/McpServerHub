@@ -285,7 +285,7 @@ export default function TelemetryPanel() {
     const config = {
       mcpServers: {
         'mcp-hub': {
-          command: 'mcp',
+          command: 'mcp-hub',
           args: ['serve'],
           env: {
             MCP_HUB_REPORT_URL: window.location.origin,
@@ -302,7 +302,7 @@ export default function TelemetryPanel() {
   const copySetupCommand = async () => {
     if (!createdDevice) return
     const command = [
-      'mcp agent setup',
+      'mcp-hub agent setup',
       `--agent ${createdDevice.device.agent_type}`,
       `--hub-url ${window.location.origin}`,
       `--telemetry-token ${createdDevice.token}`,

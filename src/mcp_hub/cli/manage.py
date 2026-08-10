@@ -32,7 +32,7 @@ def start(server_name: str | None):
         pm = ProcessManager()
 
         if not server_name:
-            click.echo("⚠️ 请指定要启动的 Server 名称, 或使用 mcp start all")
+            click.echo("⚠️ 请指定要启动的 Server 名称, 或使用 mcp-hub start all")
             return
 
         if server_name == "all":
@@ -101,7 +101,7 @@ def stop(server_name: str | None):
         pm = ProcessManager()
 
         if not server_name:
-            click.echo("⚠️ 请指定要停止的 Server 名称, 或使用 mcp stop all")
+            click.echo("⚠️ 请指定要停止的 Server 名称, 或使用 mcp-hub stop all")
             return
 
         if server_name == "all":
@@ -195,7 +195,7 @@ def status_cmd(server_name: str | None):
                 running = pm.is_running(sid)
                 status_icon = "🟢" if running else "🔴" if s.get("status") == "error" else "⏹"
                 ver = s.get("current_version", s.get("version", "?")) or "?"
-                table.add_row(status_icon, sid, f"v{ver}", "mcp start/stop")
+                table.add_row(status_icon, sid, f"v{ver}", "mcp-hub start/stop")
 
             _console.print(table)
 
@@ -208,7 +208,7 @@ def status_cmd(server_name: str | None):
                 if updates:
                     _console.print(
                         f"\n[yellow]⚠️  {len(updates)} 个 Server 有可用更新。"
-                        f"运行 [bold]mcp update[/bold] 查看详情[/yellow]"
+                        f"运行 [bold]mcp-hub update[/bold] 查看详情[/yellow]"
                     )
             except Exception:
                 pass  # 网络错误不阻塞 status

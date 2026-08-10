@@ -74,7 +74,7 @@ def agent_config(
     config = {
         "mcpServers": {
             "mcp-hub": {
-                "command": "mcp",
+                "command": "mcp-hub",
                 "args": ["serve"],
                 "env": {
                     REPORT_URL_ENV: hub_url.rstrip("/"),

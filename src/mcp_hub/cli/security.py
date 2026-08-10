@@ -188,10 +188,12 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
                 console.print(score_table)
 
         else:
-            console.print("[yellow]用法: mcp security <server> | mcp security --all[/yellow]")
-            console.print("  mcp security @anthropic/web-search    扫描指定 Server")
-            console.print("  mcp security --all                   扫描全部 Server")
-            console.print("  mcp security @anthropic/web-search -v 显示详情")
+            console.print(
+                "[yellow]用法: mcp-hub security <server> | mcp-hub security --all[/yellow]"
+            )
+            console.print("  mcp-hub security @anthropic/web-search    扫描指定 Server")
+            console.print("  mcp-hub security --all                   扫描全部 Server")
+            console.print("  mcp-hub security @anthropic/web-search -v 显示详情")
 
     asyncio.run(_run())
 

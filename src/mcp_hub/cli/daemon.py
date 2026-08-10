@@ -160,7 +160,7 @@ def serve():
 
     工作方式:
       在 Agent 的 mcp.json 中添加:
-        {"mcpServers": {"mcp-hub": {"command": "mcp", "args": ["serve"]}}}
+        {"mcpServers": {"mcp-hub": {"command": "mcp-hub", "args": ["serve"]}}}
 
       Agent 启动时会自动通过 stdio 连接 Hub Gateway，
       Gateway 将所有已安装且已启用的 Server 的工具聚合暴露给 Agent。
@@ -168,7 +168,7 @@ def serve():
       每次 tools/call 自动记录到 usage_stats 表，监控大屏可看到真实调用数据。
 
       远程上报（可选）：
-        在 Hub 监控页创建设备后运行 `mcp agent setup`，
+        在 Hub 监控页创建设备后运行 `mcp-hub agent setup`，
         Gateway 会使用设备遥测令牌可靠上报脱敏指标。
     """
     from mcp_hub.core.mcp_gateway import McpGateway

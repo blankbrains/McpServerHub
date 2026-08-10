@@ -70,7 +70,7 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
                 f"   版本: {server_data.get('latest_version', server_data.get('version', '?'))}"
             )
             console.print(f"   类型: {server_data.get('install_type', '?')}")
-            console.print(f"[dim]   运行 mcp install {sid} 来安装[/dim]")
+            console.print(f"[dim]   运行 mcp-hub install {sid} 来安装[/dim]")
             return {"server_id": sid, "success": True, "dry_run": True}
 
         # ── 执行安装 ──
@@ -160,7 +160,9 @@ def list_servers():
         servers = await registry.get_installed()
         if not servers:
             click.echo("📭 还没有安装任何 Server")
-            click.echo("   提示: 使用 mcp search 搜索，然后 mcp install <server> 安装")
+            click.echo(
+                "   提示: 使用 mcp-hub search 搜索，然后 mcp-hub install <server> 安装"
+            )
             return
 
         click.echo(f"\n📦 已安装 {len(servers)} 个 Server:\n")

@@ -46,6 +46,7 @@ def test_json_agent_migration_backs_up_and_retains_unsupported_entries(tmp_path)
     assert migrated["theme"] == "dark"
     assert set(migrated["mcpServers"]) == {"remote", "mcp-hub"}
     assert migrated["mcpServers"]["remote"]["url"] == "https://example.test/mcp"
+    assert migrated["mcpServers"]["mcp-hub"]["command"] == "mcp-hub"
     assert migrated["mcpServers"]["mcp-hub"]["env"]["MCP_HUB_GATEWAY_CONFIG"] == str(
         gateway_path
     )
@@ -86,6 +87,7 @@ WEATHER_API_KEY = "secret"
         migrated = tomllib.load(file)
     assert migrated["model"] == "gpt-5"
     assert set(migrated["mcp_servers"]) == {"mcp-hub"}
+    assert migrated["mcp_servers"]["mcp-hub"]["command"] == "mcp-hub"
     assert migrated["mcp_servers"]["mcp-hub"]["args"] == ["serve"]
 
 
@@ -115,6 +117,27 @@ def test_agent_setup_requires_confirmation_and_leaves_source_unchanged(tmp_path)
     assert result.exit_code == 0
     assert "已取消" in result.output
     assert source.read_text(encoding="utf-8") == original
+
+
+def test_agent_config_uses_unique_mcp_hub_command(tmp_path) -> None:
+    result = CliRunner().invoke(
+        agent,
+        [
+            "config",
+            "--agent",
+            "cursor",
+            "--hub-url",
+            "https://hub.example.test",
+            "--telemetry-token",
+            "mcpht_test",
+            "--state-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    config = json.loads(result.output)
+    assert config["mcpServers"]["mcp-hub"]["command"] == "mcp-hub"
 
 
 def test_agent_setup_writes_gateway_and_replaces_direct_entries(tmp_path) -> None:

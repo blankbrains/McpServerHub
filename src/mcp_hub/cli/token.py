@@ -42,11 +42,11 @@ def analyze(
     并提供优化建议。
 
     用法:
-      mcp analyze @anthropic/web-search    分析指定 Server
-      mcp analyze --all                    分析全部 Server
-      mcp analyze @anthropic/web-search -v  显示每个工具的明细
-      mcp analyze @anthropic/web-search --json  输出 JSON
-      mcp analyze @anthropic/web-search --deep  尝试连接实时 Server
+      mcp-hub analyze @anthropic/web-search    分析指定 Server
+      mcp-hub analyze --all                    分析全部 Server
+      mcp-hub analyze @anthropic/web-search -v  显示每个工具的明细
+      mcp-hub analyze @anthropic/web-search --json  输出 JSON
+      mcp-hub analyze @anthropic/web-search --deep  尝试连接实时 Server
     """
 
     async def _run():
@@ -143,10 +143,12 @@ def analyze(
             console.print(format_report(report, verbose=verbose))
 
         else:
-            console.print("[yellow]用法: mcp analyze <server> | mcp analyze --all[/yellow]")
-            console.print("  mcp analyze @anthropic/web-search    分析指定 Server")
-            console.print("  mcp analyze --all                    分析全部 Server")
-            console.print("  mcp analyze @anthropic/web-search -v  显示工具明细")
+            console.print(
+                "[yellow]用法: mcp-hub analyze <server> | mcp-hub analyze --all[/yellow]"
+            )
+            console.print("  mcp-hub analyze @anthropic/web-search    分析指定 Server")
+            console.print("  mcp-hub analyze --all                    分析全部 Server")
+            console.print("  mcp-hub analyze @anthropic/web-search -v  显示工具明细")
 
     asyncio.run(_run())
 
@@ -169,8 +171,8 @@ def optimize(server_name: str, do_apply: bool):
     优化后平均可节省 30-70% 的工具定义 token。
 
     用法:
-      mcp optimize @anthropic/web-search       查看优化建议
-      mcp optimize --apply @anthropic/web-search  写入配置文件
+      mcp-hub optimize @anthropic/web-search       查看优化建议
+      mcp-hub optimize --apply @anthropic/web-search  写入配置文件
     """
 
     async def _run():

@@ -1,6 +1,6 @@
 [project]
 name = "mcp-hub-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP Server Hub — The missing platform for the MCP ecosystem: discover, install, manage, and publish MCP Servers"
 authors = [{ name = "McpServerHub", email = "mcp-hub@example.com" }]
 license = { text = "MIT" }
@@ -51,7 +51,7 @@ Documentation = "https://github.com/blankbrains/McpServerHub#readme"
 Source = "https://github.com/blankbrains/McpServerHub"
 
 [project.scripts]
-mcp = "mcp_hub.cli.app:cli"
+mcp-hub = "mcp_hub.cli.app:cli"
 
 [build-system]
 requires = ["hatchling"]

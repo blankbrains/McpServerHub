@@ -45,7 +45,7 @@ jobs:
       - name: Type check with mypy
         run: |
           pip install mypy
-          mypy src/mcp_hub/models/ --ignore-missing-imports || true
+          mypy src/mcp_hub/models/ --ignore-missing-imports
 
       - name: Test with pytest
         env:
@@ -58,6 +58,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/mcp_hub/web/package-lock.json
+
+      - name: Build and audit frontend
+        working-directory: src/mcp_hub/web
+        run: |
+          npm ci
+          npm audit --audit-level=high --registry=https://registry.npmjs.org
+          npm run build
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5

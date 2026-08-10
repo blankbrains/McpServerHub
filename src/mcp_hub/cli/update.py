@@ -43,9 +43,9 @@ def update(server_name: str | None, check: bool):
         console.print(table)
 
         if not check:
-            console.print("\n[yellow]运行 mcp update <server> 执行更新[/yellow]")
+            console.print("\n[yellow]运行 mcp-hub update <server> 执行更新[/yellow]")
             for u in updates:
-                console.print(f"  mcp update {u['server_id'].split('/')[-1]}")
+                console.print(f"  mcp-hub update {u['server_id'].split('/')[-1]}")
 
     asyncio.run(_run())
 
