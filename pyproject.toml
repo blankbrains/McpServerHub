@@ -61,9 +61,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_hub"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/mcp_hub/web/static" = "mcp_hub/web/static"
+artifacts = ["src/mcp_hub/web/static"]
 
 [tool.hatch.build.targets.sdist]
 artifacts = ["src/mcp_hub/web/static"]
