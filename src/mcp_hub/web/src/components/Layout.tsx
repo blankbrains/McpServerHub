@@ -122,6 +122,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         path: '/' + pathParts.slice(0, i + 1).join('/'),
       }))]
     : [{ label: '仪表盘', path: '/' }]
+  const sidebarCollapsed = collapsed && !sidebarOpen
 
   const sidebar = (
     <>
@@ -132,7 +133,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <circle cx="32" cy="32" r="30" fill="url(#ls)"/>
           <text x="32" y="36" textAnchor="middle" fill="white" fontSize="26" fontWeight="800" fontFamily="system-ui,sans-serif">M</text>
         </svg>
-        {!collapsed && <span className="font-bold text-lg text-gray-900 dark:text-white whitespace-nowrap">MCP Hub</span>}
+        {!sidebarCollapsed && <span className="font-bold text-lg text-gray-900 dark:text-white whitespace-nowrap">MCP Hub</span>}
       </Link>
 
       {/* Search */}
@@ -141,7 +142,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <input
             type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
-            placeholder={collapsed ? '' : '搜索 Server...'}
+            placeholder={sidebarCollapsed ? '' : '搜索 Server...'}
             className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-blue-400 outline-none"
           />
           {searchOpen && searchResults.length > 0 && (
@@ -163,14 +164,14 @@ export default function Layout({ children }: { children: ReactNode }) {
         {navItems.map((item) => {
           const active = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'))
           return (
-            <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined}
+            <Link key={item.path} to={item.path} title={sidebarCollapsed ? item.label : undefined}
               className={`flex items-center gap-2.5 mx-2 mb-0.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 active ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
               aria-current={active ? 'page' : undefined}>
               <span className="text-base flex-shrink-0 w-5 text-center">{item.icon}</span>
-              {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+              {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
             </Link>
           )
         })}
@@ -186,7 +187,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             </span>
           )}
         </span>
-        {!collapsed && <span className="whitespace-nowrap text-xs">通知{unreadNotif > 0 ? ` (${unreadNotif})` : ''}</span>}
+        {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">通知{unreadNotif > 0 ? ` (${unreadNotif})` : ''}</span>}
       </Link>
 
       {/* 底部工具栏 */}
@@ -197,7 +198,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           {dark ? '☀️' : '🌙'}
         </button>
         <button onClick={() => setCollapsed(!collapsed)}
-          className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          className="hidden flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors md:block"
           title={collapsed ? '展开菜单' : '收起菜单'}>
           {collapsed ? '▶' : '◀'}
         </button>
@@ -206,8 +207,8 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Auth */}
       <div className="border-t border-gray-100 dark:border-gray-700 px-3 py-3">
         {auth.userId ? (
-          <div className={collapsed ? 'text-center' : ''}>
-            {collapsed ? (
+          <div className={sidebarCollapsed ? 'text-center' : ''}>
+            {sidebarCollapsed ? (
               <span className="text-sm" title={auth.userId}>👤</span>
             ) : (
               <div className="flex items-center justify-between">
@@ -221,9 +222,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         ) : (
           <button onClick={handleLogin}
             className={`flex items-center gap-1.5 rounded-lg text-sm font-medium bg-gray-900 dark:bg-white dark:text-gray-900 text-white hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors ${
-              collapsed ? 'justify-center w-8 h-8 mx-auto p-0' : 'w-full px-3 py-1.5'}`} title="登录 GitHub">
+              sidebarCollapsed ? 'justify-center w-8 h-8 mx-auto p-0' : 'w-full px-3 py-1.5'}`} title="登录 GitHub">
             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            {!collapsed && <span className="whitespace-nowrap">登录 GitHub</span>}
+            {!sidebarCollapsed && <span className="whitespace-nowrap">登录 GitHub</span>}
           </button>
         )}
       </div>
@@ -242,7 +243,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <aside className={`flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 z-50
           ${sidebarOpen ? 'fixed inset-y-0 left-0' : 'hidden'}
           md:relative md:flex
-          ${collapsed ? 'w-16' : 'w-52'}`}>
+          ${sidebarCollapsed ? 'w-16' : 'w-52'}`}>
           {/* 移动端关闭按钮 */}
           <button onClick={() => setSidebarOpen(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg">✕</button>
           {sidebar}
