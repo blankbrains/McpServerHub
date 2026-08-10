@@ -20,6 +20,24 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from mcp_hub.db import database as database_module
+
+# CLI tests use asyncio.run(), while pytest-asyncio owns a separate loop. PostgreSQL
+# connections must not be pooled across those loops.
+if not database_module.DATABASE_URL.startswith("sqlite"):
+    database_module.engine = create_async_engine(
+        database_module.DATABASE_URL,
+        echo=False,
+        poolclass=NullPool,
+    )
+    database_module.async_session_factory = async_sessionmaker(
+        database_module.engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
 
 
 @pytest.fixture

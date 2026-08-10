@@ -178,27 +178,52 @@ class TestTimeWindows:
 # ── 集成测试（需要数据库） ─────────────────────────────────
 
 
-@pytest.fixture
-def event_loop():
-    """为 async fixture 提供事件循环。"""
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
+_MONITOR_TEST_SERVER_IDS = (
+    "@test/concurrent",
+    "@test/error-test",
+    "@test/health-status",
+    "@test/integration-test-server",
+    "@test/multi-type",
+    "@test/never-existed",
+    "@test/no-data",
+    "@test/no-rtt",
+    "@test/record-err",
+    "@test/record-ok",
+    "@test/reliability-test",
+    "@test/special-chars-测试-日本語",
+    "@test/srv",
+    "@test/truncate",
+    "@test/window-filter",
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
 async def _db_tables():
-    """一次性创建所有数据库表（模块级）。"""
-    from mcp_hub.db.database import Base, engine
+    """创建数据库表和满足 health_logs 外键约束的测试 Server。"""
+    from sqlalchemy import select
 
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception:
-        pass
+    from mcp_hub.db.database import Base, async_session_factory, engine
+    from mcp_hub.db.models import ServerModel
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with async_session_factory() as session:
+        existing = set(
+            (
+                await session.execute(
+                    select(ServerModel.id).where(
+                        ServerModel.id.in_(_MONITOR_TEST_SERVER_IDS)
+                    )
+                )
+            ).scalars()
+        )
+        session.add_all(
+            ServerModel(id=server_id, name=server_id)
+            for server_id in _MONITOR_TEST_SERVER_IDS
+            if server_id not in existing
+        )
+        await session.commit()
 
 
 class TestMonitorIntegration:
