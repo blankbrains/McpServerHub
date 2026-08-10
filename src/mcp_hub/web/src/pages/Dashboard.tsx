@@ -459,20 +459,20 @@ export default function Dashboard() {
 
       {/* Log Viewer + Search */}
       <section>
-        <div className="flex items-center justify-between mb-4 gap-4">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-gray-900 flex-shrink-0">📋 日志</h2>
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center sm:justify-end">
             <select
               value={selectedLog}
               onChange={(e) => setSelectedLog(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white"
+              className="w-full min-w-0 border border-gray-300 bg-white px-3 py-1.5 text-sm sm:max-w-xs sm:flex-1"
             >
               <option value="">选择 Server...</option>
               {installed.map((s) => (
                 <option key={s.id} value={s.id}>{s.id}</option>
               ))}
             </select>
-            <form className="flex gap-1.5" onSubmit={async (e) => {
+            <form className="flex w-full min-w-0 gap-1.5 sm:w-auto" onSubmit={async (e) => {
               e.preventDefault()
               if (!logSearchQuery.trim()) return
               setLogSearching(true); setLogResults([])
@@ -488,10 +488,10 @@ export default function Dashboard() {
               <input
                 type="text" value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)}
                 placeholder="搜索 error、timeout..."
-                className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs w-36 focus:ring-1 focus:ring-blue-400 outline-none"
+                className="min-w-0 flex-1 border border-gray-300 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-400 sm:w-36 sm:flex-none"
               />
               <button type="submit" disabled={logSearching}
-                className="px-2 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200 disabled:opacity-50">
+                className="shrink-0 bg-gray-100 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-50">
                 {logSearching ? '搜索中...' : '搜索'}
               </button>
             </form>
