@@ -616,7 +616,7 @@ class McpGateway:
             response = await self._process_request(request)
             if response is not None:
                 stdout_w.write((json.dumps(response, ensure_ascii=False) + "\n").encode())
-                await stdout_w.drain()
+                stdout_w.flush()
 
     def _handle_notification(self, request: dict) -> None:
         """处理 JSON-RPC 通知（无需响应）。"""

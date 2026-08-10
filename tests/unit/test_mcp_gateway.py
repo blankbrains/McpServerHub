@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import io
+import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+from click.testing import CliRunner
+
+from mcp_hub.cli.daemon import serve
+from mcp_hub.core import mcp_gateway
 from mcp_hub.core.gateway_config import GatewayServerSpec
 from mcp_hub.core.mcp_gateway import ManagedMCP, McpGateway
 
@@ -145,3 +152,61 @@ async def test_gateway_routes_resource_and_prompt_requests_to_original_values(
     )
     assert reporter.record.await_args_list[0].kwargs["operation"] == "resources/read"
     assert reporter.record.await_args_list[1].kwargs["operation"] == "prompts/get"
+
+
+async def test_stdio_gateway_flushes_multiple_protocol_responses(monkeypatch) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}},
+    ]
+    input_buffer = io.BytesIO(
+        b"".join(
+            (json.dumps(request) + "\n").encode("utf-8")
+            for request in requests
+        )
+    )
+    output_buffer = io.BytesIO()
+    monkeypatch.setattr(
+        mcp_gateway.sys,
+        "stdin",
+        SimpleNamespace(buffer=input_buffer),
+    )
+    monkeypatch.setattr(
+        mcp_gateway.sys,
+        "stdout",
+        SimpleNamespace(buffer=output_buffer),
+    )
+
+    await McpGateway().handle_stdio()
+
+    responses = [
+        json.loads(line)
+        for line in output_buffer.getvalue().decode("utf-8").splitlines()
+    ]
+    assert [response["id"] for response in responses] == [1, 2]
+    assert responses[0]["result"]["serverInfo"]["name"] == "mcp-hub-gateway"
+    assert responses[1]["result"] == {}
+
+
+def test_serve_keeps_diagnostics_out_of_protocol_stdout(monkeypatch) -> None:
+    class FakeGateway:
+        async def start_all_managed(self) -> list[str]:
+            mcp_gateway.logger.info("gateway.test_diagnostic")
+            return []
+
+        async def handle_stdio(self) -> None:
+            return None
+
+        async def shutdown(self) -> None:
+            return None
+
+    monkeypatch.setattr(mcp_gateway, "McpGateway", FakeGateway)
+
+    result = CliRunner().invoke(serve)
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert "MCP Hub Gateway" in result.stderr
+    assert "gateway.test_diagnostic" in result.stderr

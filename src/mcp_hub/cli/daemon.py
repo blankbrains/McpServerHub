@@ -171,27 +171,34 @@ def serve():
         在 Hub 监控页创建设备后运行 `mcp-hub agent setup`，
         Gateway 会使用设备遥测令牌可靠上报脱敏指标。
     """
+    from mcp_hub.logging_config import configure_logging
+
+    configure_logging()
+
     from mcp_hub.core.mcp_gateway import McpGateway
 
-    click.echo("🔌 MCP Hub Gateway 启动中...")
+    click.echo("🔌 MCP Hub Gateway 启动中...", err=True)
 
     async def _run():
         gateway = McpGateway()
         started = await gateway.start_all_managed()
         if started:
-            click.echo(f"   ✅ 已连接 {len(started)} 个 MCP Server:")
+            click.echo(f"   ✅ 已连接 {len(started)} 个 MCP Server:", err=True)
             for s in started:
-                click.echo(f"      - {s}")
+                click.echo(f"      - {s}", err=True)
         else:
-            click.echo("   ⚠️  没有可用的 MCP Server（检查是否已安装且已启用）")
+            click.echo(
+                "   ⚠️  没有可用的 MCP Server（检查是否已安装且已启用）",
+                err=True,
+            )
 
-        click.echo("   📊 调用数据将自动记录到监控大屏")
-        click.echo("   ⏳ 等待 Agent 连接...（按 Ctrl+C 退出）")
+        click.echo("   📊 调用数据将自动记录到监控大屏", err=True)
+        click.echo("   ⏳ 等待 Agent 连接...（按 Ctrl+C 退出）", err=True)
 
         try:
             await gateway.handle_stdio()
         except KeyboardInterrupt:
-            click.echo("\n   正在关闭...")
+            click.echo("\n   正在关闭...", err=True)
         finally:
             await gateway.shutdown()
 

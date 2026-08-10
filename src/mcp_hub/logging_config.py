@@ -65,7 +65,7 @@ def configure_logging(
         foreign_pre_chain=shared_processors,
     )
 
-    handler = logging.StreamHandler()
+    handler = logging.StreamHandler(stream=sys.stderr)
     handler.setFormatter(formatter)
 
     root_logger = logging.getLogger()
