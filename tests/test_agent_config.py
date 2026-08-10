@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 
-import tomllib
 from click.testing import CliRunner
 
 from mcp_hub.cli.agent import agent
 from mcp_hub.core.agent_config import apply_agent_migration, prepare_agent_migration
 from mcp_hub.core.gateway_config import load_gateway_config, write_gateway_config
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
 
 
 def test_json_agent_migration_backs_up_and_migrates_remote_entries(tmp_path) -> None:
