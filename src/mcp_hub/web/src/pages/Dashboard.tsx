@@ -168,7 +168,7 @@ export default function Dashboard() {
               tone="blue"
             />
             <Stat
-              label="7 天 Token"
+              label="7 天估算 Token"
               value={fmtNum(telemetry?.total_tokens || 0)}
               description="根据 MCP 请求和响应载荷估算，不等同于模型供应商账单。"
               to="/monitor"
@@ -198,7 +198,7 @@ export default function Dashboard() {
                           <span>{fmtNum(server.call_count_7d)} 次</span>
                         </InfoTooltip>
                         <InfoTooltip description="根据 MCP 调用载荷估算的 Token。">
-                          <span>{fmtNum(server.token_consumption)} Token</span>
+                          <span>{fmtNum(server.token_consumption)} 估算 Token</span>
                         </InfoTooltip>
                       </div>
                     </div>

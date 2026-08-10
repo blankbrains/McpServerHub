@@ -229,7 +229,7 @@ export default function Market() {
                     <button
                       onClick={async (e) => {
                         e.preventDefault()
-                        if (!window.confirm(`从配置中移除 "${s.id}"？`)) return
+                        if (!window.confirm(`停止追踪 "${s.id}"？这不会卸载或停止本地 Server。`)) return
                         if (!isAuthenticated) {
                           setMessage('请先登录后管理自己的 Server')
                           return
@@ -244,16 +244,16 @@ export default function Market() {
                             next.delete(s.id)
                             return next
                           })
-                          setMessage(`✅ 已从配置中移除 ${s.id}`)
+                          setMessage(`✅ 已停止追踪 ${s.id}`)
                         } catch {
                           setMessage(`移除 ${s.id} 失败，请稍后重试`)
                         }
                         setTimeout(() => setMessage(''), 3000)
                       }}
                       className="px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700 transition-colors"
-                      aria-label={`从我的配置中移除 ${s.id}`}
+                      aria-label={`停止追踪 ${s.id}`}
                     >
-                      ✓ 已添加
+                      ✓ 已追踪
                     </button>
                   ) : (
                     <button
@@ -281,16 +281,16 @@ export default function Market() {
                           })
                           localStorage.setItem('mcp_hub_my_servers', JSON.stringify(next))
                           setAddedServers(prev => new Set([...prev, s.id]))
-                          setMessage(`✅ 已添加 ${s.id} 到我的配置`)
+                          setMessage(`✅ 已将 ${s.id} 加入追踪列表`)
                         } catch {
                           setMessage(`添加 ${s.id} 失败，请稍后重试`)
                         }
                         setTimeout(() => setMessage(''), 3000)
                       }}
                       className="px-2 py-1 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      aria-label={`添加 ${s.id} 到我的配置`}
+                      aria-label={`将 ${s.id} 加入追踪列表`}
                     >
-                      + 添加
+                      + 追踪
                     </button>
                   )}
                 </div>

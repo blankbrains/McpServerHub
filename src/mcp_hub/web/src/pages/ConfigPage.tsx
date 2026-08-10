@@ -91,7 +91,7 @@ export default function ConfigPage() {
       setPendingFile(null)
       setTrackingDecision('uploaded')
       localStorage.setItem('mcp_hub_upload_result', JSON.stringify(result))
-      setMessage('✅ 已保存到我的 Server。配置状态和服务端监控数据现可在监控页查看。')
+      setMessage('✅ 已保存到我的 Server。完成本地 Gateway 接入后，监控页会显示真实运行与调用数据。')
     } catch {
       setMessage('❌ 操作失败')
     }
@@ -165,7 +165,7 @@ export default function ConfigPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">⚙️ 配置中心</h1>
-      <p className="text-gray-500 text-sm">选择配置文件 → 检查市场匹配 → 确认追踪 → 下载 Agent 配置 → 按需配置本地遥测</p>
+      <p className="text-gray-500 text-sm">选择配置文件 → 检查市场匹配 → 确认追踪 → 创建设备 → 接入本地 Gateway</p>
 
       {/* ── 步骤 1：上传配置 ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -298,9 +298,9 @@ export default function ConfigPage() {
 
       {/* ── 步骤 3：选择 Agent 工具 ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">🎯 步骤 3：选择你的 AI Agent 工具</h2>
+        <h2 className="font-semibold text-gray-900 mb-1">🎯 步骤 3：选择你的 AI Agent</h2>
         <p className="text-sm text-gray-500 mb-4">
-          选择你正在使用的 AI Agent 工具。下载的配置只包含你个人追踪的 Server，并使用该 Agent 对应的配置根键与命令参数格式。
+          选择你正在使用的 Agent。推荐继续执行步骤 4 接入 Gateway；下方原生配置仅用于不需要监控的直接连接。
         </p>
         <div className="flex gap-2 mb-4 flex-wrap">
           {AGENTS.map(a => (
@@ -313,24 +313,26 @@ export default function ConfigPage() {
           ))}
         </div>
 
-        {/* 下载配置文件 */}
+        {/* 导出不含监控的原生配置 */}
         <div className="bg-gray-50 rounded-lg p-4">
           <p className="text-sm font-medium text-gray-700 mb-2">
-            📥 下载「{agent?.name || 'Claude Code'}」格式的配置文件
+            📥 导出「{agent?.name || 'Claude Code'}」原生直连配置
           </p>
           <p className="text-xs text-gray-500 mb-3">
-            下载后替换到 <code className="px-1 bg-gray-200 rounded text-xs">{agent?.path || '~/.claude.json'}</code>，重启 Agent 即可生效
+            此文件会让 Agent 直接连接 Server，不经过 Gateway，因此不会产生 Hub 调用监控数据。合并到
+            <code className="mx-1 px-1 bg-gray-200 rounded text-xs">{agent?.path || '~/.claude.json'}</code>
+            前请先备份现有配置。
           </p>
           <button onClick={handleDownload} disabled={downloading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {downloading ? '⏳ 生成中...' : `📥 下载配置文件`}
+            {downloading ? '⏳ 生成中...' : '📥 导出原生配置'}
           </button>
         </div>
       </div>
 
       {/* ── 步骤 4：启用监控 ── */}
       <div className="bg-white rounded-xl border border-green-200 bg-green-50 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：配置本地 <InfoTooltip description="遥测是在不上传原始请求或响应内容的前提下，记录调用次数、延迟、错误和估算 Token 等运行指标。">遥测</InfoTooltip>（可选）</h2>
+        <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：接入本地 <InfoTooltip description="Gateway 在本机代理 Agent 与 MCP Server 的通信，并上报不含原始请求和响应内容的运行指标。">Gateway</InfoTooltip>（监控必需）</h2>
         <p className="text-sm text-gray-600 mb-4">
           追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应 <InfoTooltip description="设备令牌只用于本地 Gateway 上报指标，服务端会将它绑定到创建时选择的 Agent 类型。">设备令牌</InfoTooltip> 配置到本地 <InfoTooltip description="Gateway 是连接本地 Agent 与 MCP Server 的转发程序，负责在调用时采集最小化指标。">Gateway</InfoTooltip>；调用、延迟和 Token 统计才会上报且会按 Agent 隔离。
         </p>
@@ -375,7 +377,7 @@ export default function ConfigPage() {
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
           复制自检命令
           </button>
-          <button onClick={() => navigate('/local-discovery')}
+          <button onClick={() => navigate('/local')}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors disabled:opacity-50">
           查看设备清单
           </button>

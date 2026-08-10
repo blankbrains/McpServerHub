@@ -47,7 +47,7 @@ const STEPS = [
     num: 5,
     title: '选择你的 AI Agent 工具',
     icon: '🎯',
-    description: '选择你正在使用的 AI Agent（Claude Code / Cursor / Codex / Trae 等），Hub 会为该 Agent 生成匹配的配置文件格式，确保 MCP 调用能正确路由。',
+    description: '选择你正在使用的 AI Agent（Claude Code / Cursor / Codex / Trae 等）。原生配置用于直接连接；需要监控时请继续接入本地 Gateway。',
   },
   {
     num: 6,
@@ -71,7 +71,7 @@ const STEPS = [
     num: 8,
     title: '查看监控数据',
     icon: '📈',
-    description: '配置完成后，在 Hub 的监控大屏中可以实时查看所有 MCP Server 的运行状态和调用数据。',
+    description: '配置完成并产生调用后，在监控页查看当前账户设备上报的运行状态、调用、延迟、错误和估算 Token。',
     action: { text: '前往监控大屏 →', to: '/monitor' },
     subActions: [
       { text: '查看我的 Server →', to: '/my-servers' },
@@ -191,8 +191,8 @@ export default function Guide() {
           <div>
             <p className="font-medium text-gray-800">Q: 上传配置后，Hub 能直接看到我本地的 MCP 调用吗？</p>
             <p className="text-gray-600 mt-0.5">
-              A: 默认不能。你需要将 Hub 网关配置添加到本地 Agent 的 MCP 配置文件中。
-              Hub 网关会作为中间人代理所有 MCP 调用，并自动记录调用数据到监控大屏。
+              A: 默认不能。你需要在监控页创建设备并运行 agent setup，让本地 Gateway 代理 Agent 与 MCP Server 的通信。
+              Agent 直接连接 Server 的调用不会经过 Hub，也不会出现在监控页。
             </p>
           </div>
           <div>
@@ -203,10 +203,10 @@ export default function Guide() {
             </p>
           </div>
           <div>
-            <p className="font-medium text-gray-800">Q: 我可以随时取消上传吗？</p>
+            <p className="font-medium text-gray-800">Q: 我可以随时停止追踪吗？</p>
             <p className="text-gray-600 mt-0.5">
               A: 是的。你可以在「我的 Server」或「配置」页面随时移除任何已追踪的 Server，
-              也可以在配置页面点击「取消上传」来停止所有追踪。
+              也可以停止整份追踪列表；这些操作不会卸载或停止本地进程。
             </p>
           </div>
           <div>

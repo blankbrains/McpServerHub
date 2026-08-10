@@ -15,7 +15,7 @@
 ---
 
 <p align="center">
-  <b>983+ 个 MCP Server</b> · <b>多 Agent 配置迁移</b> · <b>本地 Gateway</b> · <b>脱敏遥测</b><br>
+  <b>动态 MCP Server 市场</b> · <b>多 Agent 配置迁移</b> · <b>本地 Gateway</b> · <b>脱敏遥测</b><br>
   搜索 → 配置 → 本地代理 → 运行监控。
 </p>
 
@@ -25,17 +25,17 @@
 
 ## 🤔 痛点
 
-MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有主流 AI 平台采用。但用户体验还停留在 2015 年：
+MCP（Model Context Protocol）生态持续增长，但 Server 的发现、配置、运行状态和调用成本仍分散在不同工具中：
 
 ```
 👎 找 Server      → GitHub 盲搜，没有评分，没法对比
-👎 安装           → 手动看 README → pip install → 手写 JSON 配置
-👎 管理           → 没有统一进程管理器，没有健康检查
-👎 监控           → 挂了不知道，日志散落各处
+👎 配置           → 手动看 README → 安装依赖 → 手写 JSON/TOML
+👎 管理           → 多个 Agent 各自维护配置，变更难以同步
+👎 监控           → 直接连接无法统一统计调用、延迟、错误和估算 Token
 👎 发布           → 没有注册中心，没有发现机制，没有社区
 ```
 
-**MCP Server Hub 解决了所有问题。**
+**MCP Server Hub 将市场、个人配置、本地 Gateway 和脱敏遥测放进同一套工作流。**
 
 ---
 
@@ -43,25 +43,28 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 
 | 模式 | 适用场景 | 门槛 |
 |------|---------|:--:|
-| **SaaS（推荐）** | 搜索/对比/追踪 Server，本地 Gateway 代理与脱敏监控 | 浏览器 + 本地 CLI |
+| **中心 Hub + 本地 Gateway（推荐）** | 搜索/对比/追踪 Server，本地代理与脱敏监控 | 浏览器 + 本地 CLI |
 | **自托管** | 管理员在可信服务器上集中运行 MCP Server 进程 | 需服务器并显式开启进程管理 |
 
-**SaaS 用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp-hub agent setup` → 重启 Agent → 查看监控
+**推荐用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp-hub agent setup` → 重启 Agent → 查看监控
+
 **自托管管理员流程**：部署 Hub → 设置 `MCP_HUB_ALLOW_SERVER_PROCESS_MANAGEMENT=true` → 由管理员集中管理 Hub 主机进程
+
+> Agent 直接连接 MCP Server 时，Hub 无法观察调用。只有经过本地 Gateway 的请求才会产生个人监控数据。
 
 ---
 
 ## ✨ 功能一览
 
 ### 🏪 市场发现
-- **搜索 & 浏览**：983+ Server，16 分类，9 维筛选（名称/分类/标签/作者/语言/安装方式/安全等级/追踪状态/排序）
+- **搜索 & 浏览**：动态市场目录、16 分类和多维筛选（名称/分类/标签/作者/语言/安装方式/安全等级/追踪状态/排序）
 - **Server 对比**：选择 2-4 个 Server 并排对比（评分/安全/下载/可靠性/许可证）
 - **智能推荐**：同类推荐（看了还看了）+ 个性化推荐（基于你的偏好）
 - **收藏 & 评价**：收藏 Server、评分评价、回复讨论
 
 ### ⚡ 配置管理
 - **上传配置**：上传本地 `claude_desktop_config.json`，自动匹配市场 Server
-- **上传/取消**：明确选择是否将配置上传到 Hub 进行监控追踪
+- **确认追踪**：配置检查不会写入账户；用户确认后才更新个人追踪列表
 - **Agent 选择**：支持 Claude Code / Codex / Cursor / Windsurf / VS Code Copilot / Trae 和通用 MCP 客户端
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
@@ -77,7 +80,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 - **安全指示灯**：绿/黄/红/灰 四色标识安全等级
 
 ### 📊 监控 & 分析
-- **个人概览**：已追踪/已收藏/有更新/安全风险 四维统计
+- **个人概览**：已追踪/已收藏/有更新/安全风险四维统计
 - **监控大屏**：设备在线状态、真实调用次数、估算 Token、延迟、错误和本地资源采样
 - **多 Agent 遥测**：为 Claude Code、Claude Desktop、Codex 等客户端创建独立设备令牌，数据按 Agent 隔离
 - **调用性能**：调用量、成功率、平均/P95 延迟、输入输出估算 Token 与传输字节
@@ -87,7 +90,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 - **离线队列**：本地 SQLite 可靠队列，断网后自动重试
 - **本地发现**：设备主动上报 Server 名称、命令文件名、环境变量名称和配置指纹；不上传值或完整命令
 - **使用统计**：个人中心展示 30 日调用趋势（柱状图）、成功率、按 Server 分组的详情表
-- **Token 分析**：工具定义 Token 消耗分析 + 优化建议
+- **Token 分析**：工具定义 Token 估算与优化建议；调用 Token 是载荷估算值，不等同于模型供应商账单
 - **安全评分**：四维评分引擎（命令/包/发布者/代码模式），危险 Server 阻止安装
 
 ### 🔔 通知 & 体验
@@ -99,8 +102,8 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 
 ### 👤 个人中心
 - 用户信息卡片（头像/GitHub ID/角色/注册时间）
-- 使用统计（Server 数/调用数/Token/成功率）
-- 安装的 Server 列表 + 快捷入口
+- 使用统计（Server 数/调用数/估算 Token/成功率）
+- 已追踪 Server 列表 + 快捷入口
 
 ---
 
@@ -109,7 +112,7 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 ### 1. 安装
 
 ```bash
-pip install mcp-hub-cli
+python -m pip install "mcp-hub-cli==0.2.0"
 ```
 
 <details>
@@ -125,15 +128,17 @@ docker compose up -d
 ```
 </details>
 
-### 2. 零配置启动（30 秒上线）
+### 2. 本机快速启动
 
 ```bash
 mcp-hub quickstart
 ```
 
-自动使用 SQLite，无需安装 PostgreSQL。
+该命令使用 SQLite，并在用户配置目录生成本机配置。启动后打开 `http://localhost:3987`。
 
-### 3. 或完整初始化（PostgreSQL）
+GitHub 登录仍需要配置 OAuth Client ID、Client Secret 和回调地址；不登录时可以浏览市场和公开页面。
+
+### 3. 完整初始化（PostgreSQL）
 
 ```bash
 mcp-hub init
@@ -158,14 +163,17 @@ mcp-hub search database
 mcp-hub compare @modelcontextprotocol/server-postgres @modelcontextprotocol/server-sqlite
 ```
 
-### 📦 安装与运行
+### 📦 自托管进程管理
 
 ```bash
+# 仅适用于你自己部署且显式开启进程管理的 Hub
 mcp-hub install @modelcontextprotocol/server-filesystem
 mcp-hub start server-filesystem
 mcp-hub status
 mcp-hub logs server-filesystem -f
 ```
+
+普通中心 Hub 用户不通过网页远程启动自己电脑上的进程，而是在本地使用 Gateway 接入。
 
 ### 🔌 一键接入 Agent 与本地监控
 
@@ -204,7 +212,7 @@ mcp-hub agent status --agent codex
 mcp-hub agent doctor --agent codex
 ```
 
-每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和 Token。
+每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和估算 Token。
 
 > 浏览器不能直接扫描用户电脑。只有用户本地 CLI/Gateway 主动发现、代理和上报的数据才会出现在 SaaS Hub 中。
 
@@ -214,7 +222,7 @@ mcp-hub agent doctor --agent codex
 http://localhost:3987
 ```
 
-实时监控、日志查看、搜索、安装、管理 — 全部在浏览器中完成。
+浏览器负责市场、追踪配置和遥测分析；本地 Server 的启动、代理和配置迁移由 CLI/Gateway 完成。
 
 ---
 
@@ -244,13 +252,13 @@ http://localhost:3987
 
 ## 📊 项目状态
 
-**当前: v2.3** — SaaS + 自托管双模式，管理后台功能完整，生产环境运行中。
+**当前版本：0.2.0** — 中心 Hub + 本地 Gateway 为推荐架构，同时保留显式启用的自托管进程管理。
 
 | 模块 | 核心功能 |
 |------|---------|
 | 🏪 市场 | 搜索/浏览/对比/推荐/收藏/评价 |
-| 📦 我的 Server | 批量操作/重启/调用数据/更新提醒 |
-| ⚙️ 配置中心 | 上传匹配/Agent选择/配置下载/草稿 |
+| 📦 我的 Server | 追踪列表/同步开关/Gateway 状态/调用数据/更新提醒 |
+| ⚙️ 配置中心 | 上传匹配/确认追踪/原生配置导出/Gateway 同步/草稿 |
 | 📋 方案市场 | 发布方案/浏览/一键导入 |
 | 📊 监控大屏 | 调用趋势/P95 延迟/Token/字节/工具/协议/CPU/内存/错误分类 |
 | 👤 个人中心 | 资料/统计/趋势图 |

@@ -89,7 +89,7 @@ export default function AdminServerDetail() {
       </div>
 
       <div className="grid grid-cols-4 gap-3">
-        {[['安装用户', stats.install_count], ['7日调用', stats.calls_7d], ['7日Token', stats.tokens_7d >= 1000 ? `${(stats.tokens_7d/1000).toFixed(1)}K` : stats.tokens_7d], ['评分', `${server.rating?.toFixed(1) || '-'}⭐`]].map(([l, v]) => (
+        {[['追踪用户', stats.install_count], ['7日调用', stats.calls_7d], ['7日估算Token', stats.tokens_7d >= 1000 ? `${(stats.tokens_7d/1000).toFixed(1)}K` : stats.tokens_7d], ['评分', `${server.rating?.toFixed(1) || '-'}⭐`]].map(([l, v]) => (
           <div key={l as string} className="bg-white dark:bg-gray-800 rounded-xl border p-3 text-center">
             <p className="text-xl font-bold text-gray-900 dark:text-white">{v}</p><p className="text-xs text-gray-500">{l}</p>
           </div>
@@ -106,7 +106,7 @@ export default function AdminServerDetail() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border p-5">
-        <h3 className="font-semibold mb-3 text-gray-900 dark:text-white">👥 安装用户（{install_users.length}）</h3>
+        <h3 className="font-semibold mb-3 text-gray-900 dark:text-white">👥 追踪用户（{install_users.length}）</h3>
         <div className="space-y-1.5">
           {install_users.map((u: any) => (
             <div key={u.user_id} className="flex justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">

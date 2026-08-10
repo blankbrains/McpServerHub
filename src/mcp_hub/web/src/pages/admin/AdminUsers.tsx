@@ -46,7 +46,7 @@ export default function AdminUsers() {
           className="flex-1 min-w-[150px] px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
         <select value={sort} onChange={e => setSort(e.target.value)}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-          <option value="calls">按活跃度</option><option value="installs">按安装数</option><option value="created">按注册时间</option>
+          <option value="calls">按活跃度</option><option value="installs">按追踪数</option><option value="created">按注册时间</option>
         </select>
         <select value={role} onChange={e => { setRole(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">

@@ -1,7 +1,7 @@
 [project]
 name = "mcp-hub-cli"
 version = "0.2.0"
-description = "MCP Server Hub — The missing platform for the MCP ecosystem: discover, install, manage, and publish MCP Servers"
+description = "Discover, configure, proxy, monitor, and publish MCP Servers with a local Gateway"
 authors = [{ name = "McpServerHub", email = "mcp-hub@example.com" }]
 license = { text = "MIT" }
 readme = "README.md"

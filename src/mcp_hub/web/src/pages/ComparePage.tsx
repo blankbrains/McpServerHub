@@ -5,7 +5,7 @@ import InfoTooltip from '../components/InfoTooltip'
 
 const COMPARE_DIMENSIONS = [
   { key: 'rating', label: '评分', description: '用户评分的平均值，不代表安全审查或运行稳定性。', format: (v: any) => `${v} ⭐` },
-  { key: 'download_count', label: '下载量', description: '市场记录的累计下载或安装次数。', format: (v: any) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : String(v) },
+  { key: 'download_count', label: '采用次数', description: '市场记录的累计下载或加入个人配置次数。', format: (v: any) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : String(v) },
   { key: 'review_count', label: '评价数', description: '已提交到社区的评价数量。', format: (v: any) => String(v) },
   { key: 'security_level', label: '安全等级', description: 'Hub 基于发布信息和安全扫描给出的状态，不等同于对所有运行环境的绝对安全保证。', format: (v: any) => v },
   { key: 'license', label: '许可证', description: '该项目声明的使用、修改和分发许可条款。', format: (v: any) => v || '-' },

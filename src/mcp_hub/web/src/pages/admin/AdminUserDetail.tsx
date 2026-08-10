@@ -78,7 +78,7 @@ export default function AdminUserDetail() {
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
-        {[['Server', stats.server_count], ['总调用', stats.total_calls >= 1000 ? `${(stats.total_calls/1000).toFixed(1)}K` : stats.total_calls], ['总Token', stats.total_tokens >= 1000 ? `${(stats.total_tokens/1000).toFixed(1)}K` : stats.total_tokens], ['收藏', stats.favorite_count]].map(([l, v]) => (
+        {[['追踪 Server', stats.server_count], ['总调用', stats.total_calls >= 1000 ? `${(stats.total_calls/1000).toFixed(1)}K` : stats.total_calls], ['总估算 Token', stats.total_tokens >= 1000 ? `${(stats.total_tokens/1000).toFixed(1)}K` : stats.total_tokens], ['收藏', stats.favorite_count]].map(([l, v]) => (
           <div key={l as string} className="bg-white dark:bg-gray-800 rounded-xl border p-3 text-center">
             <p className="text-xl font-bold text-gray-900 dark:text-white">{v}</p>
             <p className="text-xs text-gray-500">{l}</p>
@@ -99,7 +99,7 @@ export default function AdminUserDetail() {
 
       {/* Servers */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">📦 安装的 Server（{servers.length}）</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">📦 已追踪 Server（{servers.length}）</h3>
         <div className="space-y-1.5">
           {servers.map((s: any) => (
             <div key={s.server_id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">

@@ -48,8 +48,6 @@ export default function ServerDetail() {
   const [copied, setCopied] = useState(false)
   const [isFavorited, setIsFavorited] = useState(false)
   const [installing, setInstalling] = useState(false)
-  const [configCopied, setConfigCopied] = useState(false)
-  const [generatedConfig, setGeneratedConfig] = useState('')
 
   // New feature states
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
@@ -140,20 +138,6 @@ export default function ServerDetail() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const fetchInstallConfig = async (agent: string) => {
-    if (!id) return
-    const sid = decodeURIComponent(id)
-    try {
-      const r = await apiGet<any>(
-        `/servers/${encodeURIComponent(sid)}/config?agent=${encodeURIComponent(agent)}`
-      )
-      setGeneratedConfig(JSON.stringify(r.data?.config_content || {}, null, 2))
-    } catch {
-      setGeneratedConfig('')
-      setMessage('生成配置失败，请稍后重试')
-    }
-  }
-
   if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
@@ -163,10 +147,10 @@ export default function ServerDetail() {
     try {
       const r = await installServer(server.id)
       if (!r.success) {
-        setMessage(`❌ 安装失败: ${r.message || r.data?.detail || '未知错误'}`)
+        setMessage(`❌ 追踪失败: ${r.message || r.data?.detail || '未知错误'}`)
         return
       }
-      setMessage(`✅ 已添加到配置！本地运行: ${r.data?.install_command || r.message || ''}`)
+      setMessage(`✅ 已加入追踪列表。本地安装命令: ${r.data?.install_command || r.message || '请查看项目文档'}`)
       setIsTracked(true)
       if (r.data?.configs) {
         const agentCfg = r.data.configs.find((c: any) =>
@@ -176,7 +160,7 @@ export default function ServerDetail() {
         setShowConfig(true)
       }
     } catch (e: any) {
-      setMessage(`安装失败: ${e.message || '未知错误'}`)
+      setMessage(`追踪失败: ${e.message || '未知错误'}`)
     } finally {
       setInstalling(false)
     }
@@ -323,12 +307,12 @@ export default function ServerDetail() {
           {!isTracked && (
             <button onClick={handleInstall} disabled={installing}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-              {installing ? '⏳ 添加中...' : '📥 添加到我的配置'}
+              {installing ? '⏳ 保存中...' : '＋ 加入追踪'}
             </button>
           )}
           {isTracked && (
             <span className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
-              已加入我的配置
+              已追踪
             </span>
           )}
           {isTracked && (
@@ -357,10 +341,13 @@ export default function ServerDetail() {
         )}
       </div>
 
-      {/* === 安装到本地（新增 SaaS 引导） === */}
+      {/* 原生本地安装命令 */}
       {(server as any).install_command && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-5 mb-6 border border-blue-200 dark:border-blue-800">
-          <h3 className="font-semibold text-lg mb-3">🚀 安装到你的本地 Agent</h3>
+          <h3 className="font-semibold text-lg mb-2">🚀 本地安装命令</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            此命令只负责在你的电脑准备 Server。需要监控时，还必须在监控页创建设备并完成 Gateway 接入。
+          </p>
 
           {/* 命令复制区 */}
           <div className="flex items-center gap-2 mb-4">
@@ -381,45 +368,8 @@ export default function ServerDetail() {
             </button>
           </div>
 
-          {/* Agent 选择器 + 配置预览 */}
-          <div className="text-sm text-gray-500 mb-2">选择你的 Agent 查看配置:</div>
-          <div className="flex gap-2 mb-3 flex-wrap">
-            {AGENTS.filter(agent => agent.id !== 'generic').map(agent => (
-              <button
-                key={agent.id}
-                onClick={() => { setSelectedAgent(agent.id); fetchInstallConfig(agent.id) }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedAgent === agent.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:border-blue-400'
-                }`}
-              >
-                {agent.name}
-              </button>
-            ))}
-          </div>
-
-          {/* 生成的配置预览 */}
-          {generatedConfig && (
-            <div className="relative">
-              <div className="text-xs text-gray-400 mb-1">mcp.json 配置片段:</div>
-              <pre className="bg-gray-900 text-gray-300 p-3 rounded-lg text-xs overflow-x-auto max-h-48">
-                {generatedConfig}
-              </pre>
-              <button
-                onClick={() => {
-                  navigator.clipboard?.writeText(generatedConfig).then(() => setConfigCopied(true)).catch(() => {})
-                  setTimeout(() => setConfigCopied(false), 2000)
-                }}
-                className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
-              >
-                {configCopied ? '✅' : '📋'}
-              </button>
-            </div>
-          )}
-
           <div className="text-xs text-gray-400 mt-3">
-            💡 复制命令后在终端运行，或复制配置到你的 Agent 的 mcp.json 文件中
+            执行第三方命令前，请先核对项目主页、依赖来源和所需权限。
           </div>
         </div>
       )}
@@ -462,7 +412,7 @@ export default function ServerDetail() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-xl">📊</span>
-            <h2 className="font-semibold text-gray-900">Token 消耗分析</h2>
+            <h2 className="font-semibold text-gray-900">工具定义 Token 估算</h2>
           </div>
           <div className="grid grid-cols-3 gap-4 mb-3">
             <div>
@@ -615,63 +565,19 @@ export default function ServerDetail() {
         </div>
       </div>
 
-      {/* SaaS: 本地使用 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-2xl">📋</span>
-          <h2 className="font-semibold text-gray-900">本地使用（无需部署）</h2>
-        </div>
-        <p className="text-sm text-gray-500 mb-3">
-          不想部署 MCP Hub？直接复制以下配置到你本地的 Agent 配置文件即可使用。
-        </p>
-        <div className="flex items-center gap-2 mb-3">
-          {['Claude Code', 'Cursor', 'Codex', 'Trae'].map((agent) => (
-            <button
-              key={agent}
-              onClick={() => { setSelectedAgent(agent.toLowerCase().replace(' ', '-')); fetchConfig(agent.toLowerCase().replace(' ', '-')) }}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                selectedAgent === agent.toLowerCase().replace(' ', '-')
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {agent}
-            </button>
-          ))}
-        </div>
-        {configData && (
-          <div className="space-y-2">
-            <p className="text-xs text-gray-400">
-              添加到 <code className="bg-gray-100 px-1 rounded">{configData.config_path}</code>
-            </p>
-            <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-              <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
-                {JSON.stringify(configData.config_content, null, 2)}
-              </pre>
-            </div>
-            <button
-              onClick={() => { navigator.clipboard.writeText(JSON.stringify(configData.config_content, null, 2)); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-              className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-            >
-              {copied ? '✅ 已复制!' : '📋 复制配置'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Multi-Agent Config */}
+      {/* Gateway monitoring boundary */}
       <div className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        添加到 Hub 只保存你的配置关系，不会在 Hub 服务器或你的电脑上远程安装和启动进程。
-        完成本地 Gateway 接入后，请在“我的 Server”或“监控”页面查看真实运行状态。
+        加入追踪只保存当前账户与 Server 的关系，不会远程安装或启动进程。Agent 直接连接 Server 时不会产生 Hub 监控数据；
+        需要监控请在“监控”页创建设备并运行 <code className="mx-1 font-mono text-xs">mcp-hub agent setup</code>。
       </div>
 
       {(
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">🔌 接入你本地的 Agent</h2>
+            <h2 className="font-semibold text-gray-900">🔌 原生直连配置（不含监控）</h2>
           </div>
           <p className="text-sm text-gray-500 mb-3">
-            选择你的 Agent 类型，复制配置到本地对应文件即可。
+            选择 Agent 后，将配置合并到本地对应文件。该方式绕过 Gateway，适合不需要统一调用监控的场景。
           </p>
 
           <div className="flex items-center gap-2 mb-4">
@@ -735,7 +641,7 @@ export default function ServerDetail() {
           <h2 className="font-semibold text-gray-900">工具测试台</h2>
         </div>
         <p className="text-sm text-gray-500 mb-3">
-          查看此 Server 暴露的 MCP 工具及其参数格式。如果 Server 正在 Hub 上运行，可直接测试。
+          查看标准 MCP 工具列表和调用格式。本页不会在 Hub 服务器上启动或直接调用此 Server。
         </p>
         <div className="bg-gray-900 rounded-lg p-4">
           <p className="text-green-400 text-xs font-mono mb-2"># 工具列表（JSON-RPC 2.0）</p>
@@ -761,7 +667,7 @@ export default function ServerDetail() {
               setTimeout(() => setMessage(''), 2000)
             }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-            📋 复制安装命令
+            📋 复制本地启动命令
           </button>
           <a
             href={(server.homepage && /^https?:\/\//i.test(server.homepage)) ? server.homepage : `https://github.com/search?q=${encodeURIComponent(server.id)}`}

@@ -44,7 +44,7 @@ export default function AdminOverview() {
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
         <Card label="总用户" value={fmtNum(stats.total_users)} color="blue" />
         <Card label="总 Server" value={fmtNum(stats.total_servers)} color="purple" />
-        <Card label="总安装" value={fmtNum(stats.total_installs)} color="green" />
+        <Card label="追踪关系" value={fmtNum(stats.total_installs)} color="green" />
         <Card label="总调用" value={fmtNum(stats.total_calls)} color="orange" />
         <Card label="总 Token" value={fmtNum(stats.total_tokens)} color="red" />
         <Card label="7日活跃" value={fmtNum(stats.active_users_7d)} color="indigo" />
@@ -76,7 +76,7 @@ export default function AdminOverview() {
               <Link key={s.id} to={`/admin/servers/${encodeURIComponent(s.id)}`}
                 className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
                 <span className="text-gray-700 dark:text-gray-300 truncate">{i + 1}. {s.name || s.id}</span>
-                <span className="text-xs text-gray-400 ml-2">📥 {s.installs} · 📞 {fmtNum(s.calls_7d)}</span>
+                <span className="text-xs text-gray-400 ml-2">追踪 {s.installs} · 调用 {fmtNum(s.calls_7d)}</span>
               </Link>
             ))}
           </div>

@@ -175,7 +175,7 @@ export default function ProfilePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon="📦" label="我的 Server" description="当前账户已追踪的 Server 数量。" value={String(servers.length)} color="blue" />
         <StatCard icon="📞" label="30 日调用" description="过去 30 天由已授权 Gateway 或遥测设备上报的工具调用总数。" value={fmtNum(totalCalls)} color="green" />
-        <StatCard icon="🔤" label="30 日 Token" description="过去 30 天按上报调用载荷估算的 Token 总数，不包含原始请求和响应内容。" value={fmtNum(totalTokens)} color="purple" />
+        <StatCard icon="🔤" label="30 日估算 Token" description="过去 30 天按上报调用载荷估算的 Token 总数，不包含原始请求和响应内容，也不等同于模型账单。" value={fmtNum(totalTokens)} color="purple" />
         <StatCard icon="✅" label="成功率" description="成功调用占已上报调用总数的比例；没有调用数据时显示为“-”。" value={successRate === null ? '-' : `${successRate}%`} color={successRate !== null && successRate >= 95 ? 'green' : 'yellow'} />
       </div>
 
@@ -189,7 +189,7 @@ export default function ProfilePage() {
 
       {!usageSummary?.stats?.length && (
         <p className="text-sm text-gray-500">
-          调用次数、Token 和成功率仅在已授权的本地网关或遥测设备上报真实调用后显示。
+          调用次数、估算 Token 和成功率仅在已授权的本地 Gateway 上报真实调用后显示。
         </p>
       )}
 
@@ -266,7 +266,7 @@ export default function ProfilePage() {
                 <tr className="text-left text-xs text-gray-400 border-b">
                   <th className="pb-2 font-medium">Server</th>
                   <th className="pb-2 font-medium text-right">调用次数</th>
-                  <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="按调用载荷估算的 Token 总数，不包含原始请求和响应内容。">Token 消耗</InfoTooltip></th>
+                  <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="按调用载荷估算的 Token 总数，不包含原始请求和响应内容，也不等同于模型账单。">估算 Token</InfoTooltip></th>
                   <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="从本地 Gateway 发起工具调用到收到结果的平均耗时。">平均耗时</InfoTooltip></th>
                   <th className="pb-2 font-medium text-right"><InfoTooltip side="below" description="状态为成功的调用占该 Server 已上报调用总数的比例。">成功率</InfoTooltip></th>
                 </tr>

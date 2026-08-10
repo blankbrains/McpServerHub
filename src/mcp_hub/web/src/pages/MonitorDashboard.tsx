@@ -28,6 +28,7 @@ interface DashboardData {
     total_servers: number
     running: number
     stopped: number
+    offline: number
     error: number
     healthy: number
     total_calls_7d: number
@@ -93,7 +94,7 @@ export default function MonitorDashboard() {
     } catch {
       errorCountRef.current++
       if (errorCountRef.current >= 3 && !hasDataRef.current) {
-        setErrorMsg('监控数据加载失败，请检查服务是否正常运行')
+        setErrorMsg('监控数据加载失败，请检查登录状态、Gateway 连接或稍后重试')
       }
     } finally { setLoading(false); if (manual) setRefreshing(false) }
   }
@@ -212,15 +213,15 @@ export default function MonitorDashboard() {
         </div>
       )}
 
-      {/* 原有监控面板（不变）*/}
+      {/* 当前账户的本地 Gateway 汇总 */}
       <hr className="my-6 border-gray-200 dark:border-gray-700" />
-      <h3 className="text-sm text-gray-400 mb-4">⚙️ 服务端监控（自托管模式）</h3>
+      <h3 className="text-sm text-gray-400 mb-4">⚙️ 本地 Gateway 上报汇总</h3>
 
       {/* 标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📈 监控大屏</h1>
-          <p className="text-sm text-gray-500">所有 MCP Server 运行状态、性能指标与资源位置总览（每 10 秒自动刷新）</p>
+          <h1 className="text-2xl font-bold text-gray-900">📈 本地 Server 监控</h1>
+          <p className="text-sm text-gray-500">当前账户已追踪 Server 的 Gateway 清单与近 7 天调用汇总（每 10 秒自动刷新）</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => load(true)} disabled={refreshing}
@@ -233,13 +234,13 @@ export default function MonitorDashboard() {
 
       {/* 摘要卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <SummaryCard label="总 Server" description="当前自托管监控端已发现或登记的 Server 总数。" value={String(s?.total_servers ?? 0)} icon="📦" color="gray" />
-        <SummaryCard label="运行中" description="当前由自托管监控端检测为正在运行的 Server 数量。" value={String(s?.running ?? 0)} icon="🟢" color="green" />
-        <SummaryCard label="已停止" description="当前未运行但仍被监控端登记的 Server 数量。" value={String(s?.stopped ?? 0)} icon="⏹" color="gray" />
-        <SummaryCard label="异常" description="当前监控端检测到运行异常的 Server 数量。" value={String(s?.error ?? 0)} icon="🔴" color="red" />
+        <SummaryCard label="已追踪" description="当前账户追踪列表中的 Server 总数。" value={String(s?.total_servers ?? 0)} icon="📦" color="gray" />
+        <SummaryCard label="运行中" description="最近 3 分钟在线设备上报为正在运行的 Server 数量。" value={String(s?.running ?? 0)} icon="🟢" color="green" />
+        <SummaryCard label="未运行" description="设备在线，但当前上报为未运行的 Server 数量。" value={String(s?.stopped ?? 0)} icon="⏹" color="gray" />
+        <SummaryCard label="有错误" description="过去 7 天上报过错误调用的 Server 数量。" value={String(s?.error ?? 0)} icon="🔴" color="red" />
         <SummaryCard label="7 天调用" description="过去 7 天内记录到的工具调用总数；只有经 Gateway 或遥测上报的调用会计入。" value={String(s?.total_calls_7d ?? 0)} icon="📞" color="blue" />
-        <SummaryCard label="Token 总量" description="已记录调用按载荷估算的 Token 总数，不包含原始请求和响应内容。" value={fmtTokens(s?.total_token_consumption ?? 0)} icon="📊" color="purple" />
-        <SummaryCard label={`平均可靠性 ${s?.avg_reliability ?? 0}`} description="所有具有健康检查记录的 Server 的可靠性评分平均值。" value="" icon="🏆" color={s && s.avg_reliability >= 90 ? 'green' : s && s.avg_reliability >= 60 ? 'yellow' : 'red'} />
+        <SummaryCard label="估算 Token" description="已记录调用按载荷估算的 Token 总数，不包含原始请求和响应内容，也不等同于模型账单。" value={fmtTokens(s?.total_token_consumption ?? 0)} icon="📊" color="purple" />
+        <SummaryCard label={`平均成功率 ${s?.avg_reliability ?? 0}%`} description="有调用记录的已追踪 Server 的成功调用比例平均值。" value="" icon="🏆" color={s && s.avg_reliability >= 90 ? 'green' : s && s.avg_reliability >= 60 ? 'yellow' : 'red'} />
       </div>
 
       {/* 健康分布条 */}
@@ -247,7 +248,7 @@ export default function MonitorDashboard() {
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-1 text-xs text-gray-500 mb-1.5">
             <span className="w-16">
-              <InfoTooltip description="按当前运行、停止和异常状态统计的 Server 分布，不等同于历史可用性。">健康分布</InfoTooltip>
+              <InfoTooltip description="按最近设备清单统计的运行、未运行和未接入状态分布，不等同于历史可用性。">连接分布</InfoTooltip>
             </span>
             <div className="flex-1 flex gap-0.5 h-3 rounded-full overflow-hidden">
               {s!.running > 0 && <div className="bg-green-500 transition-all" style={{ flex: s!.running }} title={`运行中 ${s!.running}`} />}
@@ -257,9 +258,9 @@ export default function MonitorDashboard() {
           </div>
           <div className="flex gap-4 text-xs text-gray-400">
             <span>🟢 运行 {s!.running}</span>
-            <span>⏹ 停止 {s!.stopped}</span>
-            {(s!.error ?? 0) > 0 && <span>🔴 异常 {s!.error}</span>}
-            <span>✅ 健康 {s!.healthy}</span>
+            <span>⏹ 未运行 {s!.stopped}</span>
+            {(s!.offline ?? 0) > 0 && <span>○ 离线或未接入 {s!.offline}</span>}
+            {(s!.error ?? 0) > 0 && <span>🔴 近 7 天有错误 {s!.error}</span>}
           </div>
         </div>
       )}
@@ -280,17 +281,16 @@ export default function MonitorDashboard() {
                 <Th>#</Th>
                 <Th onClick={() => toggleSort('server_id')} active={sortField === 'server_id'} asc={sortAsc}>Server</Th>
                 <Th onClick={() => toggleSort('running')} active={sortField === 'running'} asc={sortAsc}>状态</Th>
-                <Th>位置 / PID</Th>
+                <Th>来源</Th>
                 <Th onClick={() => toggleSort('uptime_seconds')} active={sortField === 'uptime_seconds'} asc={sortAsc}>运行时长</Th>
                 <Th onClick={() => toggleSort('call_count_7d')} active={sortField === 'call_count_7d'} asc={sortAsc}>调用(7d)</Th>
-                <Th onClick={() => toggleSort('token_consumption')} active={sortField === 'token_consumption'} asc={sortAsc}>Token</Th>
-                <Th onClick={() => toggleSort('reliability_score')} active={sortField === 'reliability_score'} asc={sortAsc}>可靠性</Th>
-                <Th onClick={() => toggleSort('total_checks')} active={sortField === 'total_checks'} asc={sortAsc}>检查</Th>
+                <Th onClick={() => toggleSort('token_consumption')} active={sortField === 'token_consumption'} asc={sortAsc}>估算 Token</Th>
+                <Th onClick={() => toggleSort('reliability_score')} active={sortField === 'reliability_score'} asc={sortAsc}>成功率</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.length === 0 ? (
-                <tr><td colSpan={9} className="p-8 text-center text-gray-400">暂无数据</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-gray-400">暂无数据。请先追踪 Server，并完成本地 Gateway 接入。</td></tr>
               ) : sorted.map((srv, i) => {
                 const maxCalls = Math.max(...sorted.map(s => s.call_count_7d), 1)
                 const maxTokens = Math.max(...sorted.map(s => s.token_consumption), 1)
@@ -311,8 +311,7 @@ export default function MonitorDashboard() {
                       </span>
                     </td>
                     <td className="p-3 text-xs text-gray-500 max-w-[200px] truncate" title={srv.location}>
-                      <span className="font-mono">{srv.pid ? `PID ${srv.pid}` : '-'}</span>
-                      <p className="truncate">{srv.location !== 'N/A' ? srv.location : '-'}</p>
+                      <span className="truncate">{srv.location !== 'N/A' ? srv.location : '本地 Agent'}</span>
                     </td>
                     <td className="p-3 text-xs text-gray-600">{fmtUptime(srv.uptime_seconds)}</td>
                     <td className="p-3">
@@ -331,13 +330,12 @@ export default function MonitorDashboard() {
                       <span className={`text-xs font-medium ${
                         srv.reliability_score >= 90 ? 'text-green-600' : srv.reliability_score >= 60 ? 'text-yellow-600' : 'text-red-600'
                       }`}>
-                        {srv.reliability_score}
+                        {srv.call_count_7d > 0 ? `${srv.reliability_score}%` : '-'}
                       </span>
                       <div className="max-w-[60px]"><Bar value={srv.reliability_score} max={100} color={
                         srv.reliability_score >= 90 ? 'bg-green-500' : srv.reliability_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
                       } /></div>
                     </td>
-                    <td className="p-3 text-xs text-gray-500">{srv.total_checks}</td>
                   </tr>
                 )
               })}
@@ -349,8 +347,8 @@ export default function MonitorDashboard() {
       {/* 底部统计 */}
       {data && (
         <div className="text-xs text-gray-400 text-center">
-          共监控 {s?.total_servers} 个 Server · {s?.running} 运行 · {s?.stopped} 停止 · {s?.error ?? 0} 异常 ·
-          7 天总调用 {s?.total_calls_7d} 次 · Token 总消耗 {fmtTokens(s?.total_token_consumption ?? 0)}
+          共追踪 {s?.total_servers} 个 Server · {s?.running} 运行 · {s?.stopped} 未运行 · {s?.offline ?? 0} 离线或未接入 ·
+          7 天总调用 {s?.total_calls_7d} 次 · 估算 Token {fmtTokens(s?.total_token_consumption ?? 0)}
           <span className="ml-2">🔄 每 10 秒自动刷新</span>
         </div>
       )}

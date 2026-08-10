@@ -209,7 +209,7 @@ export default function MyConfig() {
       <div className="max-w-3xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-700 font-medium">登录后检查、追踪和下载属于你自己的 MCP 配置</p>
+          <p className="text-gray-700 font-medium">登录后检查配置、维护追踪列表并同步本地 Gateway</p>
           <Link to="/login" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
         </div>
       </div>
@@ -221,7 +221,7 @@ export default function MyConfig() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
-          <p className="text-sm text-gray-500 mt-1">检查本地 MCP 配置，确认后保存为你的 Hub 追踪列表</p>
+          <p className="text-sm text-gray-500 mt-1">检查本地 MCP 配置，确认追踪后通过 Gateway 同步并监控</p>
         </div>
         <Link to="/market" className="text-sm text-blue-600 hover:text-blue-800">去市场添加 →</Link>
       </div>
@@ -242,8 +242,8 @@ export default function MyConfig() {
           </div>
           <div className="bg-white rounded-lg p-3 border border-blue-100">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">3</span>
-            <p className="font-medium text-gray-800">下载配置</p>
-            <p className="text-xs text-gray-500 mt-0.5">下载更新后的配置，替换本地文件，重启 Agent 即可生效</p>
+            <p className="font-medium text-gray-800">接入 Gateway</p>
+            <p className="text-xs text-gray-500 mt-0.5">在监控页创建设备并运行 agent setup；后续使用 config sync 更新清单</p>
           </div>
         </div>
         <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
@@ -276,7 +276,7 @@ export default function MyConfig() {
           trackingStatus === 'cancelled' ? 'bg-gray-50 border-gray-300' :
           'bg-amber-50 border-amber-300'
         }`}>
-          <h2 className="font-semibold text-gray-900 mb-2">⚡ 步骤 2：是否上传到 Hub 进行监控？</h2>
+          <h2 className="font-semibold text-gray-900 mb-2">⚡ 步骤 2：是否保存到个人追踪列表？</h2>
 
           {trackingStatus === 'uploaded' ? (
             <div className="space-y-3">
@@ -293,16 +293,16 @@ export default function MyConfig() {
                 onClick={handleCancelTracking}
                 className="px-5 py-2 bg-white text-red-600 border border-red-300 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
               >
-                ❌ 取消上传（停止追踪）
+                停止追踪
               </button>
             </div>
           ) : trackingStatus === 'cancelled' ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-400 text-white rounded-full text-sm font-medium">
-                  已取消上传
+                  已停止追踪
                 </span>
-                <span className="text-sm text-gray-500">Hub 不会追踪你的 MCP 配置和调用数据</span>
+                <span className="text-sm text-gray-500">Hub 不再保留这批个人追踪记录</span>
               </div>
               <p className="text-sm text-gray-500">
                 已停止追踪。重新检查配置并确认后可再次建立追踪记录。
@@ -311,7 +311,7 @@ export default function MyConfig() {
                 onClick={handleUploadToHub}
                 className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
               >
-                ✅ 重新上传到 Hub
+                ✅ 重新开始追踪
               </button>
             </div>
           ) : (
@@ -330,7 +330,7 @@ export default function MyConfig() {
                   onClick={handleUploadToHub}
                   className="px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
                 >
-                  ✅ 上传到 Hub
+                  ✅ 确认追踪
                 </button>
                 <button
                   onClick={handleCancelTracking}
@@ -370,8 +370,8 @@ export default function MyConfig() {
 
         {servers.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
-            <p>还没有添加任何 Server</p>
-            <p className="text-sm mt-1">上传本地的配置文件，或去市场浏览添加</p>
+            <p>还没有追踪任何 Server</p>
+            <p className="text-sm mt-1">上传本地配置文件，或去市场选择需要追踪的 Server</p>
             <Link to="/market" className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
               去市场浏览
             </Link>

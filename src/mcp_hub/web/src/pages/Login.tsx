@@ -112,7 +112,7 @@ export default function Login() {
         </div>
         <h2 className="text-2xl font-bold text-gray-800">登录 MCP Server Hub</h2>
         <p className="text-sm text-gray-500 max-w-xs">
-          使用 GitHub 账号登录，即可收藏 Server、提交评价、发布自己的 MCP Server
+          使用 GitHub 账号登录，即可维护追踪配置、创建设备、查看个人监控、收藏评价并发布 Server
         </p>
         <button
           onClick={handleLogin}

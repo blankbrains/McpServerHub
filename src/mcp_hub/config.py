@@ -20,6 +20,8 @@ def _find_dotenv() -> Path | None:
 
 
 def _load_dotenv() -> None:
+    if os.getenv("MCP_HUB_SKIP_DOTENV") == "1":
+        return
     env_file = _find_dotenv()
     if not env_file:
         return

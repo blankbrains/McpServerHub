@@ -46,7 +46,7 @@ export default function AdminServers() {
           className="flex-1 min-w-[150px] px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
         <select value={sort} onChange={e => setSort(e.target.value)}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-          <option value="installs">按安装数</option><option value="calls">按调用量</option><option value="rating">按评分</option>
+          <option value="installs">按追踪数</option><option value="calls">按调用量</option><option value="rating">按评分</option>
         </select>
         <select value={securityLevel} onChange={e => { setSecurityLevel(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
@@ -65,7 +65,7 @@ export default function AdminServers() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
-              <th className="px-4 py-2">Server</th><th className="px-4 py-2">分类</th><th className="px-4 py-2 text-right">安装</th>
+              <th className="px-4 py-2">Server</th><th className="px-4 py-2">分类</th><th className="px-4 py-2 text-right">追踪</th>
               <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日Token</th>
               <th className="px-4 py-2 text-right">评分</th><th className="px-4 py-2">安全</th>
             </tr></thead>
