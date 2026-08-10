@@ -23,6 +23,7 @@ import time as _time
 from dataclasses import dataclass
 from typing import Any
 
+from mcp_hub import __version__
 from mcp_hub.core.gateway_config import (
     GatewayServerSpec,
     get_gateway_config_path,
@@ -185,23 +186,42 @@ class ManagedMCP:
         self.tools: list[dict] = []
         self._request_id = 0
         self._pending: dict[int, _PendingReq] = {}
-        self._reader_task: asyncio.Task | None = None
+        self._reader_task: asyncio.Task[None] | None = None
         self._shutdown = False
+
+    def _fail_pending(self, message: str) -> None:
+        """Fail outstanding requests immediately when the child stream is unusable."""
+        for pending in self._pending.values():
+            if not pending.future.done():
+                pending.future.set_exception(
+                    GatewayError(message, server_id=self.server_id)
+                )
+        self._pending.clear()
 
     async def start_reader(self) -> None:
         """启动后台 stdout reader。"""
-        loop = asyncio.get_event_loop()
-
-        async def _reader():
+        async def _reader() -> None:
             while not self._shutdown:
                 try:
                     line = await asyncio.wait_for(
-                        loop.run_in_executor(None, self.stdout.readline), timeout=3600
+                        self.stdout.readline(),
+                        timeout=3600,
                     )
                 except asyncio.TimeoutError:
                     continue
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "gateway.server_read_failed",
+                        server_id=self.server_id,
+                        error=type(exc).__name__,
+                    )
+                    self._fail_pending("MCP Server stdout 读取失败")
+                    break
                 if not line:
                     logger.warning("gateway.server_eof", server_id=self.server_id)
+                    self._fail_pending("MCP Server 已关闭 stdout")
                     break
                 try:
                     msg = json.loads(line.decode())
@@ -226,7 +246,7 @@ class ManagedMCP:
                     else:
                         pending.future.set_result(msg)
 
-        self._reader_task = asyncio.ensure_future(_reader())
+        self._reader_task = asyncio.create_task(_reader())
 
     async def initialize(self) -> bool:
         """初始化子 Server，获取工具列表。"""
@@ -238,7 +258,7 @@ class ManagedMCP:
                 {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "mcp-hub", "version": "0.1.0"},
+                    "clientInfo": {"name": "mcp-hub", "version": __version__},
                 },
             )
             if result is None:
@@ -247,7 +267,7 @@ class ManagedMCP:
             return False
 
         # Send initialized notification
-        self._send_notification("notifications/initialized", {})
+        await self._send_notification("notifications/initialized", {})
 
         # tools/list
         try:
@@ -290,19 +310,27 @@ class ManagedMCP:
             logger.warning("gateway.timeout", server_id=self.server_id, method=method)
             return None
 
-    def _send_notification(self, method: str, params: dict) -> None:
+    async def _send_notification(self, method: str, params: dict) -> None:
         """发送 JSON-RPC 通知（无 id，无响应）。"""
         try:
             msg = {"jsonrpc": "2.0", "method": method, "params": params}
             self.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
-        except Exception:
-            pass
+            await self.stdin.drain()
+        except (BrokenPipeError, ConnectionError, OSError) as exc:
+            raise GatewayError(
+                f"发送通知失败: {exc}",
+                server_id=self.server_id,
+            ) from exc
 
-    async def close(self):
+    async def close(self) -> None:
         """关闭子进程连接。"""
         self._shutdown = True
         if self._reader_task:
             self._reader_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reader_task
+            self._reader_task = None
+        self._fail_pending("MCP Server 连接已关闭")
         if self.process and self.process.returncode is None:
             try:
                 self.process.kill()

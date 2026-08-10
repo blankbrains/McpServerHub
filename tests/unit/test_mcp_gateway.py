@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
+import sys
+import textwrap
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -26,6 +29,79 @@ def _process() -> MagicMock:
     process.wait = AsyncMock(return_value=0)
     process.kill = MagicMock()
     return process
+
+
+async def test_managed_mcp_initializes_and_calls_real_stdio_process() -> None:
+    server_code = textwrap.dedent(
+        """
+        import json
+        import sys
+
+        for line in sys.stdin:
+            request = json.loads(line)
+            request_id = request.get("id")
+            method = request.get("method")
+            if method == "initialize":
+                result = {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "test-server", "version": "1.0.0"},
+                }
+            elif method == "tools/list":
+                result = {
+                    "tools": [
+                        {
+                            "name": "echo",
+                            "description": "Echo text",
+                            "inputSchema": {"type": "object"},
+                        }
+                    ]
+                }
+            elif method == "tools/call":
+                result = {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": request["params"]["arguments"]["text"],
+                        }
+                    ]
+                }
+            else:
+                result = {}
+            if request_id is not None:
+                print(
+                    json.dumps(
+                        {"jsonrpc": "2.0", "id": request_id, "result": result}
+                    ),
+                    flush=True,
+                )
+        """
+    )
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-u",
+        "-c",
+        server_code,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    managed = ManagedMCP(
+        "test-server",
+        process,
+        process.stdin,
+        process.stdout,
+    )
+
+    try:
+        assert await managed.initialize() is True
+        assert [tool["name"] for tool in managed.tools] == ["echo"]
+        result = await managed.call_tool("echo", {"text": "roundtrip-ok"})
+        assert result["content"][0]["text"] == "roundtrip-ok"
+    finally:
+        await managed.close()
 
 
 async def test_gateway_spawns_structured_command_with_only_explicit_server_env(
