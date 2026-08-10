@@ -6,6 +6,7 @@ import psutil
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
+from mcp_hub import __version__
 from mcp_hub.core.monitor import Monitor
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
@@ -25,7 +26,7 @@ async def health_check():
     return {
         "success": True,
         "status": "healthy",
-        "version": "0.1.0",
+        "version": __version__,
     }
 
 
@@ -79,7 +80,6 @@ async def get_uptime(server_id: str):
     }
 
 
-@router.get("/health/reliability/{server_id:path}")
 async def get_reliability(server_id: str):
     """获取 Server 的可靠性评分。"""
     registry = Registry()
@@ -126,6 +126,14 @@ async def get_top_reliable(limit: int = 20):
             for s in top
         ],
     }
+
+
+# Register the catch-all only after fixed reliability routes such as /top.
+router.add_api_route(
+    "/health/reliability/{server_id:path}",
+    get_reliability,
+    methods=["GET"],
+)
 
 
 @router.get("/health/summary")
