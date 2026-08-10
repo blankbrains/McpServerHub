@@ -43,57 +43,68 @@ from mcp_hub.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-# 子进程环境变量安全白名单前缀
-_GATEWAY_SAFE_ENV_PREFIXES = (
+# 子进程只继承启动命令所需的基础环境；Server 凭证必须在自身配置中显式授权。
+_GATEWAY_SAFE_ENV_NAMES = {
     "PATH",
     "HOME",
     "USER",
+    "USERNAME",
+    "LOGNAME",
     "LANG",
-    "LC_",
+    "LANGUAGE",
     "TZ",
-    "MCP_HUB_",
-    "NODE",
-    "NPM",
-    "PYTHON",
-    "PIP",
-    "VIRTUAL_ENV",
-    "CONDA_",
     "SHELL",
     "TERM",
-    "DISPLAY",
-    "XDG_",
-    "DBUS_",
-    "SSH_",
+    "COLORTERM",
+    "TMP",
+    "TEMP",
+    "TMPDIR",
     "SYSTEMROOT",
     "SYSTEMDRIVE",
     "WINDIR",
-    "TEMP",
-    "TMP",
+    "COMSPEC",
+    "PATHEXT",
     "USERPROFILE",
     "APPDATA",
+    "LOCALAPPDATA",
     "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
     "PROGRAMDATA",
     "COMPUTERNAME",
     "HOSTNAME",
-    "LOGNAME",
     "PWD",
     "OLDPWD",
-    "COLORTERM",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "VIRTUAL_ENV",
+    "CONDA_PREFIX",
+    "CONDA_DEFAULT_ENV",
+    "NODE_PATH",
+    "PYTHONHOME",
+    "PYTHONPATH",
+    "PYTHONIOENCODING",
+    "PYTHONUTF8",
+    "PYTHONUNBUFFERED",
     "EDITOR",
     "VISUAL",
     "PAGER",
+}
+_GATEWAY_SAFE_ENV_PREFIXES = (
+    "LC_",
+    "XDG_",
 )
 
 
 def _filter_gateway_env() -> dict[str, str]:
-    """过滤环境变量，仅保留白名单前缀的变量。"""
+    """保留基础运行环境，不把 Hub 或包管理器凭证隐式传给子进程。"""
     result: dict[str, str] = {}
     for k, v in os.environ.items():
         upper_k = k.upper()
-        for prefix in _GATEWAY_SAFE_ENV_PREFIXES:
-            if upper_k.startswith(prefix):
-                result[k] = v
-                break
+        if upper_k in _GATEWAY_SAFE_ENV_NAMES or upper_k.startswith(
+            _GATEWAY_SAFE_ENV_PREFIXES
+        ):
+            result[k] = v
     return result
 
 

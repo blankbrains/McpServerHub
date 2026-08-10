@@ -108,10 +108,18 @@ async def test_gateway_spawns_structured_command_with_only_explicit_server_env(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("PATH", "base-path")
+    monkeypatch.setenv("HOME", "/home/test-user")
     monkeypatch.setenv("UNRELATED_SECRET", "must-not-be-forwarded")
     monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
     monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
     gateway = McpGateway()
+    monkeypatch.setenv("MCP_HUB_REPORT_URL", "https://hub.example.test")
+    monkeypatch.setenv("MCP_HUB_TELEMETRY_TOKEN", "synthetic-device-token")
+    monkeypatch.setenv("MCP_HUB_SECRET", "synthetic-hub-secret")
+    monkeypatch.setenv("MCP_HUB_GITHUB_CLIENT_SECRET", "synthetic-oauth-secret")
+    monkeypatch.setenv("NPM_TOKEN", "synthetic-npm-token")
+    monkeypatch.setenv("PIP_INDEX_URL", "https://user:password@example.test/simple")
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/synthetic-ssh-agent")
     spec = GatewayServerSpec(
         server_id="weather",
         command="C:\\Program Files\\nodejs\\npx.cmd",
@@ -143,8 +151,38 @@ async def test_gateway_spawns_structured_command_with_only_explicit_server_env(
     )
     assert keyword["cwd"] == "D:\\MCP Servers\\weather"
     assert keyword["env"]["WEATHER_API_KEY"] == "authorized"
+    assert keyword["env"]["PATH"] == "base-path"
+    assert keyword["env"]["HOME"] == "/home/test-user"
     assert "UNRELATED_SECRET" not in keyword["env"]
+    assert "MCP_HUB_REPORT_URL" not in keyword["env"]
+    assert "MCP_HUB_TELEMETRY_TOKEN" not in keyword["env"]
+    assert "MCP_HUB_SECRET" not in keyword["env"]
+    assert "MCP_HUB_GITHUB_CLIENT_SECRET" not in keyword["env"]
+    assert "NPM_TOKEN" not in keyword["env"]
+    assert "PIP_INDEX_URL" not in keyword["env"]
+    assert "SSH_AUTH_SOCK" not in keyword["env"]
     await gateway.shutdown()
+
+
+def test_server_environment_can_explicitly_authorize_filtered_variable_names(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("NPM_TOKEN", "host-token")
+    monkeypatch.setenv("MCP_HUB_TELEMETRY_TOKEN", "host-device-token")
+    spec = GatewayServerSpec(
+        server_id="publisher",
+        command="npx",
+        env={
+            "NPM_TOKEN": "server-scoped-token",
+            "MCP_HUB_CUSTOM_SETTING": "server-scoped-setting",
+        },
+    )
+
+    child_env = spec.process_env(mcp_gateway._filter_gateway_env())
+
+    assert child_env["NPM_TOKEN"] == "server-scoped-token"
+    assert child_env["MCP_HUB_CUSTOM_SETTING"] == "server-scoped-setting"
+    assert "MCP_HUB_TELEMETRY_TOKEN" not in child_env
 
 
 async def test_tool_call_records_extended_metrics_without_payloads(monkeypatch) -> None:
