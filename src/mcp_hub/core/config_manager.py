@@ -6,50 +6,24 @@ import json
 import shlex
 from pathlib import Path
 
+from mcp_hub.core.agent_config import get_agent_profiles
+from mcp_hub.core.gateway_config import split_legacy_command
+
 # 各 Agent 配置文件路径
 AGENT_CONFIGS = {
-    "claude-code": {
-        "name": "Claude Code",
-        "paths": [
-            Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
-        ],
-        "server_key": "mcpServers",
-    },
-    "cursor": {
-        "name": "Cursor",
-        "paths": [Path.home() / ".cursor" / "mcp.json"],
-        "server_key": "mcpServers",
-    },
-    "codex": {
-        "name": "Codex",
-        "paths": [Path.home() / ".codex" / "mcp.json"],
-        "server_key": "mcpServers",
-    },
-    "trae": {
-        "name": "Trae",
-        "paths": [Path.home() / ".trae" / "mcp.json"],
-        "server_key": "mcpServers",
-    },
-    "vscode-copilot": {
-        "name": "VS Code Copilot",
-        "paths": [Path.home() / ".copilot" / "mcp-config.json"],
-        "server_key": "servers",
-        "requires_stdio_type": True,
-    },
-    "windsurf": {
-        "name": "Windsurf",
-        "paths": [Path.home() / ".codeium" / "windsurf" / "mcp_config.json"],
-        "server_key": "mcpServers",
-    },
-    "generic": {
-        "name": "通用 mcp.json",
-        "paths": [Path.home() / ".config" / "mcp-hub" / "mcp.json"],
-        "server_key": "mcpServers",
-    },
+    agent_type: {
+        "name": profile.name,
+        "paths": list(profile.paths),
+        "server_key": profile.server_key,
+        "format": profile.format,
+        "config_path": profile.display_path,
+        "requires_stdio_type": profile.requires_stdio_type,
+    }
+    for agent_type, profile in get_agent_profiles().items()
 }
 
 
-def _command_config(command: str) -> dict[str, object]:
+def command_config(command: str) -> dict[str, object]:
     """Convert a shell command into the MCP command/args representation."""
     try:
         parts = shlex.split(command)
@@ -68,13 +42,13 @@ def _command_config(command: str) -> dict[str, object]:
 def get_config_for_agent(server_name: str, command: str, agent: str = "generic") -> dict:
     """生成指定 Agent 的配置片段。"""
     cfg = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
-    server_config = _command_config(command)
+    server_config = command_config(command)
     if cfg.get("requires_stdio_type"):
         server_config = {"type": "stdio", **server_config}
 
     return {
         "agent": cfg["name"],
-        "config_path": str(cfg["paths"][0]),
+        "config_path": cfg["config_path"],
         "config_content": {cfg["server_key"]: {server_name: server_config}},
     }
 
@@ -194,7 +168,11 @@ class ConfigManager:
             name = s["id"].split("/")[-1]
             cmd = s.get("install_command", "")
             if cmd:
-                config["mcpServers"][name] = {"command": cmd}
+                server_config = command_config(cmd)
+                env = await self.list_all_config(s["id"])
+                if env:
+                    server_config["env"] = env
+                config["mcpServers"][name] = server_config
 
         path = Path(target_path) if target_path else self.config_dir / "mcp.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -352,8 +330,10 @@ class ConfigManager:
         )
 
         # 2. 安装工具检查
-        cmd_parts = command.split()
-        tool = cmd_parts[0] if cmd_parts else "unknown"
+        try:
+            tool, _args = split_legacy_command(command)
+        except ValueError:
+            tool = "unknown"
         tool_available = False
 
         if tool in ("pip", "pip3"):

@@ -7,12 +7,13 @@ const STEPS = [
     icon: '📂',
     description: '从你的 AI Agent 中找到 MCP 配置文件',
     details: [
-      { agent: 'Claude Code', path: '~/.config/Claude/claude_desktop_config.json' },
+      { agent: 'Claude Code', path: '~/.claude.json 或项目 .mcp.json' },
+      { agent: 'Claude Desktop', path: 'Claude/claude_desktop_config.json' },
       { agent: 'Cursor', path: '~/.cursor/mcp.json' },
-      { agent: 'Codex', path: '~/.codex/mcp.json' },
+      { agent: 'Codex', path: '~/.codex/config.toml' },
       { agent: 'Trae', path: '~/.trae/mcp.json' },
       { agent: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json' },
-      { agent: 'VS Code Copilot', path: '~/.copilot/mcp-config.json' },
+      { agent: 'VS Code Copilot', path: '.vscode/mcp.json' },
     ],
   },
   {
@@ -52,12 +53,11 @@ const STEPS = [
     num: 6,
     title: '配置 MCP 网关以启用监控',
     icon: '📊',
-    description: '要让 Hub 监控你的 MCP 调用，需要将 Hub 网关添加到你的 Agent 配置中。',
-    code: `"mcp-hub-gateway": {
-  "command": "mcp",
-  "args": ["serve"]
-}`,
-    note: '请为每个使用的 Agent 单独在监控页创建设备并复制对应 Gateway 配置。设备令牌在服务端绑定 Agent 类型，调用次数、响应时长和 Token 消耗会按 Agent 隔离记录。',
+    description: '在监控页创建设备后运行一键接入命令。CLI 会先备份现有配置，再把可代理的 stdio Server 迁移到 Gateway。',
+    code: `mcp agent setup --agent codex \\
+  --hub-url https://你的Hub地址 \\
+  --telemetry-token mcpht_设备令牌`,
+    note: '远程 HTTP/SSE Server 会保留原连接；完整命令参数和环境变量值仅保存在用户本地，Hub 只接收脱敏清单与运行指标。',
   },
   {
     num: 7,

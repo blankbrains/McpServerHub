@@ -15,7 +15,7 @@ Environment=PATH=/home/djl/miniconda3/envs/McpServerHub/bin:/usr/local/bin:/usr/
 # Keep credentials outside the repository. The file must be owned by root and mode 0600.
 EnvironmentFile=/etc/mcp-hub/mcp-hub.env
 
-ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --factory --host 0.0.0.0 --port 3987 --workers 2 --log-level info
+ExecStart=/home/djl/miniconda3/envs/McpServerHub/bin/uvicorn mcp_hub.api.app:create_app --factory --host 0.0.0.0 --port 3987 --workers 1 --log-level info
 ExecReload=/bin/kill -HUP $MAINPID
 ExecStop=/bin/kill -TERM $MAINPID
 

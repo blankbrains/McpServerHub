@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -76,7 +76,7 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
             if proc.log_file:
                 location = str(proc.log_file.parent)
             if proc.started_at:
-                uptime_seconds = int(datetime.utcnow().timestamp() - proc.started_at)
+                uptime_seconds = int(datetime.now(timezone.utc).timestamp() - proc.started_at)
 
         # 可靠性评分
         reliability = await monitor.calculate_reliability(sid)
@@ -96,7 +96,8 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
         try:
             filters = [
                 UsageStatsModel.server_id == sid,
-                UsageStatsModel.created_at >= datetime.utcnow() - timedelta(days=7),
+                UsageStatsModel.created_at
+                >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7),
             ]
             if user_id:
                 filters.append(UsageStatsModel.user_id == user_id)

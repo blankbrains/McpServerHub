@@ -462,7 +462,7 @@ export default function MyConfig() {
               📋 复制命令
             </button>
             <p className="text-xs text-gray-400 mt-2">
-              需要在本机安装 mcp-hub-cli 并已启动 Hub daemon。命令会自动将配置写入 ~/.config/Claude/claude_desktop_config.json
+              需要在本机安装 mcp-hub-cli 并先使用 mcp login 登录。同步会在覆盖前确认并创建带时间戳备份；随后可在监控页复制 mcp agent setup 命令启用本地监控。
             </p>
           </div>
         )}

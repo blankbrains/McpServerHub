@@ -4,13 +4,14 @@ import { getAuthHeaders, getAuthState, uploadConfig, downloadConfig } from '../a
 import InfoTooltip from '../components/InfoTooltip'
 
 const AGENTS = [
-  { id: 'claude-code', name: 'Claude Code', path: '~/.config/Claude/claude_desktop_config.json', icon: '🤖' },
-  { id: 'cursor', name: 'Cursor', path: '~/.cursor/mcp.json', icon: '📝' },
-  { id: 'vscode-copilot', name: 'VS Code Copilot', path: '~/.copilot/mcp-config.json', icon: '💻' },
-  { id: 'codex', name: 'Codex', path: '~/.codex/mcp.json', icon: '🔧' },
-  { id: 'trae', name: 'Trae', path: '~/.trae/mcp.json', icon: '🚀' },
-  { id: 'windsurf', name: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json', icon: '🌊' },
-  { id: 'generic', name: '通用 mcp.json', path: '~/.config/mcp-hub/mcp.json', icon: '📄' },
+  { id: 'claude-code', name: 'Claude Code', path: '~/.claude.json', extension: 'json', icon: '🤖' },
+  { id: 'claude-desktop', name: 'Claude Desktop', path: 'Claude/claude_desktop_config.json', extension: 'json', icon: '🖥️' },
+  { id: 'cursor', name: 'Cursor', path: '~/.cursor/mcp.json', extension: 'json', icon: '📝' },
+  { id: 'vscode-copilot', name: 'VS Code Copilot', path: '.vscode/mcp.json', extension: 'json', icon: '💻' },
+  { id: 'codex', name: 'Codex', path: '~/.codex/config.toml', extension: 'toml', icon: '🔧' },
+  { id: 'trae', name: 'Trae', path: '~/.trae/mcp.json', extension: 'json', icon: '🚀' },
+  { id: 'windsurf', name: 'Windsurf', path: '~/.codeium/windsurf/mcp_config.json', extension: 'json', icon: '🌊' },
+  { id: 'generic', name: '通用 mcp.json', path: '~/.config/mcp-hub/mcp.json', extension: 'json', icon: '📄' },
 ]
 
 type TrackingDecision = 'idle' | 'uploaded' | 'cancelled'
@@ -151,7 +152,7 @@ export default function ConfigPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `mcp-hub-config-${selectedAgent}.json`
+      a.download = `mcp-hub-config-${selectedAgent}.${agent?.extension || 'json'}`
       a.click()
       URL.revokeObjectURL(url)
       setMessage('✅ 配置文件已下载')
@@ -318,7 +319,7 @@ export default function ConfigPage() {
             📥 下载「{agent?.name || 'Claude Code'}」格式的配置文件
           </p>
           <p className="text-xs text-gray-500 mb-3">
-            下载后替换到 <code className="px-1 bg-gray-200 rounded text-xs">{agent?.path || '~/.config/Claude/claude_desktop_config.json'}</code>，重启 Agent 即可生效
+            下载后替换到 <code className="px-1 bg-gray-200 rounded text-xs">{agent?.path || '~/.claude.json'}</code>，重启 Agent 即可生效
           </p>
           <button onClick={handleDownload} disabled={downloading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -335,23 +336,18 @@ export default function ConfigPage() {
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
-{`"mcp-hub-gateway": {
-  "command": "mcp",
-  "args": ["serve"]
-}`}
+{`mcp agent setup --agent ${selectedAgent} \\
+  --hub-url ${window.location.origin} \\
+  --telemetry-token mcpht_设备令牌`}
           </pre>
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          请在监控页为当前 Agent 创建设备后使用“复制 Gateway 配置”；其中会包含绑定该 Agent 的设备遥测令牌。
+          请在监控页为当前 Agent 创建设备后使用“复制一键接入命令”。命令会先备份原配置，再迁移可代理的 stdio Server。
         </p>
         <div className="flex gap-2">
-          <button onClick={() => { navigator.clipboard.writeText('"mcp-hub-gateway": {\n  "command": "mcp",\n  "args": ["serve"]\n}'); setMessage('✅ 已复制到剪贴板') }}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-            📋 复制配置
-          </button>
           <button onClick={() => navigate('/monitor')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-            📈 查看监控大屏
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+            创建设备并接入
           </button>
           <button onClick={() => navigate('/my-servers')}
             className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
@@ -360,41 +356,28 @@ export default function ConfigPage() {
         </div>
       </div>
 
-      {/* ── 高级功能 ── */}
+      {/* ── 本地诊断 ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-3">🔧 高级功能</h2>
+        <h2 className="font-semibold text-gray-900 mb-2">🔧 本地 Gateway 诊断</h2>
+        <p className="mb-3 text-sm text-gray-500">在用户电脑执行，不会读取或修改 Hub 服务器上的 Agent 配置。</p>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={async () => {
-            try {
-              const r = await fetch('/api/v1/config/backup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                body: JSON.stringify({ label: '' }),
-              }).then(r => r.json())
-              setMessage(r.success ? '✅ 配置已备份' : `❌ ${r.message}`)
-            } catch { setMessage('❌ 备份失败') }
+          <button onClick={() => {
+            navigator.clipboard.writeText(`mcp agent status --agent ${selectedAgent}`)
+            setMessage('✅ 状态命令已复制')
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-          💾 备份配置
+          复制状态命令
           </button>
-          <button onClick={async () => {
-            try {
-              const r = await fetch('/api/v1/config/diff', {
-                headers: getAuthHeaders(),
-              }).then(r => r.json())
-              if (r.data) {
-                const d = r.data
-                if (d.in_sync) setMessage('✅ 配置与 Hub 完全同步')
-                else setMessage(`⚠️ 差异: 本地${d.only_local.length}个独有, Hub${d.only_hub.length}个独有, ${d.different.length}个不一致`)
-              }
-            } catch { setMessage('❌ 差异检查失败') }
+          <button onClick={() => {
+            navigator.clipboard.writeText(`mcp agent doctor --agent ${selectedAgent}`)
+            setMessage('✅ 自检命令已复制')
           }}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-          🔍 检查差异
+          复制自检命令
           </button>
-          <button onClick={handleDownload} disabled={downloading}
+          <button onClick={() => navigate('/local-discovery')}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors disabled:opacity-50">
-          🔄 同步到本地
+          查看设备清单
           </button>
         </div>
       </div>

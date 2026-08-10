@@ -4,7 +4,7 @@
 
 **MCP 生态的缺失拼图**
 
-发现 · 安装 · 管理 · 发布 · 社区
+发现 · 配置 · 代理 · 监控 · 发布
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00a393?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -15,8 +15,8 @@
 ---
 
 <p align="center">
-  <b>983+ 个 MCP Server</b> · <b>23 个 Web 页面</b> · <b>16 个分类</b> · <b>315 个测试</b><br>
-  搜索 → 安装 → 配置 → 监控。一个平台搞定。
+  <b>983+ 个 MCP Server</b> · <b>多 Agent 配置迁移</b> · <b>本地 Gateway</b> · <b>脱敏遥测</b><br>
+  搜索 → 配置 → 本地代理 → 运行监控。
 </p>
 
 </div>
@@ -43,10 +43,10 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 
 | 模式 | 适用场景 | 门槛 |
 |------|---------|:--:|
-| **SaaS（推荐）** | 搜索/对比/追踪 Server，获取安装命令，版本更新提醒 | 打开浏览器即可 |
+| **SaaS（推荐）** | 搜索/对比/追踪 Server，本地 Gateway 代理与脱敏监控 | 浏览器 + 本地 CLI |
 | **自托管** | 团队/企业集中管理 MCP Server 进程，实时监控 | 需服务器 |
 
-**SaaS 用户流程**：登录 → 搜索 Server → 点"追踪" → 复制安装命令 → 粘贴到 Claude Code / Cursor 的 mcp.json
+**SaaS 用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp agent setup` → 重启 Agent → 查看监控
 **自托管用户流程**：部署 Hub → 一键安装 → 集中管理所有 MCP Server 进程 + 实时健康监控
 
 ---
@@ -65,7 +65,9 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 - **Agent 选择**：支持 Claude Code / Codex / Cursor / Windsurf / VS Code Copilot / Trae 和通用 MCP 客户端
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
-- **下载 & 同步**：一键下载配置文件，CLI 同步到本地
+- **多格式生成**：JSON Agent 使用 `mcpServers`/`servers`，Codex 使用 `~/.codex/config.toml`
+- **安全迁移**：`mcp agent setup` 先预览和确认，再备份原配置并迁移 stdio Server
+- **完整进程配置**：保留结构化 `command`、`args`、按 Server 授权的 `env`、`cwd` 和启用状态
 
 ### 📦 Server 管理
 - **我的 Server**：配置追踪 / 进程管理 双视图切换
@@ -77,7 +79,13 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 ### 📊 监控 & 分析
 - **个人概览**：已追踪/已收藏/有更新/安全风险 四维统计
 - **监控大屏**：实时运行状态、调用次数、Token 消耗、可靠性排行榜
-- **多 Agent 遥测**：为 Claude Code、Codex 等客户端创建独立设备令牌，调用、延迟、错误和 Token 按 Agent 隔离汇总与筛选
+- **多 Agent 遥测**：为 Claude Code、Claude Desktop、Codex 等客户端创建独立设备令牌，数据按 Agent 隔离
+- **调用性能**：调用量、成功率、平均/P95 延迟、输入输出估算 Token 与传输字节
+- **工具与协议**：按 Server/工具聚合，并监控 `tools/call`、`resources/read`、`prompts/get`
+- **进程资源**：每分钟采样 CPU、内存、进程运行时长，展示平均值与峰值
+- **错误分类**：上传稳定错误类别，不上传异常正文、参数或响应
+- **离线队列**：本地 SQLite 可靠队列，断网后自动重试
+- **本地发现**：设备主动上报 Server 名称、命令文件名、环境变量名称和配置指纹；不上传值或完整命令
 - **使用统计**：个人中心展示 30 日调用趋势（柱状图）、成功率、按 Server 分组的详情表
 - **Token 分析**：工具定义 Token 消耗分析 + 优化建议
 - **安全评分**：四维评分引擎（命令/包/发布者/代码模式），危险 Server 阻止安装
@@ -159,37 +167,36 @@ mcp status
 mcp logs server-filesystem -f
 ```
 
-### 🔌 接入 Agent 与按 Agent 隔离遥测
+### 🔌 一键接入 Agent 与本地监控
 
-将 Hub Gateway 添加到 Claude Code、Codex 或其他 MCP 客户端的配置中：
-
-```json
-{
-  "mcpServers": {
-    "mcp-hub": {
-      "command": "mcp",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-仅添加 Gateway 不会自动上传本地调用数据。请在监控页为每个使用的 Agent 分别创建设备，再复制该设备生成的 Gateway 配置。设备令牌在服务端绑定 Agent 类型，事件体不能自行声明或伪造归属。
-
-也可以通过 CLI 生成对应配置：
+在监控页为正在使用的 Agent 创建设备，然后运行页面生成的一次性接入命令：
 
 ```bash
-# 在监控页为 Codex 创建设备后，使用该设备的一次性遥测令牌
-mcp agent config \
+mcp agent setup \
   --agent codex \
   --hub-url https://<your-hub-host> \
   --telemetry-token mcpht_<device-token>
+```
 
-# 查看 Codex 自己的离线队列状态
+CLI 会执行以下操作：
+
+1. 自动查找 Agent 配置，或通过 `--source-config` 指定文件。
+2. 展示将迁移的 stdio Server 和保留的远程 Server。
+3. 获得确认后创建带时间戳的原文件备份。
+4. 将完整本地进程配置写入 Agent 独立的 `gateway.json`。
+5. 在 Agent 配置中保留远程 HTTP/SSE Server，并添加唯一的 `mcp-hub` 入口。
+6. 上报不含参数、响应、环境变量值和完整命令的设备清单。
+
+本地诊断：
+
+```bash
 mcp agent status --agent codex
+mcp agent doctor --agent codex
 ```
 
 每个 Agent 使用独立令牌和默认状态目录，例如 `~/.config/mcp-hub/codex` 与 `~/.config/mcp-hub/claude-code`。监控大屏会显示已注册 Agent，并可按 Agent 筛选 Server 调用、成功率、延迟和 Token。
+
+> 浏览器不能直接扫描用户电脑。只有用户本地 CLI/Gateway 主动发现、代理和上报的数据才会出现在 SaaS Hub 中。
 
 ### 🌐 Web 仪表盘
 
@@ -235,7 +242,7 @@ http://localhost:3987
 | 📦 我的 Server | 批量操作/重启/调用数据/更新提醒 |
 | ⚙️ 配置中心 | 上传匹配/Agent选择/配置下载/草稿 |
 | 📋 方案市场 | 发布方案/浏览/一键导入 |
-| 📊 监控大屏 | 实时状态/调用/Token/可靠性/按 Agent 筛选 |
+| 📊 监控大屏 | 调用趋势/P95 延迟/Token/字节/工具/协议/CPU/内存/错误分类 |
 | 👤 个人中心 | 资料/统计/趋势图 |
 | 🔔 通知中心 | 告警/更新/回复/系统通知/单条删除 |
 | 🌙 体验 | Dark Mode/全局搜索/面包屑/移动端 |

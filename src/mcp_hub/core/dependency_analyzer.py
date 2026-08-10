@@ -14,6 +14,8 @@ import re
 import shutil
 from dataclasses import dataclass, field
 
+from mcp_hub.core.gateway_config import split_legacy_command
+
 # 已知的 MCP Server 常见环境变量需求模式
 KNOWN_ENV_PATTERNS: dict[str, dict] = {
     # API Keys
@@ -222,8 +224,10 @@ class DependencyAnalyzer:
             report.notes.append("未提供安装命令，无法分析")
             return report
 
-        parts = cmd.split()
-        tool = parts[0] if parts else "unknown"
+        try:
+            tool, _parts = split_legacy_command(cmd)
+        except ValueError:
+            tool = "unknown"
         report.install_tool = tool
 
         # 1. 分析运行时需求
@@ -372,7 +376,11 @@ class DependencyAnalyzer:
             report.notes.append("Puppeteer 需要 Chromium 浏览器")
 
         # 检查 API Key 需求（从命令参数推断）
-        for part in command.split():
+        try:
+            _tool, parts = split_legacy_command(command)
+        except ValueError:
+            parts = ()
+        for part in parts:
             part_lower = part.lower()
             if "api-key" in part_lower or "apikey" in part_lower:
                 report.notes.append("此 Server 需要 API Key，请确保已配置相应的环境变量")

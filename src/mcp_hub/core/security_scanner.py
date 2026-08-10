@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 
 import httpx
 
+from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.models.server import SecurityLevel
 
 # ── 常量 ───────────────────────────────────────────────────
@@ -232,7 +233,11 @@ class PackageChecker:
 
     def _extract_package_name(self, command: str, install_type: str) -> str | None:
         """从安装命令中提取包名。"""
-        parts = command.split()
+        try:
+            executable, args = split_legacy_command(command)
+            parts = (executable, *args)
+        except ValueError:
+            parts = ()
         if install_type in ("npx",):
             # npx -y @org/package 或 npx @org/package
             for p in parts:

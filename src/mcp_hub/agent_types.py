@@ -6,6 +6,7 @@ DEFAULT_AGENT_TYPE = "generic"
 
 AGENT_TYPE_LABELS: dict[str, str] = {
     "claude-code": "Claude Code",
+    "claude-desktop": "Claude Desktop",
     "codex": "Codex",
     "cursor": "Cursor",
     "windsurf": "Windsurf",

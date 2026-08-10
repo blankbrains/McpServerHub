@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Annotated
 
 import httpx
+import tomli_w
 from fastapi import APIRouter, Depends, File, Header, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, select, text
 
-from mcp_hub.api.dependencies import get_current_user
+from mcp_hub.api.dependencies import get_admin_user, get_current_user
+from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.core.registry import Registry
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import UserServerModel
@@ -141,10 +143,18 @@ async def download_config(
             fragment = get_config_for_agent(name, cmd, agent)
             config[server_key][name] = fragment["config_content"][server_key][name]
 
+    if config_spec.get("format") == "toml":
+        content = tomli_w.dumps(config)
+        media_type = "application/toml"
+        filename = "mcp-hub-config.toml"
+    else:
+        content = json.dumps(config, indent=2, ensure_ascii=False)
+        media_type = "application/json"
+        filename = "mcp-hub-config.json"
     return Response(
-        content=json.dumps(config, indent=2, ensure_ascii=False),
-        media_type="application/json",
-        headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -296,7 +306,11 @@ async def upload_config(
         for s in results:
             sid = s.get("id", "")
             scmd = s.get("install_command", "")
-            if name in sid or (scmd and cmd and scmd.split()[0] in cmd):
+            try:
+                executable, _args = split_legacy_command(scmd)
+            except ValueError:
+                executable = ""
+            if name in sid or (executable and cmd and executable in cmd):
                 found = s
                 break
 
@@ -363,13 +377,17 @@ async def upload_config(
                     all_tracked.append({"server_id": sid, "matched": False})
                     if track_servers:
                         try:
+                            try:
+                                install_type, _args = split_legacy_command(cmd)
+                            except ValueError:
+                                install_type = "custom"
                             await registry.register_server(
                                 {
                                     "id": sid,
                                     "name": name,
                                     "description": f"自定义 Server: {name}",
                                     "install_command": cmd,
-                                    "install_type": cmd.split()[0] if cmd else "custom",
+                                    "install_type": install_type,
                                     "categories": json.dumps(["custom"]),
                                     "tags": json.dumps(["user-uploaded"]),
                                     "author": "user",
@@ -427,11 +445,16 @@ async def build_config(data: dict):
     生成的配置包含这些 Server 的安装命令 + Hub 网关入口。
     """
     server_ids = data.get("servers", [])
+    agent = data.get("agent", "generic")
     if not server_ids:
         return {"success": False, "error": "server 列表为空"}
 
+    from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+
     registry = Registry()
-    config = {"mcpServers": {}}
+    config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
+    server_key = config_spec["server_key"]
+    config = {server_key: {}}
 
     for sid in server_ids:
         server = await registry.get_by_id(sid)
@@ -439,29 +462,27 @@ async def build_config(data: dict):
             cmd = server.get("install_command", "")
             name = sid.split("/")[-1]
             if cmd:
-                config["mcpServers"][name] = {"command": cmd}
+                fragment = get_config_for_agent(name, cmd, agent)
+                config[server_key][name] = fragment["config_content"][server_key][name]
 
-    # 添加 Hub 网关
-    config["mcpServers"]["mcp-hub-gateway"] = {
-        "command": "mcp",
-        "args": ["serve"],
-    }
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(config, tmp, indent=2, ensure_ascii=False)
-
-    return FileResponse(
-        tmp.name,
+    if config_spec.get("format") == "toml":
+        return Response(
+            content=tomli_w.dumps(config),
+            media_type="application/toml",
+            headers={"Content-Disposition": "attachment; filename=mcp-hub-config.toml"},
+        )
+    return Response(
+        content=json.dumps(config, indent=2, ensure_ascii=False),
         media_type="application/json",
-        filename="mcp-hub-config.json",
+        headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
     )
 
 
 @router.post("/config/generate")
-async def generate_config():
+async def generate_config(_admin_id: str = Depends(get_admin_user)):
     """生成完整的 mcp.json 配置文件，包含所有已安装 Server + Hub 网关。"""
+    from mcp_hub.core.config_manager import get_config_for_agent
+
     registry = Registry()
     installed = await registry.get_installed()
 
@@ -472,13 +493,8 @@ async def generate_config():
         cmd = s.get("install_command", "")
         name = s["id"].split("/")[-1]
         if cmd:
-            config["mcpServers"][name] = {"command": cmd}
-
-    # 添加 Hub 网关入口（如果当前是 daemon 模式）
-    config["mcpServers"]["mcp-hub"] = {
-        "command": "mcp",
-        "args": ["serve"],
-    }
+            fragment = get_config_for_agent(name, cmd, "generic")
+            config["mcpServers"][name] = fragment["config_content"]["mcpServers"][name]
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
@@ -493,7 +509,7 @@ async def generate_config():
 
 
 @router.get("/config/from-local")
-async def config_from_local():
+async def config_from_local(_admin_id: str = Depends(get_admin_user)):
     """尝试读取本地的 mcp.json 配置文件。
 
     扫描所有已知 Agent 的标准路径：
@@ -563,7 +579,7 @@ async def config_from_local():
 
 
 @router.get("/local/discover")
-async def local_discover():
+async def local_discover(_admin_id: str = Depends(get_admin_user)):
     """扫描本机所有 AI Agent 的 MCP 配置文件。
 
     自动发现 Claude Code、Claude Desktop、Cursor、Codex、Trae、
@@ -577,7 +593,7 @@ async def local_discover():
 
 
 @router.get("/local/compare")
-async def local_compare():
+async def local_compare(_admin_id: str = Depends(get_admin_user)):
     """跨 Agent 对比 MCP 配置。
 
     返回每个 MCP Server 在各 Agent 中的分布情况：
@@ -604,7 +620,7 @@ async def local_compare():
 
 
 @router.get("/local/conflicts")
-async def local_conflicts():
+async def local_conflicts(_admin_id: str = Depends(get_admin_user)):
     """检测本地 MCP 配置冲突。
 
     发现同名 Server 在不同 Agent 中配置了不同的命令或参数，
@@ -634,7 +650,7 @@ async def local_conflicts():
 
 
 @router.get("/config/diff")
-async def config_diff():
+async def config_diff(_admin_id: str = Depends(get_admin_user)):
     """对比本地 mcp.json 与 Hub 上的配置差异。
 
     返回：
@@ -651,7 +667,7 @@ async def config_diff():
 
 
 @router.post("/config/backup")
-async def config_backup(data: dict):
+async def config_backup(data: dict, _admin_id: str = Depends(get_admin_user)):
     """备份当前配置。可附带 label 标签。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -662,7 +678,7 @@ async def config_backup(data: dict):
 
 
 @router.get("/config/backups")
-async def config_backups_list():
+async def config_backups_list(_admin_id: str = Depends(get_admin_user)):
     """列出所有配置备份。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -672,7 +688,7 @@ async def config_backups_list():
 
 
 @router.post("/config/restore/{filename:path}")
-async def config_restore(filename: str):
+async def config_restore(filename: str, _admin_id: str = Depends(get_admin_user)):
     """从指定备份恢复配置。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -682,7 +698,7 @@ async def config_restore(filename: str):
 
 
 @router.post("/servers/pre-check")
-async def server_pre_check(data: dict):
+async def server_pre_check(data: dict, _admin_id: str = Depends(get_admin_user)):
     """安装前环境预检。
 
     请求体: {"command": "uvx mcp-server-web-search"}
@@ -700,7 +716,7 @@ async def server_pre_check(data: dict):
 
 
 @router.post("/servers/dependency-analyze")
-async def server_dependency_analyze(data: dict):
+async def server_dependency_analyze(data: dict, _admin_id: str = Depends(get_admin_user)):
     """分析 MCP Server 的完整依赖链。
 
     请求体: {"server_id": "@anthropic/web-search", "command": "uvx mcp-server-web-search"}

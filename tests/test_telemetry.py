@@ -11,14 +11,22 @@ from sqlalchemy import delete
 
 from mcp_hub.api.routes_telemetry import (
     DeviceCreateRequest,
+    InventorySnapshotRequest,
     TelemetryBatchRequest,
     TelemetryEventInput,
     create_telemetry_device,
     get_telemetry_agents,
+    get_telemetry_errors,
     get_telemetry_identity,
+    get_telemetry_inventory,
+    get_telemetry_operations,
+    get_telemetry_resources,
     get_telemetry_servers,
     get_telemetry_summary,
+    get_telemetry_timeseries,
+    get_telemetry_tools,
     ingest_telemetry_events,
+    ingest_telemetry_inventory,
     revoke_telemetry_device,
 )
 from mcp_hub.cli.agent import agent
@@ -34,7 +42,12 @@ from mcp_hub.core.telemetry import (
     get_agent_state_dir,
 )
 from mcp_hub.db.database import async_session_factory, engine
-from mcp_hub.db.models import Base, TelemetryDeviceModel, TelemetryEventModel
+from mcp_hub.db.models import (
+    Base,
+    TelemetryDeviceModel,
+    TelemetryEventModel,
+    TelemetryInventoryModel,
+)
 
 
 async def _prepare_telemetry_tables() -> None:
@@ -42,6 +55,7 @@ async def _prepare_telemetry_tables() -> None:
         await connection.run_sync(Base.metadata.create_all)
     async with async_session_factory() as session:
         await session.execute(delete(TelemetryEventModel))
+        await session.execute(delete(TelemetryInventoryModel))
         await session.execute(delete(TelemetryDeviceModel))
         await session.commit()
 
@@ -56,6 +70,10 @@ def _event(event_id: str, server_id: str = "@example/weather") -> TelemetryEvent
         duration_ms=120,
         input_tokens=12,
         output_tokens=8,
+        input_bytes=120,
+        output_bytes=80,
+        session_id="session-00000001",
+        operation="tools/call",
         occurred_at=datetime.now(timezone.utc),
     )
 
@@ -77,6 +95,9 @@ async def test_telemetry_events_are_idempotent_and_user_scoped() -> None:
     assert second["data"] == {"saved": 0, "duplicates": 1}
     assert summary["data"]["total_calls"] == 1
     assert summary["data"]["total_tokens"] == 20
+    assert summary["data"]["total_bytes"] == 200
+    assert summary["data"]["active_sessions"] == 1
+    assert summary["data"]["p95_duration_ms"] == 120
     assert other_summary["data"]["total_calls"] == 0
     assert servers["data"]["servers"][0]["server_id"] == "@example/weather"
 
@@ -240,3 +261,163 @@ def test_agent_config_outputs_gateway_environment(tmp_path) -> None:
     assert "MCP_HUB_AGENT_TYPE" in result.output
     assert "codex" in result.output
     assert "https://hub.example.test" in result.output
+
+
+async def test_telemetry_exposes_tool_trend_resource_and_error_aggregates() -> None:
+    await _prepare_telemetry_tables()
+    created = await create_telemetry_device(DeviceCreateRequest(name="Workstation"), "alice")
+    identity = await get_telemetry_identity(f"Bearer {created['data']['token']}")
+    failed = _event("aggregate-event-0001")
+    failed.status = "error"
+    failed.error_code = "timeout"
+    resource = TelemetryEventInput(
+        event_id="aggregate-resource-0001",
+        event_type="resource_sample",
+        session_id="session-00000001",
+        server_id="@example/weather",
+        operation="process_sample",
+        cpu_percent=25.5,
+        memory_bytes=128 * 1024 * 1024,
+        process_uptime_seconds=3600,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    await ingest_telemetry_events(
+        TelemetryBatchRequest(
+            events=[
+                _event("aggregate-event-0002"),
+                failed,
+                resource,
+                TelemetryEventInput(
+                    event_id="aggregate-protocol-001",
+                    event_type="protocol_call",
+                    session_id="session-00000001",
+                    server_id="@example/weather",
+                    operation="resources/read",
+                    duration_ms=80,
+                    input_bytes=30,
+                    output_bytes=100,
+                    occurred_at=datetime.now(timezone.utc),
+                ),
+            ]
+        ),
+        identity,
+    )
+
+    tools = await get_telemetry_tools(days=7, user_id="alice")
+    timeseries = await get_telemetry_timeseries(days=7, user_id="alice")
+    resources = await get_telemetry_resources(days=7, user_id="alice")
+    errors = await get_telemetry_errors(days=7, user_id="alice")
+    operations = await get_telemetry_operations(days=7, user_id="alice")
+
+    assert tools["data"]["tools"][0]["total_calls"] == 2
+    assert tools["data"]["tools"][0]["success_rate"] == 50.0
+    assert timeseries["data"]["points"][0]["error_calls"] == 1
+    assert resources["data"]["resources"][0]["max_memory_bytes"] == 128 * 1024 * 1024
+    assert resources["data"]["resources"][0]["process_uptime_seconds"] == 3600
+    assert errors["data"]["errors"][0]["error_code"] == "timeout"
+    assert {row["operation"] for row in operations["data"]["operations"]} == {
+        "tools/call",
+        "resources/read",
+    }
+
+
+async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> None:
+    await _prepare_telemetry_tables()
+    claude = await create_telemetry_device(
+        DeviceCreateRequest(name="Laptop", agent_type="claude-code"),
+        "alice",
+    )
+    codex = await create_telemetry_device(
+        DeviceCreateRequest(name="Desktop", agent_type="codex"),
+        "alice",
+    )
+    claude_identity = await get_telemetry_identity(f"Bearer {claude['data']['token']}")
+    codex_identity = await get_telemetry_identity(f"Bearer {codex['data']['token']}")
+    reported_at = datetime.now(timezone.utc)
+
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="inventory-event-0001",
+            reported_at=reported_at,
+            servers=[
+                {
+                    "server_name": "weather",
+                    "transport": "stdio",
+                    "command_name": "npx",
+                    "env_keys": ["WEATHER_API_KEY"],
+                    "config_hash": "a" * 64,
+                    "enabled": True,
+                }
+            ],
+        ),
+        claude_identity,
+    )
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="inventory-event-0002",
+            reported_at=reported_at,
+            servers=[
+                {
+                    "server_name": "weather",
+                    "transport": "stdio",
+                    "command_name": "uvx",
+                    "env_keys": ["WEATHER_API_KEY"],
+                    "config_hash": "b" * 64,
+                    "enabled": True,
+                },
+                {
+                    "server_name": "database",
+                    "transport": "stdio",
+                    "command_name": "uvx",
+                    "env_keys": ["DATABASE_URL"],
+                    "config_hash": "c" * 64,
+                    "enabled": False,
+                },
+            ],
+        ),
+        codex_identity,
+    )
+
+    inventory = await get_telemetry_inventory(user_id="alice")
+    other_inventory = await get_telemetry_inventory(user_id="bob")
+    serialized = str(inventory)
+
+    assert inventory["data"]["total_devices"] == 2
+    assert inventory["data"]["total_unique_servers"] == 2
+    assert inventory["data"]["conflicts"][0]["server_name"] == "weather"
+    assert "WEATHER_API_KEY" in serialized
+    assert "secret" not in serialized
+    assert other_inventory["data"]["total_devices"] == 0
+
+
+async def test_new_inventory_snapshot_marks_removed_servers_inactive() -> None:
+    await _prepare_telemetry_tables()
+    created = await create_telemetry_device(DeviceCreateRequest(name="Laptop"), "alice")
+    identity = await get_telemetry_identity(f"Bearer {created['data']['token']}")
+    reported_at = datetime.now(timezone.utc)
+    server = {
+        "server_name": "weather",
+        "command_name": "npx",
+        "env_keys": [],
+        "config_hash": "d" * 64,
+    }
+
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="inventory-replace-0001",
+            reported_at=reported_at,
+            servers=[server],
+        ),
+        identity,
+    )
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="inventory-replace-0002",
+            reported_at=reported_at,
+            servers=[],
+        ),
+        identity,
+    )
+
+    inventory = await get_telemetry_inventory(user_id="alice")
+    assert inventory["data"]["total_unique_servers"] == 0

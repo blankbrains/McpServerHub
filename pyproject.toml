@@ -32,6 +32,8 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "structlog>=24.0.0",
     "alembic>=1.13.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "tomli-w>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +62,9 @@ packages = ["src/mcp_hub"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/mcp_hub/web/static" = "mcp_hub/web/static"
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["src/mcp_hub/web/static"]
 
 [tool.ruff]
 line-length = 100

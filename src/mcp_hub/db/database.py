@@ -7,6 +7,7 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -432,6 +433,49 @@ async def _run_migrations():
                 "迁移步骤 telemetry_devices.agent_type 失败",
                 exc_info=True,
             )
+
+    # 扩展遥测事件字段。新安装由 metadata.create_all 创建，旧数据库在此增量加列。
+    telemetry_columns = {
+        "session_id": "VARCHAR(64) DEFAULT ''",
+        "operation": "VARCHAR(64) DEFAULT ''",
+        "error_code": "VARCHAR(64) DEFAULT ''",
+        "input_bytes": "INTEGER DEFAULT 0",
+        "output_bytes": "INTEGER DEFAULT 0",
+        "process_uptime_seconds": "INTEGER",
+        "queue_depth": "INTEGER",
+        "server_version": "VARCHAR(50) DEFAULT ''",
+        "transport": "VARCHAR(32) DEFAULT 'stdio'",
+    }
+    try:
+        async with engine.begin() as conn:
+            existing_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_events")
+                }
+            )
+            for column_name, column_sql in telemetry_columns.items():
+                if column_name not in existing_columns:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE telemetry_events "
+                            f"ADD COLUMN {column_name} {column_sql}"
+                        )
+                    )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_telemetry_events_session_id "
+                    "ON telemetry_events(session_id)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_telemetry_events_error_code "
+                    "ON telemetry_events(error_code)"
+                )
+            )
+    except Exception:
+        logger.debug("迁移步骤 telemetry_events 扩展字段失败", exc_info=True)
 
 
 async def init_db():

@@ -233,13 +233,55 @@ class TelemetryEventModel(Base):
         index=True,
     )
     event_type = Column(String(32), nullable=False, index=True)
+    session_id = Column(String(64), default="", index=True)
     server_id = Column(String(255), default="", index=True)
     tool_name = Column(String(255), default="")
+    operation = Column(String(64), default="")
     status = Column(String(32), default="ok", index=True)
+    error_code = Column(String(64), default="", index=True)
     duration_ms = Column(Integer, default=0)
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
+    input_bytes = Column(Integer, default=0)
+    output_bytes = Column(Integer, default=0)
     cpu_percent = Column(Float, nullable=True)
     memory_bytes = Column(Integer, nullable=True)
+    process_uptime_seconds = Column(Integer, nullable=True)
+    queue_depth = Column(Integer, nullable=True)
+    server_version = Column(String(50), default="")
+    transport = Column(String(32), default="stdio")
     occurred_at = Column(DateTime, nullable=False, index=True)
     received_at = Column(DateTime, server_default=func.now(), index=True)
+
+
+class TelemetryInventoryModel(Base):
+    """Privacy-preserving local MCP configuration inventory."""
+
+    __tablename__ = "telemetry_inventory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    device_id = Column(
+        String(64),
+        ForeignKey("telemetry_devices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    server_name = Column(String(255), nullable=False)
+    transport = Column(String(32), default="stdio")
+    command_name = Column(String(255), default="")
+    env_keys = Column(Text, default="[]")
+    config_hash = Column(String(64), nullable=False)
+    enabled = Column(Boolean, default=True)
+    active = Column(Boolean, default=True, index=True)
+    configuration_error = Column(String(64), default="")
+    discovered_at = Column(DateTime, nullable=False, index=True)
+    last_seen_at = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "device_id",
+            "server_name",
+            name="uq_telemetry_inventory_device_server",
+        ),
+    )

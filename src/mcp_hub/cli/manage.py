@@ -6,8 +6,20 @@ import asyncio
 
 import click
 
+from mcp_hub.core.config_manager import ConfigManager
+from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.core.process_manager import ProcessManager
 from mcp_hub.core.registry import Registry
+
+
+async def _spawn_configured_server(
+    process_manager: ProcessManager,
+    server_id: str,
+    command: str,
+) -> None:
+    executable, args = split_legacy_command(command)
+    env = await ConfigManager().list_all_config(server_id)
+    await process_manager.spawn(server_id, executable, list(args), env=env)
 
 
 @click.command("start")
@@ -51,9 +63,8 @@ def start(server_name: str | None):
                 command = s.get("install_command", "")
                 if not command:
                     continue
-                parts = command.split()
                 try:
-                    await pm.spawn(sid, parts[0], parts[1:])
+                    await _spawn_configured_server(pm, sid, command)
                     await registry.update_status(sid, "running")
                     started += 1
                     click.echo(f"  ✅ {sid} 已启动")
@@ -73,8 +84,7 @@ def start(server_name: str | None):
             click.echo(f"❌ {server_id} 没有安装命令")
             return
 
-        parts = command.split()
-        await pm.spawn(server_id, parts[0], parts[1:])
+        await _spawn_configured_server(pm, server_id, command)
         await registry.update_status(server_id, "running")
         click.echo(f"✅ {server_id} 已启动")
 
@@ -127,8 +137,7 @@ def restart(server_name: str):
         await pm.kill(server_id)
         server = await registry.get_by_id(server_id)
         if server and server.get("install_command"):
-            parts = server["install_command"].split()
-            await pm.spawn(server_id, parts[0], parts[1:])
+            await _spawn_configured_server(pm, server_id, server["install_command"])
             await registry.update_status(server_id, "running")
             click.echo(f"🔄 {server_id} 已重启")
 

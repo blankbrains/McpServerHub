@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import shlex
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TextIO
 
+from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
 from mcp_hub.logging_config import get_logger
 
@@ -78,10 +79,12 @@ class ManagedProcess:
     started_at: float | None = None
     restart_count: int = 0
     log_file: Path | None = None
-    log_fd: int | None = None  # log file descriptor (closed on kill)
+    log_handle: TextIO | None = None
     last_keepalive_ok: float | None = None  # timestamp of last successful keepalive ping
     spawn_command: str = ""  # 记录启动命令，用于自动重启
     spawn_args: list[str] | None = None  # 记录启动参数，用于自动重启
+    spawn_env_keys: list[str] | None = None
+    spawn_cwd: str | None = None
 
 
 # 全局进程管理器单例
@@ -109,6 +112,9 @@ class ProcessManager:
         server_id: str,
         command: str,
         args: list[str] | None = None,
+        *,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
     ) -> ManagedProcess:
         async with self._lock:
             if server_id in self._processes:
@@ -117,21 +123,26 @@ class ProcessManager:
                     raise ServerAlreadyRunningError(server_id, proc.pid)
 
             log_file = self.log_dir / f"{server_id.replace('/', '_').replace('@', '')}.log"
-            log_fd = open(log_file, "a", encoding="utf-8")  # noqa: SIM115
-            log_fd.write(f"\n--- {datetime.now().isoformat()} Started ---\n")
-            log_fd.flush()
+            log_handle = open(log_file, "a", encoding="utf-8")  # noqa: SIM115
+            log_handle.write(f"\n--- {datetime.now().isoformat()} Started ---\n")
+            log_handle.flush()
 
-            cmd_list = shlex.split(command)
-            full_cmd = cmd_list[0]
-            full_args = cmd_list[1:] + (args or [])
+            if args is None:
+                full_cmd, legacy_args = split_legacy_command(command)
+                full_args = list(legacy_args)
+            else:
+                full_cmd = command
+                full_args = list(args)
+            process_env = {**_filter_env(), **(env or {})}
 
             process = await asyncio.create_subprocess_exec(
                 full_cmd,
                 *full_args,
                 stdin=asyncio.subprocess.PIPE,
-                stdout=log_fd,
+                stdout=log_handle,
                 stderr=asyncio.subprocess.STDOUT,
-                env=_filter_env(),
+                env=process_env,
+                cwd=cwd,
             )
 
             managed = ManagedProcess(
@@ -140,9 +151,11 @@ class ProcessManager:
                 process=process,
                 started_at=time.time(),
                 log_file=log_file,
-                log_fd=log_fd.fileno(),
+                log_handle=log_handle,
                 spawn_command=command,
                 spawn_args=args,
+                spawn_env_keys=sorted((env or {}).keys()),
+                spawn_cwd=cwd,
             )
             self._processes[server_id] = managed
             logger.info(
@@ -162,7 +175,8 @@ class ProcessManager:
                     exit_code=process.returncode,
                     stderr="".join(error_msg)[:500],
                 )
-                log_fd.close()
+                log_handle.close()
+                managed.log_handle = None
                 self._processes.pop(server_id, None)
                 raise ProcessStartupError(server_id, process.returncode, "".join(error_msg))
 
@@ -229,11 +243,10 @@ class ProcessManager:
                         f.write(f"--- {datetime.now().isoformat()} Stopped ---\n")
                 except OSError:
                     pass
-            # Close the log file descriptor if still open
-            if proc.log_fd is not None:
+            if proc.log_handle is not None:
                 with contextlib.suppress(OSError):
-                    os.close(proc.log_fd)
-                proc.log_fd = None
+                    proc.log_handle.close()
+                proc.log_handle = None
             return True
 
     def get(self, server_id: str) -> ManagedProcess | None:
@@ -250,10 +263,10 @@ class ProcessManager:
         """关闭所有日志文件描述符并清理进程（测试用）。"""
         async with self._lock:
             for proc in list(self._processes.values()):
-                if proc.log_fd is not None:
+                if proc.log_handle is not None:
                     with contextlib.suppress(OSError):
-                        os.close(proc.log_fd)
-                    proc.log_fd = None
+                        proc.log_handle.close()
+                    proc.log_handle = None
                 if proc.process and proc.process.returncode is None:
                     with contextlib.suppress(ProcessLookupError):
                         proc.process.terminate()

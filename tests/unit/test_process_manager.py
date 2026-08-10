@@ -96,11 +96,13 @@ class TestProcessManagerSpawn:
     ) -> None:
         """spawn 后日志文件应被创建。"""
         mock_spawn.return_value = _make_mock_process(pid=20001)
-        await pm.spawn("test/server", "echo")
+        managed = await pm.spawn("test/server", "echo")
         log_file = temp_dir / "test_server.log"
         assert log_file.exists()
         content = log_file.read_text(encoding="utf-8")
         assert "Started" in content
+        assert managed.log_handle is not None
+        assert managed.log_handle.closed is False
 
     @patch("asyncio.create_subprocess_exec")
     async def test_spawn_duplicate(self, mock_spawn: MagicMock, pm: ProcessManager) -> None:
@@ -123,10 +125,11 @@ class TestProcessManagerKill:
     async def test_kill_existing(self, mock_spawn: MagicMock, pm: ProcessManager) -> None:
         """kill 已注册的进程应返回 True 并从 _processes 移除。"""
         mock_spawn.return_value = _make_mock_process(pid=50001)
-        await pm.spawn("test/server", "echo")
+        managed = await pm.spawn("test/server", "echo")
         result = await pm.kill("test/server")
         assert result is True
         assert pm.get("test/server") is None
+        assert managed.log_handle is None
 
     async def test_kill_non_existent(self, pm: ProcessManager) -> None:
         """kill 不存在的 server_id 应返回 False。"""

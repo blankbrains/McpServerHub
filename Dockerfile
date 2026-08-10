@@ -18,7 +18,7 @@ COPY src/mcp_hub/web/ ./
 RUN npm run build
 
 FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户

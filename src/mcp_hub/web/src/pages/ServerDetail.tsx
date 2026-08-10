@@ -11,6 +11,7 @@ import InfoTooltip from '../components/InfoTooltip'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', color: 'bg-green-100 text-green-800' },
+  { id: 'claude-desktop', name: 'Claude Desktop', color: 'bg-emerald-100 text-emerald-800' },
   { id: 'cursor', name: 'Cursor', color: 'bg-purple-100 text-purple-800' },
   { id: 'vscode-copilot', name: 'VS Code Copilot', color: 'bg-sky-100 text-sky-800' },
   { id: 'codex', name: 'Codex', color: 'bg-blue-100 text-blue-800' },

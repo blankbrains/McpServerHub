@@ -122,7 +122,8 @@ def apply_config(path: str | None):
     "--agent", default="claude-code", help="目标 Agent (claude-code/cursor/codex/generic)"
 )  # noqa: E501
 @click.option("--server-ids", help="要同步的 Server ID 列表（逗号分隔），默认同步所有已安装")
-def sync_config(hub_url: str, agent: str, server_ids: str | None):
+@click.option("--yes", is_flag=True, help="确认覆盖前已阅读目标路径与备份说明")
+def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
     """从 Hub 同步配置到本地。
 
     从 Hub 服务器获取配置，自动写入本地 Agent 配置文件。
@@ -147,23 +148,33 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
                 async with httpx.AsyncClient(timeout=15) as client:
                     resp = await client.post(
                         f"{api_base}/config/build",
-                        json={"servers": ids},
+                        json={"servers": ids, "agent": agent},
                         headers=auth_headers,
                     )
                     if resp.status_code != 200:
                         _console.print(f"[red]❌ Hub 返回错误: {resp.status_code}[/red]")
                         return
-                    config = resp.json()
+                    if "toml" in resp.headers.get("content-type", ""):
+                        config = resp.text
+                    else:
+                        config = resp.json()
             else:
                 async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.get(f"{api_base}/config/download", headers=auth_headers)
+                    resp = await client.get(
+                        f"{api_base}/config/download",
+                        params={"agent": agent},
+                        headers=auth_headers,
+                    )
                     if resp.status_code == 401:
                         _console.print("[red]❌ 请先使用 mcp login 登录后再同步个人配置[/red]")
                         return
                     if resp.status_code != 200:
                         _console.print(f"[red]❌ Hub 返回错误: {resp.status_code}[/red]")
                         return
-                    config = resp.json()
+                    if "toml" in resp.headers.get("content-type", ""):
+                        config = resp.text
+                    else:
+                        config = resp.json()
 
         except httpx.ConnectError:
             _console.print(f"[red]❌ 无法连接 Hub: {api_base}[/red]")
@@ -174,22 +185,49 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None):
             return
 
         # 确定目标路径
-        from pathlib import Path
+        from datetime import datetime
 
-        agent_paths = {
-            "claude-code": Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
-            "cursor": Path.home() / ".cursor" / "mcp.json",
-            "codex": Path.home() / ".codex" / "mcp.json",
-            "trae": Path.home() / ".trae" / "mcp.json",
-            "generic": Path.home() / ".config" / "mcp-hub" / "mcp.json",
-        }
-        target = agent_paths.get(agent, agent_paths["claude-code"])
+        from mcp_hub.core.agent_config import get_agent_profile
+
+        try:
+            profile = get_agent_profile(agent)
+        except ValueError as exc:
+            _console.print(f"[red]❌ {exc}[/red]")
+            return
+        target = profile.paths[0]
+
+        if target.exists():
+            if not yes and not click.confirm(
+                f"{target} 已存在。继续会先备份原文件，再用 Hub 配置替换，是否继续？",
+                default=False,
+            ):
+                _console.print("[yellow]已取消，未修改本地配置[/yellow]")
+                return
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = target.with_name(f"{target.name}.mcp-hub-backup-{timestamp}")
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            backup_path.write_bytes(target.read_bytes())
+            _console.print(f"[dim]备份: {backup_path}[/dim]")
 
         # 写入本地文件
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+        if isinstance(config, str):
+            target.write_text(config, encoding="utf-8")
+            try:
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib
 
-        server_count = len(config.get("mcpServers", {})) if isinstance(config, dict) else 0
+                server_count = len(tomllib.loads(config).get(profile.server_key, {}))
+            except (ValueError, TypeError):
+                server_count = 0
+        else:
+            target.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
+            server_count = (
+                len(config.get(profile.server_key, {})) if isinstance(config, dict) else 0
+            )
+
         _console.print("[green]✅ 配置已同步[/green]")
         _console.print(f"   写入: [bold]{target}[/bold]")
         _console.print(f"   Server: {server_count} 个")

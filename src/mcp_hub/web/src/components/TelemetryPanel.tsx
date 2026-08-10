@@ -14,6 +14,13 @@ interface TelemetrySummary {
   total_tokens: number
   active_devices: number
   active_servers: number
+  active_sessions: number
+  p95_duration_ms: number
+  input_bytes: number
+  output_bytes: number
+  total_bytes: number
+  first_call_at: string | null
+  last_call_at: string | null
   last_seen_at: string | null
 }
 
@@ -53,8 +60,55 @@ interface CreatedDevice {
   token: string
 }
 
+interface TelemetryTool {
+  server_id: string
+  tool_name: string
+  total_calls: number
+  error_calls: number
+  success_rate: number
+  avg_duration_ms: number
+  total_tokens: number
+  total_bytes: number
+  last_call_at: string | null
+}
+
+interface TelemetryPoint {
+  date: string
+  total_calls: number
+  error_calls: number
+  avg_duration_ms: number
+  total_tokens: number
+}
+
+interface TelemetryResource {
+  server_id: string
+  sample_count: number
+  avg_cpu_percent: number
+  max_cpu_percent: number
+  avg_memory_bytes: number
+  max_memory_bytes: number
+  process_uptime_seconds: number
+  last_sample_at: string | null
+}
+
+interface TelemetryError {
+  server_id: string
+  error_code: string
+  count: number
+  last_seen_at: string | null
+}
+
+interface TelemetryOperation {
+  operation: string
+  total_calls: number
+  error_calls: number
+  avg_duration_ms: number
+  last_call_at: string | null
+}
+
 const AGENT_OPTIONS = [
   { id: 'claude-code', label: 'Claude Code' },
+  { id: 'claude-desktop', label: 'Claude Desktop' },
   { id: 'codex', label: 'Codex' },
   { id: 'cursor', label: 'Cursor' },
   { id: 'windsurf', label: 'Windsurf' },
@@ -79,6 +133,20 @@ function formatDate(value: string | null): string {
   return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleString()
 }
 
+function formatBytes(value: number): string {
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${value} B`
+}
+
+function formatUptime(value: number): string {
+  if (!value) return '-'
+  const days = Math.floor(value / 86400)
+  const hours = Math.floor((value % 86400) / 3600)
+  return days > 0 ? `${days} 天 ${hours} 小时` : `${hours} 小时`
+}
+
 async function copyText(value: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(value)
@@ -93,11 +161,17 @@ export default function TelemetryPanel() {
   const [servers, setServers] = useState<TelemetryServer[]>([])
   const [devices, setDevices] = useState<TelemetryDevice[]>([])
   const [agents, setAgents] = useState<TelemetryAgentSummary[]>([])
+  const [tools, setTools] = useState<TelemetryTool[]>([])
+  const [points, setPoints] = useState<TelemetryPoint[]>([])
+  const [resources, setResources] = useState<TelemetryResource[]>([])
+  const [errors, setErrors] = useState<TelemetryError[]>([])
+  const [operations, setOperations] = useState<TelemetryOperation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deviceName, setDeviceName] = useState('Local MCP Agent')
   const [deviceAgentType, setDeviceAgentType] = useState('generic')
   const [selectedAgent, setSelectedAgent] = useState('')
+  const [days, setDays] = useState(7)
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [creating, setCreating] = useState(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
@@ -114,17 +188,37 @@ export default function TelemetryPanel() {
       setLoading(true)
       setError('')
       try {
-        const [summaryResult, serversResult, devicesResult, agentsResult] = await Promise.all([
-          apiGet<TelemetrySummary>(`/telemetry/summary?days=7${query}`),
-          apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=7${query}`),
+        const [
+          summaryResult,
+          serversResult,
+          devicesResult,
+          agentsResult,
+          toolsResult,
+          timeseriesResult,
+          resourcesResult,
+          errorsResult,
+          operationsResult,
+        ] = await Promise.all([
+          apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
+          apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=${days}${query}`),
           apiGet<TelemetryDevice[]>('/telemetry/devices'),
-          apiGet<{ days: number; agents: TelemetryAgentSummary[] }>('/telemetry/agents?days=7'),
+          apiGet<{ days: number; agents: TelemetryAgentSummary[] }>(`/telemetry/agents?days=${days}`),
+          apiGet<{ days: number; tools: TelemetryTool[] }>(`/telemetry/tools?days=${days}${query}`),
+          apiGet<{ days: number; points: TelemetryPoint[] }>(`/telemetry/timeseries?days=${days}${query}`),
+          apiGet<{ days: number; resources: TelemetryResource[] }>(`/telemetry/resources?days=${days}${query}`),
+          apiGet<{ days: number; errors: TelemetryError[] }>(`/telemetry/errors?days=${days}${query}`),
+          apiGet<{ days: number; operations: TelemetryOperation[] }>(`/telemetry/operations?days=${days}${query}`),
         ])
         if (!active) return
         setSummary(summaryResult.data)
         setServers(serversResult.data?.servers || [])
         setDevices(devicesResult.data || [])
         setAgents(agentsResult.data?.agents || [])
+        setTools(toolsResult.data?.tools || [])
+        setPoints(timeseriesResult.data?.points || [])
+        setResources(resourcesResult.data?.resources || [])
+        setErrors(errorsResult.data?.errors || [])
+        setOperations(operationsResult.data?.operations || [])
       } catch {
         if (active) setError('遥测数据加载失败，请稍后重试。')
       } finally {
@@ -136,7 +230,7 @@ export default function TelemetryPanel() {
     return () => {
       active = false
     }
-  }, [refreshVersion, selectedAgent])
+  }, [days, refreshVersion, selectedAgent])
 
   const refresh = () => {
     setRefreshVersion((version) => version + 1)
@@ -205,9 +299,22 @@ export default function TelemetryPanel() {
     setCopyState(copied ? '配置已复制' : '复制失败')
   }
 
+  const copySetupCommand = async () => {
+    if (!createdDevice) return
+    const command = [
+      'mcp agent setup',
+      `--agent ${createdDevice.device.agent_type}`,
+      `--hub-url ${window.location.origin}`,
+      `--telemetry-token ${createdDevice.token}`,
+    ].join(' ')
+    const copied = await copyText(command)
+    setCopyState(copied ? '接入命令已复制' : '复制失败')
+  }
+
   const registeredAgentTypes = new Set(agents.map((agent) => agent.agent_type))
   if (selectedAgent) registeredAgentTypes.add(selectedAgent)
   const visibleAgents = AGENT_OPTIONS.filter((agent) => registeredAgentTypes.has(agent.id))
+  const maxTrendCalls = Math.max(...points.map((point) => point.total_calls), 1)
 
   return (
     <section className="space-y-4" aria-labelledby="telemetry-heading">
@@ -218,14 +325,27 @@ export default function TelemetryPanel() {
             来自已授权本地 <InfoTooltip description="Gateway 是部署在本地 Agent 与 MCP Server 之间的转发程序，用于在不上传请求内容的前提下采集调用指标。">Gateway</InfoTooltip> 的真实调用、延迟、错误与 <InfoTooltip description="Token 是模型处理文本时使用的计量单位。这里是根据调用载荷估算的数量，不会上传原始提示词或响应内容。">估算载荷 Token</InfoTooltip>。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={refresh}
-          disabled={loading}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? '刷新中...' : '刷新'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={days}
+            onChange={(event) => setDays(Number(event.target.value))}
+            aria-label="监控时间范围"
+            className="border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={1}>最近 24 小时</option>
+            <option value={7}>最近 7 天</option>
+            <option value={30}>最近 30 天</option>
+            <option value={90}>最近 90 天</option>
+          </select>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? '刷新中...' : '刷新'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -237,13 +357,14 @@ export default function TelemetryPanel() {
       {loading && !summary ? (
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">正在加载遥测数据...</div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {[
-            ['调用次数', '过去 7 天内由本地 Gateway 上报的工具调用总数。', summary?.total_calls ?? 0, 'text-blue-700'],
+            ['调用次数', `过去 ${days} 天内由本地 Gateway 上报的工具调用总数。`, summary?.total_calls ?? 0, 'text-blue-700'],
             ['成功率', '状态为成功的调用占全部调用的比例。', `${summary?.success_rate ?? 0}%`, 'text-green-700'],
             ['估算载荷 Token', '按调用载荷估算的 Token 总量，不包含原始内容。', formatTokens(summary?.total_tokens ?? 0), 'text-violet-700'],
             ['平均延迟', '从 Gateway 发起调用到收到结果的平均耗时。', `${summary?.avg_duration_ms ?? 0}ms`, 'text-amber-700'],
-            ['活跃设备', '过去 7 天内至少上报过一次工具调用的设备数量。', summary?.active_devices ?? 0, 'text-slate-700'],
+            ['P95 延迟', '95% 的调用耗时不超过此值，用于识别长尾性能问题。', `${summary?.p95_duration_ms ?? 0}ms`, 'text-red-700'],
+            ['传输数据', '仅统计序列化请求和响应的字节数，不保存内容。', formatBytes(summary?.total_bytes ?? 0), 'text-slate-700'],
           ].map(([label, description, value, color]) => (
             <div key={String(label)} className="rounded-lg border border-gray-200 bg-white p-4">
               <p className="text-xs text-gray-500"><InfoTooltip description={String(description)}>{label}</InfoTooltip></p>
@@ -252,6 +373,43 @@ export default function TelemetryPanel() {
           ))}
         </div>
       )}
+
+      <div className="border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-gray-900">调用趋势</h3>
+          <p className="text-xs text-gray-500">调用、错误与平均延迟按天聚合</p>
+        </div>
+        {points.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-500">当前时间范围内没有调用趋势。</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="flex min-w-[560px] items-end gap-2 border-b border-gray-200 pb-2 pt-4">
+              {points.map((point) => {
+                const callHeight = Math.max(4, Math.round(point.total_calls / maxTrendCalls * 144))
+                const errorHeight = point.total_calls
+                  ? Math.round(point.error_calls / point.total_calls * callHeight)
+                  : 0
+                return (
+                  <div key={point.date} className="flex min-w-12 flex-1 flex-col items-center">
+                    <div className="mb-2 text-center text-[11px] text-gray-500">
+                      <p>{point.total_calls} 次</p>
+                      <p>{point.avg_duration_ms}ms</p>
+                    </div>
+                    <div className="relative w-7 bg-blue-500" style={{ height: `${callHeight}px` }} title={`${point.date}：${point.total_calls} 次调用，${point.error_calls} 次错误`}>
+                      {errorHeight > 0 && <div className="absolute inset-x-0 bottom-0 bg-red-500" style={{ height: `${errorHeight}px` }} />}
+                    </div>
+                    <span className="mt-2 text-[10px] text-gray-400">{point.date.slice(5)}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-2 flex gap-4 text-xs text-gray-500">
+              <span><span className="mr-1 inline-block h-2 w-2 bg-blue-500" />调用</span>
+              <span><span className="mr-1 inline-block h-2 w-2 bg-red-500" />错误占比</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="按 Agent 筛选遥测数据">
         <button
@@ -370,6 +528,7 @@ export default function TelemetryPanel() {
               <code className="mt-2 block break-all rounded bg-white p-2 text-xs text-gray-800">{createdDevice.token}</code>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void copyToken()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制密钥</button>
+                <button type="button" onClick={() => void copySetupCommand()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制一键接入命令</button>
                 <button type="button" onClick={() => void copyConfig()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制 Gateway 配置</button>
                 {copyState && <span className="self-center text-xs text-amber-900" role="status">{copyState}</span>}
               </div>
@@ -403,6 +562,117 @@ export default function TelemetryPanel() {
             ))}
           </ul>
         </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="overflow-hidden border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 px-4 py-3">
+            <h3 className="font-semibold text-gray-900">工具调用</h3>
+          </div>
+          {tools.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-gray-500">当前时间范围内没有工具调用。</p>
+          ) : (
+            <div className="max-h-80 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">工具</th>
+                    <th className="px-4 py-3 font-medium">调用</th>
+                    <th className="px-4 py-3 font-medium">成功率</th>
+                    <th className="px-4 py-3 font-medium">平均延迟</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {tools.map((tool) => (
+                    <tr key={`${tool.server_id}-${tool.tool_name}`}>
+                      <td className="max-w-[260px] px-4 py-3">
+                        <p className="truncate text-xs font-medium text-gray-800" title={tool.tool_name}>{tool.tool_name || '-'}</p>
+                        <p className="truncate font-mono text-[11px] text-gray-400" title={tool.server_id}>{tool.server_id}</p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{tool.total_calls}</td>
+                      <td className={`px-4 py-3 ${tool.success_rate >= 95 ? 'text-green-700' : 'text-red-700'}`}>{tool.success_rate}%</td>
+                      <td className="px-4 py-3 text-gray-700">{tool.avg_duration_ms}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 px-4 py-3">
+            <h3 className="font-semibold text-gray-900">进程资源</h3>
+          </div>
+          {resources.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-gray-500">尚未收到进程资源采样。</p>
+          ) : (
+            <div className="max-h-80 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Server</th>
+                    <th className="px-4 py-3 font-medium">CPU 平均/峰值</th>
+                    <th className="px-4 py-3 font-medium">内存平均/峰值</th>
+                    <th className="px-4 py-3 font-medium">运行时长</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {resources.map((resource) => (
+                    <tr key={resource.server_id}>
+                      <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-gray-700" title={resource.server_id}>{resource.server_id}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{resource.avg_cpu_percent}% / {resource.max_cpu_percent}%</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{formatBytes(resource.avg_memory_bytes)} / {formatBytes(resource.max_memory_bytes)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{formatUptime(resource.process_uptime_seconds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <h3 className="font-semibold text-gray-900">错误分类</h3>
+          <span className="text-xs text-gray-500">不上传错误正文</span>
+        </div>
+        {errors.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-gray-500">当前时间范围内没有错误。</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {errors.map((item) => (
+              <li key={`${item.server_id}-${item.error_code}`} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700" title={item.server_id}>{item.server_id || 'Gateway'}</span>
+                <code className="bg-red-50 px-2 py-1 text-xs text-red-700">{item.error_code}</code>
+                <span className="text-xs text-gray-600">{item.count} 次</span>
+                <span className="text-xs text-gray-400">{formatDate(item.last_seen_at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 px-4 py-3">
+          <h3 className="font-semibold text-gray-900">MCP 协议操作</h3>
+        </div>
+        {operations.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-gray-500">当前时间范围内没有协议调用。</p>
+        ) : (
+          <div className="grid divide-y divide-gray-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+            {operations.map((operation) => (
+              <div key={operation.operation} className="p-4">
+                <p className="font-mono text-xs font-medium text-gray-800">{operation.operation}</p>
+                <p className="mt-2 text-xl font-semibold text-gray-900">{operation.total_calls}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  错误 {operation.error_calls} · 平均 {operation.avg_duration_ms}ms
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

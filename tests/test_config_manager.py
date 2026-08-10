@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from mcp_hub.core.config_manager import get_config_for_agent
@@ -10,19 +8,25 @@ from mcp_hub.core.config_manager import get_config_for_agent
     [
         (
             "claude-code",
-            Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
+            "~/.claude.json",
             "mcpServers",
             False,
         ),
         (
+            "codex",
+            "~/.codex/config.toml",
+            "mcp_servers",
+            False,
+        ),
+        (
             "vscode-copilot",
-            Path.home() / ".copilot" / "mcp-config.json",
+            ".vscode/mcp.json",
             "servers",
             True,
         ),
         (
             "windsurf",
-            Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+            "~/.codeium/windsurf/mcp_config.json",
             "mcpServers",
             False,
         ),
@@ -30,7 +34,7 @@ from mcp_hub.core.config_manager import get_config_for_agent
 )
 def test_get_config_for_agent_uses_agent_specific_mcp_format(
     agent: str,
-    config_path: Path,
+    config_path: str,
     server_key: str,
     requires_stdio_type: bool,
 ) -> None:
@@ -42,7 +46,7 @@ def test_get_config_for_agent_uses_agent_specific_mcp_format(
 
     server_config = result["config_content"][server_key]["example-server"]
 
-    assert result["config_path"] == str(config_path)
+    assert result["config_path"] == config_path
     assert server_config["command"] == "npx"
     assert server_config["args"] == [
         "-y",

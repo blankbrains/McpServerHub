@@ -1,194 +1,248 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet } from '../api/client'
+import { apiGet, getAuthState } from '../api/client'
+import InfoTooltip from '../components/InfoTooltip'
 
-interface AgentSummary {
-  agent_id: string
-  agent_name: string
-  configured: boolean
+interface InventoryServer {
+  server_name: string
+  transport: string
+  command_name: string
+  env_keys: string[]
+  config_hash: string
+  enabled: boolean
+  configuration_error: string
+  last_seen_at: string
+}
+
+interface InventoryDevice {
+  id: string
+  name: string
+  agent_type: string
+  online: boolean
   server_count: number
-  servers: string[]
+  last_seen_at: string | null
+  servers: InventoryServer[]
 }
 
 interface CompareItem {
   server_name: string
   present_in: string[]
   absent_in: string[]
-  commands: Record<string, string>
   has_conflict: boolean
 }
 
 interface ConflictItem {
   server_name: string
-  agent_a: string
-  command_a: string
-  agent_b: string
-  command_b: string
-  severity: string
+  devices: Array<{
+    device: string
+    command_name: string
+    env_keys: string[]
+    config_hash: string
+  }>
 }
 
-interface DiscoverData {
-  total_agents_known: number
-  total_agents_found: number
+interface InventoryData {
+  total_devices: number
+  online_devices: number
   total_unique_servers: number
-  agents: AgentSummary[]
+  devices: InventoryDevice[]
+  compare: CompareItem[]
+  conflicts: ConflictItem[]
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '尚未连接'
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? '时间未知' : parsed.toLocaleString()
 }
 
 export default function LocalDiscovery() {
-  const [discover, setDiscover] = useState<DiscoverData | null>(null)
-  const [compare, setCompare] = useState<CompareItem[]>([])
-  const [conflicts, setConflicts] = useState<ConflictItem[]>([])
+  const [data, setData] = useState<InventoryData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'agents' | 'compare' | 'conflicts'>('agents')
+  const [error, setError] = useState('')
+  const [tab, setTab] = useState<'devices' | 'compare' | 'conflicts'>('devices')
+  const authenticated = Boolean(getAuthState().token)
 
-  useEffect(() => {
-    let failed = false
-    Promise.all([
-      apiGet<DiscoverData>('/local/discover').then(r => setDiscover(r.data)).catch(() => { failed = true }),
-      apiGet<CompareItem[]>('/local/compare').then(r => setCompare(r.data || [])).catch(() => { failed = true }),
-      apiGet<ConflictItem[]>('/local/conflicts').then(r => setConflicts(r.data || [])).catch(() => { failed = true }),
-    ]).finally(() => {
-      if (failed) setError('部分数据加载失败')
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await apiGet<InventoryData>('/telemetry/inventory')
+      setData(result.data)
+    } catch {
+      setError('本地清单加载失败，请检查登录状态或稍后重试。')
+    } finally {
       setLoading(false)
-    })
-  }, [])
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">扫描本地 Agent 配置...</div>
+    }
   }
 
-  if (error) {
+  useEffect(() => {
+    if (authenticated) void load()
+    else setLoading(false)
+  }, [authenticated])
+
+  if (!authenticated) {
     return (
-      <div className="text-center py-16 text-red-500 space-y-3">
-        <p>{error}</p>
-        <p className="text-xs text-gray-400">本功能扫描 Hub 所在主机的 Agent 配置文件；远程访问时不会读取浏览器所在电脑的文件。</p>
+      <div className="mx-auto max-w-3xl space-y-5">
+        <h1 className="text-2xl font-bold text-gray-900">本地 MCP 发现</h1>
+        <div className="border border-gray-200 bg-white p-8 text-center">
+          <p className="text-sm text-gray-600">登录后查看由你的本地 Agent 设备主动上报的 MCP 清单。</p>
+          <Link to="/login" className="mt-4 inline-flex bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+            登录
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">🔍 本地 Agent 发现</h1>
-        <p className="text-sm text-gray-500">
-          已在 Hub 主机发现 {discover?.total_agents_found || 0}/{discover?.total_agents_known || 0} 个 Agent ·
-          {discover?.total_unique_servers || 0} 个 MCP Server
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">本地 MCP 发现</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            仅展示已授权设备上报的脱敏清单，不会由服务器扫描浏览器所在电脑。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={loading}
+          className="border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          {loading ? '刷新中...' : '刷新'}
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {(['agents', 'compare', 'conflicts'] as const).map(t => (
+      {error && <div role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          ['已授权设备', data?.total_devices ?? 0, '设备令牌仍有效的本地 Agent 数量。'],
+          ['在线设备', data?.online_devices ?? 0, '最近 3 分钟内与 Hub 通信的设备数量。'],
+          ['唯一 Server', data?.total_unique_servers ?? 0, '所有设备当前清单中的去重 Server 数量。'],
+        ].map(([label, value, description]) => (
+          <div key={String(label)} className="border border-gray-200 bg-white p-4">
+            <p className="text-xs text-gray-500"><InfoTooltip description={String(description)}>{label}</InfoTooltip></p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex w-fit border border-gray-200 bg-gray-50 p-1" role="tablist">
+        {([
+          ['devices', '设备清单'],
+          ['compare', '跨 Agent 对比'],
+          ['conflicts', `配置冲突${data?.conflicts.length ? ` (${data.conflicts.length})` : ''}`],
+        ] as const).map(([id, label]) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            aria-pressed={tab === t}
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`px-3 py-2 text-sm ${tab === id ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
-            {{ agents: 'Agent 总览', compare: '跨 Agent 对比', conflicts: `配置冲突${conflicts.length ? ` (${conflicts.length})` : ''}` }[t]}
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Agent 总览 Tab */}
-      {tab === 'agents' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(discover?.agents || []).map(agent => (
-            <div key={agent.agent_id}
-              className={`bg-white rounded-xl border p-5 ${agent.configured ? 'border-green-200' : 'border-gray-200 opacity-60'}`}>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">{agent.agent_name}</h3>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${agent.configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {agent.configured ? `${agent.server_count} 个 Server` : '未检测到'}
+      {loading && !data ? (
+        <div className="border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">正在读取设备清单...</div>
+      ) : tab === 'devices' ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(data?.devices || []).map((device) => (
+            <section key={device.id} className="border border-gray-200 bg-white">
+              <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+                <div>
+                  <h2 className="font-semibold text-gray-900">{device.name}</h2>
+                  <p className="text-xs text-gray-500">{device.agent_type} · {formatDate(device.last_seen_at)}</p>
+                </div>
+                <span className={`text-xs font-medium ${device.online ? 'text-green-700' : 'text-gray-500'}`}>
+                  {device.online ? '在线' : '离线'}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mb-2 font-mono">{agent.agent_id}</p>
-              {agent.servers.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {agent.servers.map(s => (
-                    <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">{s}</span>
+              {device.servers.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-gray-500">该设备尚未上报 Server 清单。</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {device.servers.map((server) => (
+                    <li key={server.server_name} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-800">{server.server_name}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            {server.command_name || server.transport}
+                            {server.env_keys.length > 0 ? ` · 环境变量 ${server.env_keys.join(', ')}` : ''}
+                          </p>
+                        </div>
+                        <span className={`text-xs ${server.enabled ? 'text-green-700' : 'text-gray-500'}`}>
+                          {server.configuration_error ? server.configuration_error : server.enabled ? '已启用' : '已禁用'}
+                        </span>
+                      </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
-            </div>
+            </section>
           ))}
+          {(data?.devices.length || 0) === 0 && (
+            <div className="border border-gray-200 bg-white px-5 py-10 text-center text-sm text-gray-500 lg:col-span-2">
+              尚无设备清单。请先在监控页创建设备并完成本地 Gateway 配置。
+            </div>
+          )}
         </div>
-      )}
-
-      {/* 跨 Agent 对比 Tab */}
-      {tab === 'compare' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      ) : tab === 'compare' ? (
+        <div className="overflow-hidden border border-gray-200 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="p-3 text-left text-xs font-medium text-gray-500">Server</th>
-                  <th className="p-3 text-left text-xs font-medium text-gray-500">已安装于</th>
-                  <th className="p-3 text-left text-xs font-medium text-gray-500">缺失于</th>
-                  <th className="p-3 text-left text-xs font-medium text-gray-500">状态</th>
+              <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Server</th>
+                  <th className="px-4 py-3 font-medium">存在于</th>
+                  <th className="px-4 py-3 font-medium">缺失于</th>
+                  <th className="px-4 py-3 font-medium">配置</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {compare.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-400">未检测到任何 Agent 配置</td></tr>
-                ) : compare.map(item => (
-                  <tr key={item.server_name} className="hover:bg-gray-50">
-                    <td className="p-3 font-medium text-gray-900">{item.server_name}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1">
-                        {item.present_in.map(a => (
-                          <span key={a} className="px-2 py-0.5 bg-green-50 text-green-600 rounded text-xs">{a}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1">
-                        {item.absent_in.map(a => (
-                          <span key={a} className="px-2 py-0.5 bg-red-50 text-red-500 rounded text-xs">{a}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      {item.has_conflict
-                        ? <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">⚠ 命令不一致</span>
-                        : <span className="text-green-600 text-xs">✅ 一致</span>
-                      }
+                {(data?.compare || []).map((item) => (
+                  <tr key={item.server_name}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{item.server_name}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{item.present_in.join('、') || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{item.absent_in.join('、') || '-'}</td>
+                    <td className={`px-4 py-3 text-xs ${item.has_conflict ? 'text-amber-700' : 'text-green-700'}`}>
+                      {item.has_conflict ? '不一致' : '一致'}
                     </td>
                   </tr>
                 ))}
+                {(data?.compare.length || 0) === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-10 text-center text-gray-500">暂无可对比的清单。</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
-      )}
-
-      {/* 配置冲突 Tab */}
-      {tab === 'conflicts' && (
+      ) : (
         <div className="space-y-3">
-          {conflicts.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-              🎉 没有检测到配置冲突，各 Agent 配置一致
-            </div>
-          ) : conflicts.map((c, i) => (
-            <div key={i} className="bg-white rounded-xl border border-yellow-200 p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-yellow-500">⚠️</span>
-                <h3 className="font-semibold text-gray-900">{c.server_name}</h3>
-                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">{c.severity}</span>
+          {(data?.conflicts || []).map((conflict) => (
+            <section key={conflict.server_name} className="border border-amber-200 bg-white p-4">
+              <h2 className="font-semibold text-gray-900">{conflict.server_name}</h2>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {conflict.devices.map((device) => (
+                  <div key={`${conflict.server_name}-${device.device}`} className="bg-gray-50 p-3 text-xs">
+                    <p className="font-medium text-gray-700">{device.device}</p>
+                    <p className="mt-1 text-gray-500">命令：{device.command_name || '-'}</p>
+                    <p className="text-gray-500">环境变量：{device.env_keys.join(', ') || '无'}</p>
+                    <p className="mt-1 font-mono text-gray-400">配置指纹 {device.config_hash.slice(0, 12)}</p>
+                  </div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-400 mb-1">{c.agent_a}</p>
-                  <code className="text-xs text-green-700 break-all">{c.command_a}</code>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-400 mb-1">{c.agent_b}</p>
-                  <code className="text-xs text-green-700 break-all">{c.command_b}</code>
-                </div>
-              </div>
-            </div>
+            </section>
           ))}
+          {(data?.conflicts.length || 0) === 0 && (
+            <div className="border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">当前未发现跨设备配置冲突。</div>
+          )}
         </div>
       )}
     </div>

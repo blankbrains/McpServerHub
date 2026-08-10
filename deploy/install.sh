@@ -39,8 +39,8 @@ install_hub() {
 
     # Try pip first
     if command -v pip3 &>/dev/null; then
-        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple mcp-hub 2>/dev/null ||
-        pip3 install mcp-hub 2>/dev/null && {
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple mcp-hub-cli 2>/dev/null ||
+        pip3 install mcp-hub-cli 2>/dev/null && {
             echo -e "${GREEN}✅ MCP Hub CLI 安装成功${NC}"
             return 0
         }
@@ -48,7 +48,7 @@ install_hub() {
 
     # Fallback: pipx
     if command -v pipx &>/dev/null; then
-        pipx install mcp-hub && {
+        pipx install mcp-hub-cli && {
             echo -e "${GREEN}✅ MCP Hub CLI 安装成功 (via pipx)${NC}"
             return 0
         }
@@ -56,13 +56,13 @@ install_hub() {
 
     # Fallback: uv
     if command -v uv &>/dev/null; then
-        uv pip install mcp-hub && {
+        uv tool install mcp-hub-cli && {
             echo -e "${GREEN}✅ MCP Hub CLI 安装成功 (via uv)${NC}"
             return 0
         }
     fi
 
-    echo -e "${RED}❌ 安装失败。请手动安装: pip install mcp-hub${NC}"
+    echo -e "${RED}❌ 安装失败。请手动安装: pip install mcp-hub-cli${NC}"
     exit 1
 }
 
@@ -75,7 +75,7 @@ install_server() {
         echo "   mcp search              # 搜索 MCP Server"
         echo "   mcp install @org/server # 安装 Server"
         echo "   mcp start server-name   # 启动"
-        echo "   mcp serve               # 启动 MCP 网关"
+        echo "   mcp agent setup ...     # 备份并接入本地 Gateway 监控"
         echo ""
         echo -e "${YELLOW}或者直接安装推荐 Server:${NC}"
         echo "   curl -fsSL https://mcphub.cn/install.sh | bash -s -- @modelcontextprotocol/server-filesystem"

@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
 from mcp_hub.exceptions import (
@@ -179,10 +180,16 @@ async def start_server(server_id: str, user_id: str = Depends(get_current_user))
     if not command:
         raise ConfigError("没有安装命令", {"server_id": server_id})
 
-    parts = command.split()
+    try:
+        executable, args = split_legacy_command(command)
+    except ValueError as exc:
+        raise ConfigError(str(exc), {"server_id": server_id}) from exc
+    from mcp_hub.core.config_manager import ConfigManager
+
+    env = await ConfigManager().list_all_config(server_id)
     pm = get_process_manager()
     try:
-        await pm.spawn(server_id, parts[0], parts[1:])
+        await pm.spawn(server_id, executable, list(args), env=env)
     except ServerAlreadyRunningError as e:
         raise e  # 直接透传，已是 McpHubError
     except ProcessStartupError as e:
@@ -299,11 +306,13 @@ async def download_all_config(_agent: str = "generic"):
     if not installed:
         raise ServerNotFoundError("（已安装列表）")
 
+    from mcp_hub.core.config_manager import command_config
+
     config = {"mcpServers": {}}
     for s in installed:
         cmd = s.get("install_command", "")
         name = s["id"].split("/")[-1]
-        config["mcpServers"][name] = {"command": cmd}
+        config["mcpServers"][name] = command_config(cmd)
 
     # 写入临时文件并返回
     import json

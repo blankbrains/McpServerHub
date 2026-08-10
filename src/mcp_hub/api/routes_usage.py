@@ -116,13 +116,14 @@ async def get_usage_stats(
     - server_id: 可选，不传则返回所有 Server 的统计
     - days: 统计天数 (default 7)
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     from sqlalchemy import case, func, select
 
     async with async_session_factory() as session:
         filters = [
-            UsageStatsModel.created_at >= datetime.utcnow() - timedelta(days=days),
+            UsageStatsModel.created_at
+            >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days),
             UsageStatsModel.user_id == user_id,
         ]
         if server_id:

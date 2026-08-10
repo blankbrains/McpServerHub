@@ -10,6 +10,7 @@ from mcp_hub.core.config_manager import (  # noqa: F401  # re-export
     ConfigManager,  # noqa: F401
     get_config_for_agent,
 )
+from mcp_hub.core.gateway_config import split_legacy_command
 
 # 向后兼容：从 installer 导入仍然有效
 from mcp_hub.core.version_manager import VersionManager  # noqa: F401
@@ -44,9 +45,11 @@ class Installer:
         }
 
     async def _execute_install(self, command: str) -> dict:
-        parts = command.split()
-        if not parts:
+        try:
+            executable, parsed_args = split_legacy_command(command)
+        except ValueError:
             return {"success": False, "error": "空命令"}
+        parts = [executable, *parsed_args]
         # npx -y 可以跳过交互确认，确保在非交互环境中也能运行
         if parts[0] == "npx" and "-y" not in parts:
             parts.insert(1, "-y")

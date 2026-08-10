@@ -7,6 +7,8 @@ import logging
 
 import httpx
 
+from mcp_hub.core.gateway_config import split_legacy_command
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,10 @@ class VersionManager:
             # npm packages
             if "npx" in install_cmd or "@" in server_id:
                 pkg = server_id if server_id.startswith("@") else server_id.split("/")[-1]
-                parts = install_cmd.split()
+                try:
+                    _command, parts = split_legacy_command(install_cmd)
+                except ValueError:
+                    parts = ()
                 for p in parts:
                     if "@" in p and not p.startswith("-"):
                         pkg = p
@@ -164,7 +169,10 @@ class VersionManager:
     async def _execute_update(self, install_cmd: str, new_version: str) -> dict:
         """执行真实的版本升级。"""
         if "npx" in install_cmd:
-            parts = install_cmd.split()
+            try:
+                _command, parts = split_legacy_command(install_cmd)
+            except ValueError:
+                parts = ()
             pkg = next((p for p in parts if "@" in p and not p.startswith("-")), "")
             if pkg:
                 try:
@@ -182,7 +190,20 @@ class VersionManager:
                 return {"success": True, "detail": "npx 缓存已清理，下次运行时使用最新版本"}
 
         if "pip" in install_cmd or "uvx" in install_cmd:
-            pkg_name = install_cmd.split()[-1]
+            try:
+                _command, parts = split_legacy_command(install_cmd)
+            except ValueError as exc:
+                return {"success": False, "error": str(exc)}
+            pkg_name = next(
+                (
+                    part
+                    for part in reversed(parts)
+                    if not part.startswith("-") and part not in {"install", "--upgrade"}
+                ),
+                "",
+            )
+            if not pkg_name:
+                return {"success": False, "error": "无法从安装命令识别包名"}
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "pip",

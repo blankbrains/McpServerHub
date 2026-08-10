@@ -16,62 +16,20 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mcp_hub.core.agent_config import get_agent_profiles
 from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# 已知 AI Agent 的 MCP 配置文件路径
+# 已知 AI Agent 的 MCP 配置文件路径与格式，和配置生成共用同一事实来源。
 KNOWN_AGENT_PATHS: dict[str, dict] = {
-    "claude-code": {
-        "name": "Claude Code (CLI)",
-        "paths": [
-            Path.home() / ".config" / "claude-code" / "mcp.json",
-            Path.home() / ".claude" / "mcp.json",
-        ],
-    },
-    "claude-desktop": {
-        "name": "Claude Desktop",
-        "paths": [
-            Path.home() / ".config" / "Claude" / "claude_desktop_config.json",
-        ],
-    },
-    "cursor": {
-        "name": "Cursor",
-        "paths": [
-            Path.home() / ".cursor" / "mcp.json",
-        ],
-    },
-    "codex": {
-        "name": "Codex",
-        "paths": [
-            Path.home() / ".codex" / "mcp.json",
-        ],
-    },
-    "trae": {
-        "name": "Trae",
-        "paths": [
-            Path.home() / ".trae" / "mcp.json",
-        ],
-    },
-    "windsurf": {
-        "name": "Windsurf",
-        "paths": [
-            Path.home() / ".windsurf" / "mcp.json",
-        ],
-    },
-    "vscode-copilot": {
-        "name": "VS Code Copilot",
-        "paths": [
-            Path.home() / ".vscode" / "mcp.json",
-        ],
-    },
-    "project-local": {
-        "name": "项目本地",
-        "paths": [
-            Path.cwd() / ".mcp.json",
-            Path.cwd() / "mcp.json",
-        ],
-    },
+    agent_type: {
+        "name": profile.name,
+        "paths": list(profile.paths),
+        "format": profile.format,
+        "server_key": profile.server_key,
+    }
+    for agent_type, profile in get_agent_profiles().items()
 }
 
 
@@ -253,8 +211,17 @@ class LocalAgentDiscovery:
             if not p.exists():
                 continue
             try:
-                content = json.loads(p.read_text(encoding="utf-8"))
-                mcp_servers = content.get("mcpServers", {})
+                if agent_info.get("format") == "toml":
+                    try:
+                        import tomllib
+                    except ImportError:
+                        import tomli as tomllib
+
+                    with p.open("rb") as file:
+                        content = tomllib.load(file)
+                else:
+                    content = json.loads(p.read_text(encoding="utf-8"))
+                mcp_servers = content.get(agent_info.get("server_key", "mcpServers"), {})
                 if mcp_servers:
                     result.paths_found.append(str(p))
                     for srv_name, srv_config in mcp_servers.items():
@@ -262,7 +229,7 @@ class LocalAgentDiscovery:
                         result.server_details[srv_name] = (
                             srv_config if isinstance(srv_config, dict) else {}
                         )
-            except json.JSONDecodeError as e:
+            except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(
                     "local_discovery.invalid_json",
                     agent_id=agent_id,
