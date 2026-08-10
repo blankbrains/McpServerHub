@@ -225,7 +225,13 @@ async def sync_from_github(client: httpx.AsyncClient, dry_run: bool) -> int:
     return count
 
 
-async def _register_npm_package(name: str, ver: str, desc: str, homepage: str, keywords: list):
+async def _register_npm_package(
+    name: str,
+    ver: str,
+    desc: str,
+    homepage: str,
+    keywords: list[str],
+) -> None:
     """注册 npm 包到数据库。"""
     from sqlalchemy import select
 
@@ -277,7 +283,7 @@ async def _register_npm_package(name: str, ver: str, desc: str, homepage: str, k
         await session.commit()
 
 
-async def _register_pypi_package(name: str, ver: str, desc: str, homepage: str):
+async def _register_pypi_package(name: str, ver: str, desc: str, homepage: str) -> None:
     """注册 PyPI 包到数据库。"""
     from sqlalchemy import select
 
@@ -311,7 +317,13 @@ async def _register_pypi_package(name: str, ver: str, desc: str, homepage: str):
         await session.commit()
 
 
-async def _register_github_repo(full_name: str, desc: str, stars: int, topics: list, lang: str):
+async def _register_github_repo(
+    full_name: str,
+    desc: str,
+    stars: int,
+    topics: list[str],
+    lang: str,
+) -> None:
     """注册 GitHub 仓库到数据库。"""
     from sqlalchemy import select
 
@@ -368,10 +380,10 @@ async def _register_github_repo(full_name: str, desc: str, stars: int, topics: l
 @click.command("registry-sync")
 @click.option("--dry-run", is_flag=True, help="只预览，不写入数据库")
 @click.option("--source", type=click.Choice(["npm", "pypi", "github", "all"]), default="all")
-def registry_sync(dry_run: bool, source: str):
+def registry_sync(dry_run: bool, source: str) -> None:
     """从 npm/PyPI/GitHub 同步热门 MCP Server 到本地市场。"""
 
-    async def _run():
+    async def _run() -> None:
         console.print("[bold]🔄 正在同步 MCP 注册表 (200+ servers)...[/bold]\n")
 
         total = 0

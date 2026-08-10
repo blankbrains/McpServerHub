@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Any
 
 import click
 from rich.console import Console
@@ -23,10 +24,10 @@ console = Console()
 @click.option("--json", "json_output", is_flag=True)
 @click.option("--force", is_flag=True, help="跳过安全检查")
 @click.option("--dry-run", "dry_run", is_flag=True, help="预览模式（只检查不安装）")
-def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: bool):
+def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: bool) -> None:
     """安装 MCP Server（安装前自动安全扫描，支持多参数）。"""
 
-    async def _install_one(sid: str) -> dict:
+    async def _install_one(sid: str) -> dict[str, Any]:
         registry = Registry()
         server_data = await registry.get_by_id(sid)
         if not server_data:
@@ -101,7 +102,7 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
             return {"server_id": sid, "success": True, "detail": result.get("detail", "")}
         return {"server_id": sid, "success": False, "error": result.get("error", "安装失败")}
 
-    async def _run():
+    async def _run() -> None:
         results = []
         for sid in server_ids:
             server_id = f"@community/{sid}" if "/" not in sid else sid
@@ -138,11 +139,11 @@ def install(server_ids: tuple[str], json_output: bool, force: bool, dry_run: boo
 @click.command("uninstall")
 @click.argument("server_id", required=True)
 @click.confirmation_option(prompt="确定要卸载吗？")
-def uninstall(server_id: str):
+def uninstall(server_id: str) -> None:
     """卸载 MCP Server。"""
     import asyncio
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         await registry.update_status(server_id, "not_installed")
         click.echo(f"✅ {server_id} 已卸载")
@@ -151,11 +152,11 @@ def uninstall(server_id: str):
 
 
 @click.command("list")
-def list_servers():
+def list_servers() -> None:
     """列出已安装的 Server。"""
     import asyncio
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         servers = await registry.get_installed()
         if not servers:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -39,7 +41,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.info("db.initializing")
     try:
         from mcp_hub.db.database import init_db
@@ -77,7 +79,10 @@ def create_app(dev: bool = False) -> FastAPI:
     # === Exception Handlers (统一响应格式) ===
 
     def _error_response(
-        code: str, message: str, status: int = 500, details: dict | None = None
+        code: str,
+        message: str,
+        status: int = 500,
+        details: dict[str, Any] | None = None,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status,
@@ -88,7 +93,10 @@ def create_app(dev: bool = False) -> FastAPI:
         )
 
     @app.exception_handler(McpHubError)
-    async def mcp_hub_error_handler(_request: Request, exc: McpHubError):
+    async def mcp_hub_error_handler(
+        _request: Request,
+        exc: McpHubError,
+    ) -> JSONResponse:
         return _error_response(
             code=exc.code,
             message=str(exc),
@@ -97,7 +105,10 @@ def create_app(dev: bool = False) -> FastAPI:
         )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error_handler(_request: Request, exc: RequestValidationError):
+    async def validation_error_handler(
+        _request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
         errors = exc.errors()
         return _error_response(
             code="VALIDATION_ERROR",
@@ -107,7 +118,10 @@ def create_app(dev: bool = False) -> FastAPI:
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(_request: Request, exc: StarletteHTTPException):
+    async def http_exception_handler(
+        _request: Request,
+        exc: StarletteHTTPException,
+    ) -> JSONResponse:
         return _error_response(
             code="HTTP_ERROR",
             message=str(exc.detail),
@@ -115,7 +129,10 @@ def create_app(dev: bool = False) -> FastAPI:
         )
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(_request: Request, exc: Exception):
+    async def generic_exception_handler(
+        _request: Request,
+        exc: Exception,
+    ) -> JSONResponse:
         logger.error("api.unhandled_error", error=str(exc), type=type(exc).__name__)
         return _error_response(
             code="INTERNAL_ERROR",
@@ -155,7 +172,7 @@ def create_app(dev: bool = False) -> FastAPI:
     if not (static_dir / "index.html").exists():
 
         @app.get("/")
-        async def root():
+        async def root() -> dict[str, str]:
             return {
                 "name": "MCP Server Hub",
                 "version": __version__,

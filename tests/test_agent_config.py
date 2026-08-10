@@ -12,7 +12,7 @@ from mcp_hub.core.agent_config import apply_agent_migration, prepare_agent_migra
 from mcp_hub.core.gateway_config import load_gateway_config, write_gateway_config
 
 
-def test_json_agent_migration_backs_up_and_retains_unsupported_entries(tmp_path) -> None:
+def test_json_agent_migration_backs_up_and_migrates_remote_entries(tmp_path) -> None:
     source = tmp_path / "mcp.json"
     original = {
         "theme": "dark",
@@ -44,16 +44,18 @@ def test_json_agent_migration_backs_up_and_retains_unsupported_entries(tmp_path)
     migrated = json.loads(source.read_text(encoding="utf-8"))
     assert json.loads(backup.read_text(encoding="utf-8")) == original
     assert migrated["theme"] == "dark"
-    assert set(migrated["mcpServers"]) == {"remote", "mcp-hub"}
-    assert migrated["mcpServers"]["remote"]["url"] == "https://example.test/mcp"
+    assert set(migrated["mcpServers"]) == {"mcp-hub"}
     assert migrated["mcpServers"]["mcp-hub"]["command"] == "mcp-hub"
     assert migrated["mcpServers"]["mcp-hub"]["env"]["MCP_HUB_GATEWAY_CONFIG"] == str(
         gateway_path
     )
     specs, errors = load_gateway_config(gateway_path)
     assert errors == []
+    assert [spec.server_id for spec in specs] == ["weather", "remote"]
     assert specs[0].args[-1] == "New York"
     assert specs[0].env == {"WEATHER_API_KEY": "secret"}
+    assert specs[1].transport == "streamable-http"
+    assert specs[1].url == "https://example.test/mcp"
 
 
 def test_codex_toml_migration_preserves_other_settings(tmp_path) -> None:

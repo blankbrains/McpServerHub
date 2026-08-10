@@ -8,7 +8,13 @@ interface InventoryServer {
   transport: string
   command_name: string
   env_keys: string[]
+  header_keys: string[]
   config_hash: string
+  server_version: string
+  protocol_version: string
+  capabilities: string[]
+  tool_count: number
+  running: boolean
   enabled: boolean
   configuration_error: string
   last_seen_at: string
@@ -18,6 +24,10 @@ interface InventoryDevice {
   id: string
   name: string
   agent_type: string
+  gateway_version: string
+  runtime_version: string
+  platform: string
+  architecture: string
   online: boolean
   server_count: number
   last_seen_at: string | null
@@ -158,6 +168,11 @@ export default function LocalDiscovery() {
                 <div>
                   <h2 className="font-semibold text-gray-900">{device.name}</h2>
                   <p className="text-xs text-gray-500">{device.agent_type} · {formatDate(device.last_seen_at)}</p>
+                  {(device.gateway_version || device.runtime_version || device.platform) && (
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {device.platform || 'unknown'} {device.architecture} · Python {device.runtime_version || '-'} · Gateway {device.gateway_version || '-'}
+                    </p>
+                  )}
                 </div>
                 <span className={`text-xs font-medium ${device.online ? 'text-green-700' : 'text-gray-500'}`}>
                   {device.online ? '在线' : '离线'}
@@ -174,11 +189,20 @@ export default function LocalDiscovery() {
                           <p className="truncate text-sm font-medium text-gray-800">{server.server_name}</p>
                           <p className="mt-0.5 text-xs text-gray-500">
                             {server.command_name || server.transport}
+                            {server.server_version ? ` · v${server.server_version}` : ''}
+                            {server.protocol_version ? ` · MCP ${server.protocol_version}` : ''}
+                            {server.tool_count > 0 ? ` · ${server.tool_count} 个工具` : ''}
                             {server.env_keys.length > 0 ? ` · 环境变量 ${server.env_keys.join(', ')}` : ''}
+                            {server.header_keys.length > 0 ? ` · 请求头 ${server.header_keys.join(', ')}` : ''}
                           </p>
+                          {server.capabilities.length > 0 && (
+                            <p className="mt-1 text-[11px] text-gray-400">
+                              能力：{server.capabilities.join('、')}
+                            </p>
+                          )}
                         </div>
-                        <span className={`text-xs ${server.enabled ? 'text-green-700' : 'text-gray-500'}`}>
-                          {server.configuration_error ? server.configuration_error : server.enabled ? '已启用' : '已禁用'}
+                        <span className={`text-xs ${server.running ? 'text-green-700' : server.enabled ? 'text-amber-700' : 'text-gray-500'}`}>
+                          {server.configuration_error ? server.configuration_error : server.running ? '运行中' : server.enabled ? '未运行' : '已禁用'}
                         </span>
                       </div>
                     </li>

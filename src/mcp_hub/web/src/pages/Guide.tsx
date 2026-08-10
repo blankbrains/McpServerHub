@@ -39,7 +39,7 @@ const STEPS = [
     icon: '⚡',
     description: '检查完成后，由你决定是否将这份配置保存到个人追踪列表：',
     highlights: [
-      { label: '✅ 确认追踪', desc: '将匹配到的 Server 保存到你的个人追踪列表。监控页会显示这些 Server 的服务端状态、健康检查和已上报的调用统计。', color: 'blue' },
+      { label: '✅ 确认追踪', desc: '将匹配到的 Server 保存到你的个人追踪列表。完成本地 Gateway 接入后，监控页会显示设备上报的真实运行状态和调用统计。', color: 'blue' },
       { label: '❌ 取消', desc: '丢弃本次检查结果，不会创建追踪记录或注册自定义 Server。你可以随时重新检查。', color: 'gray' },
     ],
   },
@@ -53,14 +53,22 @@ const STEPS = [
     num: 6,
     title: '配置 MCP 网关以启用监控',
     icon: '📊',
-    description: '在监控页创建设备后运行一键接入命令。CLI 会先备份现有配置，再把可代理的 stdio Server 迁移到 Gateway。',
+    description: '在监控页创建设备后运行一键接入命令。CLI 会先备份现有配置，再把 stdio、Streamable HTTP 和 SSE Server 迁移到本地 Gateway。',
     code: `mcp-hub agent setup --agent codex \\
   --hub-url https://你的Hub地址 \\
   --telemetry-token mcpht_设备令牌`,
-    note: '远程 HTTP/SSE Server 会保留原连接；完整命令参数和环境变量值仅保存在用户本地，Hub 只接收脱敏清单与运行指标。',
+    note: '完整 URL、请求头值、命令参数和环境变量值仅保存在用户本地；Hub 只接收传输类型、字段名称、配置指纹与运行指标。',
   },
   {
     num: 7,
+    title: '同步后续配置变更',
+    icon: '🔄',
+    description: '首次接入完成后，在网页调整追踪或同步开关，再运行以下命令更新 Gateway。命令只修改 gateway.json，并保留本地密钥、请求头和工作目录。',
+    code: `mcp-hub config sync --agent codex \\
+  --server https://你的Hub地址`,
+  },
+  {
+    num: 8,
     title: '查看监控数据',
     icon: '📈',
     description: '配置完成后，在 Hub 的监控大屏中可以实时查看所有 MCP Server 的运行状态和调用数据。',

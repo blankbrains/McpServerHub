@@ -22,7 +22,7 @@ def safe_log_path(log_dir: str, server_id: str) -> Path:
 @click.argument("server_name", required=True)
 @click.option("-n", "--lines", default=50, type=int, help="显示行数")
 @click.option("-f", "--follow", is_flag=True, help="实时跟踪")
-def logs(server_name: str, lines: int, follow: bool):
+def logs(server_name: str, lines: int, follow: bool) -> None:
     """查看 Server 日志。"""
     import time
 
@@ -35,7 +35,7 @@ def logs(server_name: str, lines: int, follow: bool):
         click.echo("   提示: Server 可能还未启动过")
         return
 
-    def tail():
+    def tail() -> None:
         with open(log_file, encoding="utf-8") as f:
             content = f.read()
             all_lines = content.splitlines()

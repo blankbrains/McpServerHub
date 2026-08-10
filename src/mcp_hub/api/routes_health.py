@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import psutil
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 
 from mcp_hub import __version__
+from mcp_hub.api.dependencies import get_process_admin
+from mcp_hub.config import get_settings
 from mcp_hub.core.monitor import Monitor
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
@@ -21,17 +25,24 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> dict[str, Any]:
     """Hub 自身健康检查。"""
     return {
         "success": True,
         "status": "healthy",
         "version": __version__,
+        "capabilities": {
+            "central_process_management": (
+                get_settings().ALLOW_SERVER_PROCESS_MANAGEMENT
+            ),
+        },
     }
 
 
 @router.get("/health/servers")
-async def servers_health():
+async def servers_health(
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
     """全局 Server 健康摘要。"""
     registry = Registry()
     pm = get_process_manager()
@@ -57,7 +68,7 @@ async def servers_health():
 
 
 @router.get("/health/uptime/{server_id:path}")
-async def get_uptime(server_id: str):
+async def get_uptime(server_id: str) -> dict[str, Any]:
     """获取 Server 的 Uptime 统计。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -80,7 +91,7 @@ async def get_uptime(server_id: str):
     }
 
 
-async def get_reliability(server_id: str):
+async def get_reliability(server_id: str) -> dict[str, Any]:
     """获取 Server 的可靠性评分。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -109,7 +120,7 @@ async def get_reliability(server_id: str):
 
 
 @router.get("/health/reliability/top")
-async def get_top_reliable(limit: int = 20):
+async def get_top_reliable(limit: int = 20) -> dict[str, Any]:
     """获取最稳定 Server 排行榜。"""
     top = await Monitor.get_top_reliable(limit=limit)
     return {
@@ -137,14 +148,17 @@ router.add_api_route(
 
 
 @router.get("/health/summary")
-async def get_monitor_summary():
+async def get_monitor_summary() -> dict[str, Any]:
     """获取全局监控统计。"""
     stats = await Monitor.get_summary_stats()
     return {"success": True, "data": stats}
 
 
 @router.post("/health/check/{server_id:path}")
-async def trigger_health_check(server_id: str):
+async def trigger_health_check(
+    server_id: str,
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
     """手动触发一次健康检查并记录。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -164,7 +178,7 @@ async def trigger_health_check(server_id: str):
         }
 
     # L1 检查
-    if psutil.pid_exists(proc.pid):
+    if proc.pid is not None and psutil.pid_exists(proc.pid):
         await Monitor.record_check(server_id, "L1_process", "ok", message="进程存活")
         return {
             "success": True,

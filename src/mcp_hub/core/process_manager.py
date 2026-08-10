@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,63 +11,16 @@ from pathlib import Path
 from typing import TextIO
 
 from mcp_hub.core.gateway_config import split_legacy_command
+from mcp_hub.core.process_env import filter_process_environment
 from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
 from mcp_hub.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# 子进程环境变量安全白名单前缀
-_SAFE_ENV_PREFIXES = (
-    "PATH",
-    "HOME",
-    "USER",
-    "LANG",
-    "LC_",
-    "TZ",
-    "MCP_HUB_",
-    "NODE",
-    "NPM",
-    "PYTHON",
-    "PIP",
-    "VIRTUAL_ENV",
-    "CONDA_",
-    "SHELL",
-    "TERM",
-    "DISPLAY",
-    "XDG_",
-    "DBUS_",
-    "SSH_",
-    "SYSTEMROOT",
-    "SYSTEMDRIVE",
-    "WINDIR",
-    "TEMP",
-    "TMP",
-    "USERPROFILE",
-    "APPDATA",
-    "PROGRAMFILES",
-    "PROGRAMDATA",
-    "COMPUTERNAME",
-    "HOSTNAME",
-    "LOGNAME",
-    "PWD",
-    "OLDPWD",
-    "COLORTERM",
-    "EDITOR",
-    "VISUAL",
-    "PAGER",
-)
-
 
 def _filter_env() -> dict[str, str]:
-    """过滤环境变量，仅保留白名单前缀的变量。"""
-    result: dict[str, str] = {}
-    for k, v in os.environ.items():
-        upper_k = k.upper()
-        for prefix in _SAFE_ENV_PREFIXES:
-            if upper_k.startswith(prefix):
-                result[k] = v
-                break
-    return result
+    """保留基础运行环境，不把主进程凭证隐式传给受管 Server。"""
+    return filter_process_environment()
 
 
 @dataclass
@@ -83,7 +35,7 @@ class ManagedProcess:
     last_keepalive_ok: float | None = None  # timestamp of last successful keepalive ping
     spawn_command: str = ""  # 记录启动命令，用于自动重启
     spawn_args: list[str] | None = None  # 记录启动参数，用于自动重启
-    spawn_env_keys: list[str] | None = None
+    spawn_env: dict[str, str] | None = None
     spawn_cwd: str | None = None
 
 
@@ -100,11 +52,11 @@ def get_process_manager() -> ProcessManager:
 
 
 class ProcessManager:
-    def __init__(self, log_dir: Path | None = None):
+    def __init__(self, log_dir: Path | None = None) -> None:
         self.log_dir = log_dir or Path.home() / ".config" / "mcp-hub" / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._processes: dict[str, ManagedProcess] = {}
-        self._keepalive_tasks: dict[str, asyncio.Task] = {}
+        self._keepalive_tasks: dict[str, asyncio.Task[None]] = {}
         self._lock = asyncio.Lock()
 
     async def spawn(
@@ -153,8 +105,8 @@ class ProcessManager:
                 log_file=log_file,
                 log_handle=log_handle,
                 spawn_command=command,
-                spawn_args=args,
-                spawn_env_keys=sorted((env or {}).keys()),
+                spawn_args=list(args) if args is not None else None,
+                spawn_env=dict(env) if env is not None else None,
                 spawn_cwd=cwd,
             )
             self._processes[server_id] = managed
@@ -187,9 +139,7 @@ class ProcessManager:
 
     def _start_keepalive(self, server_id: str) -> None:
         """定期发送 keep-alive 保持 stdio MCP Server 存活。"""
-        import asyncio
-
-        async def _ping():
+        async def _ping() -> None:
             try:
                 while True:
                     proc = self._processes.get(server_id)
@@ -204,10 +154,16 @@ class ProcessManager:
                         except (BrokenPipeError, OSError):
                             break
                     await asyncio.sleep(10)
-            except Exception:
-                pass
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug(
+                    "process.keepalive_failed",
+                    server_id=server_id,
+                    error=str(exc),
+                )
 
-        task = asyncio.ensure_future(_ping())
+        task = asyncio.create_task(_ping())
         self._keepalive_tasks[server_id] = task
 
     async def kill(self, server_id: str, timeout: float = 5.0) -> bool:
@@ -262,6 +218,12 @@ class ProcessManager:
     async def cleanup_all(self) -> None:
         """关闭所有日志文件描述符并清理进程（测试用）。"""
         async with self._lock:
+            keepalive_tasks = list(self._keepalive_tasks.values())
+            for task in keepalive_tasks:
+                task.cancel()
+            if keepalive_tasks:
+                await asyncio.gather(*keepalive_tasks, return_exceptions=True)
+            self._keepalive_tasks.clear()
             for proc in list(self._processes.values()):
                 if proc.log_handle is not None:
                     with contextlib.suppress(OSError):

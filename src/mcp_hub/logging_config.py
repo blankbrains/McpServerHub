@@ -11,7 +11,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
 import structlog
 
@@ -39,6 +40,7 @@ def configure_logging(
         structlog.processors.UnicodeDecoder(),
     ]
 
+    renderer: Callable[..., Any]
     if json_format or os.environ.get("MCP_HUB_LOG_JSON", "").lower() in ("1", "true", "yes"):
         # 生产模式：JSON 输出（兼容日志收集系统）
         renderer = structlog.processors.JSONRenderer()
@@ -91,7 +93,10 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
         >>> logger = get_logger(__name__)
         >>> logger.info("server.started", server_id="@org/test", pid=12345)
     """
-    return structlog.get_logger(name or "mcp_hub")
+    return cast(
+        structlog.stdlib.BoundLogger,
+        structlog.get_logger(name or "mcp_hub"),
+    )
 
 
 # 模块级别默认 logger（用于简单场景）

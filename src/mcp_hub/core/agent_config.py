@@ -182,7 +182,7 @@ def prepare_agent_migration(
     agent_type: str,
     source_path: Path | None = None,
 ) -> AgentMigration:
-    """Parse an Agent config and separate migratable stdio Servers."""
+    """Parse an Agent config and separate supported Gateway connections."""
     profile = get_agent_profile(agent_type)
     path = source_path or find_agent_config(agent_type)
     if path is None:
@@ -223,7 +223,7 @@ def apply_agent_migration(
     state_dir: Path,
     gateway_config_path: Path,
 ) -> Path:
-    """Back up and atomically replace direct stdio entries with one Gateway entry."""
+    """Back up and replace supported direct entries with one local Gateway entry."""
     path = migration.source_path
     raw_servers = migration.document.get(migration.profile.server_key, {})
     retained = {

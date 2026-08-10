@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from mcp_hub.core.registry import Registry
@@ -12,7 +14,7 @@ router = APIRouter(tags=["tokens"])
 
 
 @router.get("/tokens/analyze/{server_id:path}")
-async def analyze_tokens(server_id: str):
+async def analyze_tokens(server_id: str) -> dict[str, Any]:
     """分析指定 Server 的 Token 消耗。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -50,7 +52,7 @@ async def analyze_tokens(server_id: str):
 
 
 @router.post("/tokens/optimize/{server_id:path}")
-async def optimize_tokens(server_id: str):
+async def optimize_tokens(server_id: str) -> dict[str, Any]:
     """生成指定 Server 的优化后配置。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)

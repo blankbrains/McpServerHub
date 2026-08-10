@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  getServer, installServer, startServer, stopServer, rateServer, favoriteServer,
+  getServer, installServer, rateServer, favoriteServer,
   apiDelete, apiGet, apiPost, getAuthState, getFavoriteServers, ServerInfo, SecurityScanResult, TokenAnalysisResult,
   scanServerSecurity, analyzeServerTokens, getServerReliability,
 } from '../api/client'
-import StatusBadge from '../components/StatusBadge'
 import StarRating from '../components/StarRating'
 import InfoTooltip from '../components/InfoTooltip'
 
@@ -168,7 +167,6 @@ export default function ServerDetail() {
         return
       }
       setMessage(`✅ 已添加到配置！本地运行: ${r.data?.install_command || r.message || ''}`)
-      setServer({ ...server, status: 'stopped' } as ServerInfo)
       setIsTracked(true)
       if (r.data?.configs) {
         const agentCfg = r.data.configs.find((c: any) =>
@@ -181,26 +179,6 @@ export default function ServerDetail() {
       setMessage(`安装失败: ${e.message || '未知错误'}`)
     } finally {
       setInstalling(false)
-    }
-  }
-
-  const handleStart = async () => {
-    try {
-      const r = await startServer(server.id)
-      setMessage(r.message || '已启动')
-      if (r.success) setServer({ ...server, status: 'running' })
-    } catch (e: any) {
-      setMessage(`启动失败: ${e.message || '未知错误'}`)
-    }
-  }
-
-  const handleStop = async () => {
-    try {
-      const r = await stopServer(server.id)
-      setMessage(r.message || '已停止')
-      if (r.success) setServer({ ...server, status: 'stopped' })
-    } catch (e: any) {
-      setMessage(`停止失败: ${e.message || '未知错误'}`)
     }
   }
 
@@ -294,7 +272,9 @@ export default function ServerDetail() {
             <h1 className="text-2xl font-bold text-gray-900">{server.id}</h1>
             <p className="text-sm text-gray-400 mt-1">v{server.version || '?'}</p>
           </div>
-          <StatusBadge status={server.status} />
+          <span className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600">
+            市场条目
+          </span>
         </div>
 
         <p className="text-gray-600 mb-4">{server.description || '暂无描述'}</p>
@@ -340,27 +320,16 @@ export default function ServerDetail() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
-          {server.status === 'not_installed' && !isTracked && (
+          {!isTracked && (
             <button onClick={handleInstall} disabled={installing}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
               {installing ? '⏳ 添加中...' : '📥 添加到我的配置'}
             </button>
           )}
-          {server.status === 'not_installed' && isTracked && (
-            <button onClick={handleInstall} disabled={installing}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-              {installing ? '⏳ 添加中...' : '📥 重新添加到我的配置'}
-            </button>
-          )}
-          {isTracked && server.status === 'stopped' && (
-            <button onClick={handleStart} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
-              ▶️ 启动 Hub 主机实例
-            </button>
-          )}
-          {isTracked && server.status === 'running' && (
-            <button onClick={handleStop} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
-              ⏹ 停止 Hub 主机实例
-            </button>
+          {isTracked && (
+            <span className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
+              已加入我的配置
+            </span>
           )}
           {isTracked && (
             <button onClick={handleUntrack} className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
@@ -691,7 +660,12 @@ export default function ServerDetail() {
       </div>
 
       {/* Multi-Agent Config */}
-      {(server.status === 'stopped' || server.status === 'running') && (
+      <div className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        添加到 Hub 只保存你的配置关系，不会在 Hub 服务器或你的电脑上远程安装和启动进程。
+        完成本地 Gateway 接入后，请在“我的 Server”或“监控”页面查看真实运行状态。
+      </div>
+
+      {(
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">🔌 接入你本地的 Agent</h2>

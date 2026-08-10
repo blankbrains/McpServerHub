@@ -4,12 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
 
+from mcp_hub.core.agent_config import AgentConfigProfile, get_agent_profile
 from mcp_hub.core.config_manager import ConfigManager
+from mcp_hub.core.gateway_config import (
+    GatewayServerSpec,
+    get_gateway_config_path,
+    load_gateway_config,
+    parse_gateway_config,
+    write_gateway_config,
+)
+
+try:
+    import tomllib
+except ImportError:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
 
 _console = Console()
 
@@ -24,17 +40,63 @@ def _get_saved_auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
+def _decode_hub_config(
+    config: str | dict[str, Any],
+    profile: AgentConfigProfile,
+) -> tuple[list[GatewayServerSpec], list[dict[str, str]]]:
+    """Convert a downloaded Agent document into canonical Gateway specs."""
+    document = tomllib.loads(config) if isinstance(config, str) else config
+    if not isinstance(document, dict):
+        raise ValueError("Hub 配置根节点必须是对象")
+    raw_servers = document.get(profile.server_key, {})
+    if not isinstance(raw_servers, dict):
+        raise ValueError(f"Hub 配置中的 {profile.server_key} 必须是对象")
+    return parse_gateway_config({"mcpServers": raw_servers})
+
+
+def _merge_private_gateway_fields(
+    desired: list[GatewayServerSpec],
+    existing: list[GatewayServerSpec],
+) -> list[GatewayServerSpec]:
+    """Preserve local-only credentials and working directories during Hub sync."""
+    existing_by_id = {spec.server_id: spec for spec in existing}
+    merged: list[GatewayServerSpec] = []
+    for spec in desired:
+        previous = existing_by_id.get(spec.server_id)
+        if previous is None or previous.transport != spec.transport:
+            merged.append(spec)
+            continue
+        if spec.transport == "stdio":
+            merged.append(
+                replace(
+                    spec,
+                    env=dict(previous.env),
+                    cwd=previous.cwd,
+                )
+            )
+        else:
+            merged.append(
+                replace(
+                    spec,
+                    headers=dict(previous.headers),
+                    header_env=dict(previous.header_env),
+                    bearer_token_env_var=previous.bearer_token_env_var,
+                )
+            )
+    return merged
+
+
 @click.group("config")
-def config():
+def config() -> None:
     """管理 Server 配置。"""
 
 
 @config.command("list")
 @click.argument("server_name", required=True)
-def list_config(server_name: str):
+def list_config(server_name: str) -> None:
     """查看 Server 配置。"""
 
-    async def _run():
+    async def _run() -> None:
         cm = ConfigManager()
         server_id = f"@community/{server_name}" if "/" not in server_name else server_name
         cfg = await cm.list_config(server_id)
@@ -47,10 +109,10 @@ def list_config(server_name: str):
 @click.argument("server_name", required=True)
 @click.argument("key", required=True)
 @click.argument("value", required=True)
-def set_config(server_name: str, key: str, value: str):
+def set_config(server_name: str, key: str, value: str) -> None:
     """设置环境变量。"""
 
-    async def _run():
+    async def _run() -> None:
         cm = ConfigManager()
         server_id = f"@community/{server_name}" if "/" not in server_name else server_name
         ok = await cm.set_config(server_id, key, value)
@@ -64,11 +126,11 @@ def set_config(server_name: str, key: str, value: str):
 
 @config.command("export")
 @click.argument("file", required=False)
-def export_config(file: str | None):
+def export_config(file: str | None) -> None:
     """导出配置。"""
     from mcp_hub.core.config_manager import ConfigManager
 
-    async def _run():
+    async def _run() -> None:
         cm = ConfigManager()
         cfg = await cm._load_config()
         output = json.dumps(cfg, indent=2, ensure_ascii=False)
@@ -84,7 +146,7 @@ def export_config(file: str | None):
 
 @config.command("import")
 @click.argument("file", required=True)
-def import_config(file: str):
+def import_config(file: str) -> None:
     """导入配置。"""
     try:
         with open(file, encoding="utf-8") as f:
@@ -101,10 +163,10 @@ def import_config(file: str):
 
 @config.command("apply")
 @click.option("--path", default=None, help="写入路径，默认 ~/.config/mcp-hub/mcp.json")
-def apply_config(path: str | None):
+def apply_config(path: str | None) -> None:
     """将 Hub 配置写入本地文件（自动配置）。"""
 
-    async def _run():
+    async def _run() -> None:
         cm = ConfigManager()
         result = await cm.apply_config(path)
         if result["success"]:
@@ -123,10 +185,11 @@ def apply_config(path: str | None):
 )  # noqa: E501
 @click.option("--server-ids", help="要同步的 Server ID 列表（逗号分隔），默认同步所有已安装")
 @click.option("--yes", is_flag=True, help="确认覆盖前已阅读目标路径与备份说明")
-def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
-    """从 Hub 同步配置到本地。
+def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool) -> None:
+    """从 Hub 同步当前用户配置到本地 Gateway。
 
-    从 Hub 服务器获取配置，自动写入本地 Agent 配置文件。
+    Agent 配置必须先通过 `mcp-hub agent setup` 接入 Gateway。
+    同步只更新 Gateway 管理的 Server 清单，不覆盖 Agent 主配置。
 
     用法:
       mcp-hub config sync                                    # 同步所有已安装
@@ -135,7 +198,7 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
       mcp-hub config sync --server-ids @anth/web,@git/hub    # 只同步指定 Server
     """
 
-    async def _run():
+    async def _run() -> None:
         import httpx
 
         api_base = hub_url.rstrip("/") + "/api/v1"
@@ -186,57 +249,66 @@ def sync_config(hub_url: str, agent: str, server_ids: str | None, yes: bool):
             _console.print(f"[red]❌ 同步失败: {e}[/red]")
             return
 
-        # 确定目标路径
-        from datetime import datetime
-
-        from mcp_hub.core.agent_config import get_agent_profile
-
         try:
             profile = get_agent_profile(agent)
         except ValueError as exc:
             _console.print(f"[red]❌ {exc}[/red]")
             return
-        target = profile.paths[0]
-
-        if target.exists():
-            if not yes and not click.confirm(
-                f"{target} 已存在。继续会先备份原文件，再用 Hub 配置替换，是否继续？",
-                default=False,
-            ):
-                _console.print("[yellow]已取消，未修改本地配置[/yellow]")
-                return
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = target.with_name(f"{target.name}.mcp-hub-backup-{timestamp}")
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            backup_path.write_bytes(target.read_bytes())
-            _console.print(f"[dim]备份: {backup_path}[/dim]")
-
-        # 写入本地文件
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(config, str):
-            target.write_text(config, encoding="utf-8")
-            try:
-                try:
-                    import tomllib
-                except ImportError:
-                    import tomli as tomllib
-
-                server_count = len(tomllib.loads(config).get(profile.server_key, {}))
-            except (ValueError, TypeError):
-                server_count = 0
-        else:
-            target.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
-            server_count = (
-                len(config.get(profile.server_key, {})) if isinstance(config, dict) else 0
+        gateway_path = get_gateway_config_path(agent_type=agent)
+        if not gateway_path.exists():
+            _console.print(
+                "[red]❌ 尚未找到本地 Gateway 配置，请先运行 "
+                f"`mcp-hub agent setup --agent {agent}`[/red]"
             )
+            return
 
-        _console.print("[green]✅ 配置已同步[/green]")
-        _console.print(f"   写入: [bold]{target}[/bold]")
-        _console.print(f"   Server: {server_count} 个")
+        try:
+            desired, decode_errors = _decode_hub_config(config, profile)
+        except (ValueError, TypeError, tomllib.TOMLDecodeError) as exc:
+            _console.print(f"[red]❌ Hub 返回的配置无效: {exc}[/red]")
+            return
+        if decode_errors:
+            for error in decode_errors:
+                _console.print(
+                    "[red]❌ "
+                    f"{error.get('server_id') or 'unknown'}: {error.get('error', '配置无效')}[/red]"
+                )
+            return
 
-        if agent == "claude-code":
-            _console.print("\n[dim]💡 重启 Claude Code 即可生效[/dim]")
-        elif agent == "cursor":
-            _console.print("\n[dim]💡 重启 Cursor 即可生效[/dim]")
+        existing, existing_errors = load_gateway_config(gateway_path)
+        if existing_errors:
+            for error in existing_errors:
+                _console.print(
+                    "[red]❌ 当前 Gateway 配置损坏: "
+                    f"{error.get('server_id') or 'root'}: {error.get('error', '配置无效')}[/red]"
+                )
+            return
+        merged = _merge_private_gateway_fields(desired, existing)
+        desired_ids = {spec.server_id for spec in merged}
+        removed_ids = [spec.server_id for spec in existing if spec.server_id not in desired_ids]
+
+        _console.print(f"Agent: {profile.name}")
+        _console.print(f"Gateway: {gateway_path}")
+        _console.print(f"同步后 Server: {len(merged)} 个")
+        if removed_ids:
+            _console.print("将从 Gateway 移除: " + ", ".join(removed_ids))
+        if not yes and not click.confirm(
+            "继续会先备份当前 Gateway 配置，再应用 Hub 清单，是否继续？",
+            default=False,
+        ):
+            _console.print("[yellow]已取消，未修改本地配置[/yellow]")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = gateway_path.with_name(
+            f"{gateway_path.name}.mcp-hub-backup-{timestamp}"
+        )
+        backup_path.write_bytes(gateway_path.read_bytes())
+        write_gateway_config(merged, gateway_path)
+
+        _console.print("[green]✅ Gateway 配置已同步[/green]")
+        _console.print(f"   备份: [bold]{backup_path}[/bold]")
+        _console.print(f"   Server: {len(merged)} 个")
+        _console.print(f"\n[dim]💡 重启 {profile.name} 后生效[/dim]")
 
     asyncio.run(_run())

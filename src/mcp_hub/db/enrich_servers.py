@@ -217,7 +217,7 @@ async def translate_descriptions() -> int:
 # ========== 导出 ==========
 
 
-async def enrich_all():
+async def enrich_all() -> None:
     """一键执行：生成图标 + 翻译描述。"""
     await generate_icons()
 

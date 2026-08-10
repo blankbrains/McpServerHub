@@ -16,6 +16,8 @@ interface TelemetrySummary {
   active_servers: number
   active_sessions: number
   p95_duration_ms: number
+  current_queue_depth: number
+  max_queue_depth: number
   input_bytes: number
   output_bytes: number
   total_bytes: number
@@ -39,6 +41,10 @@ interface TelemetryDevice {
   id: string
   name: string
   agent_type: string
+  gateway_version: string
+  runtime_version: string
+  platform: string
+  architecture: string
   created_at: string | null
   last_seen_at: string | null
   revoked_at: string | null
@@ -106,6 +112,16 @@ interface TelemetryOperation {
   last_call_at: string | null
 }
 
+interface TelemetryLifecycleEvent {
+  server_id: string
+  operation: string
+  status: string
+  duration_ms: number
+  error_code: string
+  server_version: string
+  occurred_at: string
+}
+
 const AGENT_OPTIONS = [
   { id: 'claude-code', label: 'Claude Code' },
   { id: 'claude-desktop', label: 'Claude Desktop' },
@@ -166,6 +182,7 @@ export default function TelemetryPanel() {
   const [resources, setResources] = useState<TelemetryResource[]>([])
   const [errors, setErrors] = useState<TelemetryError[]>([])
   const [operations, setOperations] = useState<TelemetryOperation[]>([])
+  const [lifecycleEvents, setLifecycleEvents] = useState<TelemetryLifecycleEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deviceName, setDeviceName] = useState('Local MCP Agent')
@@ -198,6 +215,7 @@ export default function TelemetryPanel() {
           resourcesResult,
           errorsResult,
           operationsResult,
+          lifecycleResult,
         ] = await Promise.all([
           apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
           apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=${days}${query}`),
@@ -208,6 +226,7 @@ export default function TelemetryPanel() {
           apiGet<{ days: number; resources: TelemetryResource[] }>(`/telemetry/resources?days=${days}${query}`),
           apiGet<{ days: number; errors: TelemetryError[] }>(`/telemetry/errors?days=${days}${query}`),
           apiGet<{ days: number; operations: TelemetryOperation[] }>(`/telemetry/operations?days=${days}${query}`),
+          apiGet<{ days: number; events: TelemetryLifecycleEvent[] }>(`/telemetry/lifecycle?days=${days}${query}`),
         ])
         if (!active) return
         setSummary(summaryResult.data)
@@ -219,6 +238,7 @@ export default function TelemetryPanel() {
         setResources(resourcesResult.data?.resources || [])
         setErrors(errorsResult.data?.errors || [])
         setOperations(operationsResult.data?.operations || [])
+        setLifecycleEvents(lifecycleResult.data?.events || [])
       } catch {
         if (active) setError('遥测数据加载失败，请稍后重试。')
       } finally {
@@ -357,7 +377,7 @@ export default function TelemetryPanel() {
       {loading && !summary ? (
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">正在加载遥测数据...</div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
           {[
             ['调用次数', `过去 ${days} 天内由本地 Gateway 上报的工具调用总数。`, summary?.total_calls ?? 0, 'text-blue-700'],
             ['成功率', '状态为成功的调用占全部调用的比例。', `${summary?.success_rate ?? 0}%`, 'text-green-700'],
@@ -365,6 +385,8 @@ export default function TelemetryPanel() {
             ['平均延迟', '从 Gateway 发起调用到收到结果的平均耗时。', `${summary?.avg_duration_ms ?? 0}ms`, 'text-amber-700'],
             ['P95 延迟', '95% 的调用耗时不超过此值，用于识别长尾性能问题。', `${summary?.p95_duration_ms ?? 0}ms`, 'text-red-700'],
             ['传输数据', '仅统计序列化请求和响应的字节数，不保存内容。', formatBytes(summary?.total_bytes ?? 0), 'text-slate-700'],
+            ['在线设备', '最近 3 分钟内成功连接 Hub 的未撤销本地 Agent 设备。', summary?.active_devices ?? 0, 'text-cyan-700'],
+            ['待传队列', '本地最近一次事件上报时仍在离线队列中的事件数量。', summary?.current_queue_depth ?? 0, 'text-orange-700'],
           ].map(([label, description, value, color]) => (
             <div key={String(label)} className="rounded-lg border border-gray-200 bg-white p-4">
               <p className="text-xs text-gray-500"><InfoTooltip description={String(description)}>{label}</InfoTooltip></p>
@@ -545,6 +567,11 @@ export default function TelemetryPanel() {
                   <p className="text-xs text-gray-500">
                     {agentLabel(device.agent_type)} · 最后在线 {formatDate(device.last_seen_at)}
                   </p>
+                  {(device.gateway_version || device.runtime_version || device.platform) && (
+                    <p className="mt-1 truncate text-[11px] text-gray-400" title={`${device.platform} ${device.architecture} · Python ${device.runtime_version} · Gateway ${device.gateway_version}`}>
+                      {device.platform || 'unknown'} {device.architecture} · Python {device.runtime_version || '-'} · Gateway {device.gateway_version || '-'}
+                    </p>
+                  )}
                 </div>
                 {device.revoked_at ? (
                   <span className="text-xs text-gray-500">已撤销</span>
@@ -648,6 +675,30 @@ export default function TelemetryPanel() {
                 <code className="bg-red-50 px-2 py-1 text-xs text-red-700">{item.error_code}</code>
                 <span className="text-xs text-gray-600">{item.count} 次</span>
                 <span className="text-xs text-gray-400">{formatDate(item.last_seen_at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <h3 className="font-semibold text-gray-900">Server 生命周期</h3>
+          <span className="text-xs text-gray-500">启动、停止、初始化失败与意外退出</span>
+        </div>
+        {lifecycleEvents.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-gray-500">当前时间范围内没有生命周期事件。</p>
+        ) : (
+          <ul className="max-h-80 divide-y divide-gray-100 overflow-auto">
+            {lifecycleEvents.map((event, index) => (
+              <li key={`${event.server_id}-${event.occurred_at}-${index}`} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-700" title={event.server_id}>{event.server_id || 'Gateway'}</span>
+                <span className={`text-xs font-medium ${event.status === 'error' ? 'text-red-700' : event.status === 'ok' ? 'text-green-700' : 'text-amber-700'}`}>
+                  {event.operation}
+                </span>
+                {event.duration_ms > 0 && <span className="text-xs text-gray-500">{event.duration_ms}ms</span>}
+                {event.error_code && <code className="bg-red-50 px-2 py-1 text-xs text-red-700">{event.error_code}</code>}
+                <span className="text-xs text-gray-400">{formatDate(event.occurred_at)}</span>
               </li>
             ))}
           </ul>

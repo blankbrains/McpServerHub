@@ -24,10 +24,10 @@ async def _spawn_configured_server(
 
 @click.command("start")
 @click.argument("server_name", required=False)
-def start(server_name: str | None):
+def start(server_name: str | None) -> None:
     """启动 Server (支持 all: 启动所有已安装但未运行的)。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         pm = ProcessManager()
 
@@ -93,10 +93,10 @@ def start(server_name: str | None):
 
 @click.command("stop")
 @click.argument("server_name", required=False)
-def stop(server_name: str | None):
+def stop(server_name: str | None) -> None:
     """停止 Server (支持 all: 停止所有运行中的)。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         pm = ProcessManager()
 
@@ -126,10 +126,10 @@ def stop(server_name: str | None):
 
 @click.command("restart")
 @click.argument("server_name", required=True)
-def restart(server_name: str):
+def restart(server_name: str) -> None:
     """重启 Server。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         pm = ProcessManager()
         server_id = f"@community/{server_name}" if "/" not in server_name else server_name
@@ -146,14 +146,14 @@ def restart(server_name: str):
 
 @click.command("status")
 @click.argument("server_name", required=False)
-def status_cmd(server_name: str | None):
+def status_cmd(server_name: str | None) -> None:
     """查看 Server 状态。"""
     from rich.console import Console
     from rich.table import Table
 
     _console = Console()
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         pm = ProcessManager()
 
@@ -174,7 +174,8 @@ def status_cmd(server_name: str | None):
             _console.print(f"   版本: v{server.get('version', '?')}")
             if running:
                 proc = pm.get(server_id)
-                _console.print(f"   PID: {proc.pid}")
+                if proc is not None:
+                    _console.print(f"   PID: {proc.pid}")
         else:
             servers = await registry.get_installed()
             if not servers:

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import delete
 
+from mcp_hub.api.routes_admin import admin_overview
 from mcp_hub.api.routes_telemetry import (
     DeviceCreateRequest,
     InventorySnapshotRequest,
@@ -19,6 +20,7 @@ from mcp_hub.api.routes_telemetry import (
     get_telemetry_errors,
     get_telemetry_identity,
     get_telemetry_inventory,
+    get_telemetry_lifecycle,
     get_telemetry_operations,
     get_telemetry_resources,
     get_telemetry_servers,
@@ -29,6 +31,7 @@ from mcp_hub.api.routes_telemetry import (
     ingest_telemetry_inventory,
     revoke_telemetry_device,
 )
+from mcp_hub.api.routes_usage import get_usage_stats
 from mcp_hub.cli.agent import agent
 from mcp_hub.core import telemetry
 from mcp_hub.core.telemetry import (
@@ -47,6 +50,7 @@ from mcp_hub.db.models import (
     TelemetryDeviceModel,
     TelemetryEventModel,
     TelemetryInventoryModel,
+    UsageStatsModel,
 )
 
 
@@ -54,6 +58,7 @@ async def _prepare_telemetry_tables() -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with async_session_factory() as session:
+        await session.execute(delete(UsageStatsModel))
         await session.execute(delete(TelemetryEventModel))
         await session.execute(delete(TelemetryInventoryModel))
         await session.execute(delete(TelemetryDeviceModel))
@@ -90,6 +95,8 @@ async def test_telemetry_events_are_idempotent_and_user_scoped() -> None:
     summary = await get_telemetry_summary(days=7, user_id="alice")
     other_summary = await get_telemetry_summary(days=7, user_id="bob")
     servers = await get_telemetry_servers(days=7, user_id="alice")
+    legacy_projection = await get_usage_stats(days=7, user_id="alice")
+    admin_projection = await admin_overview(admin_user="admin")
 
     assert first["data"] == {"saved": 1, "duplicates": 0}
     assert second["data"] == {"saved": 0, "duplicates": 1}
@@ -100,6 +107,10 @@ async def test_telemetry_events_are_idempotent_and_user_scoped() -> None:
     assert summary["data"]["p95_duration_ms"] == 120
     assert other_summary["data"]["total_calls"] == 0
     assert servers["data"]["servers"][0]["server_id"] == "@example/weather"
+    assert legacy_projection["data"]["stats"][0]["total_calls"] == 1
+    assert legacy_projection["data"]["stats"][0]["total_tokens"] == 20
+    assert admin_projection["data"]["stats"]["total_calls"] == 1
+    assert admin_projection["data"]["stats"]["total_tokens"] == 20
 
 
 async def test_telemetry_isolated_and_aggregated_by_agent_type() -> None:
@@ -338,6 +349,10 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
     await ingest_telemetry_inventory(
         InventorySnapshotRequest(
             event_id="inventory-event-0001",
+            gateway_version="0.2.0",
+            runtime_version="3.10.14",
+            platform="linux",
+            architecture="x86_64",
             reported_at=reported_at,
             servers=[
                 {
@@ -345,7 +360,13 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
                     "transport": "stdio",
                     "command_name": "npx",
                     "env_keys": ["WEATHER_API_KEY"],
+                    "header_keys": [],
                     "config_hash": "a" * 64,
+                    "server_version": "1.0.0",
+                    "protocol_version": "2026-07-28",
+                    "capabilities": ["tools", "resources"],
+                    "tool_count": 7,
+                    "running": True,
                     "enabled": True,
                 }
             ],
@@ -362,14 +383,16 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
                     "transport": "stdio",
                     "command_name": "uvx",
                     "env_keys": ["WEATHER_API_KEY"],
+                    "header_keys": [],
                     "config_hash": "b" * 64,
                     "enabled": True,
                 },
                 {
                     "server_name": "database",
-                    "transport": "stdio",
-                    "command_name": "uvx",
+                    "transport": "streamable-http",
+                    "command_name": "",
                     "env_keys": ["DATABASE_URL"],
+                    "header_keys": ["Authorization"],
                     "config_hash": "c" * 64,
                     "enabled": False,
                 },
@@ -385,7 +408,23 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
     assert inventory["data"]["total_devices"] == 2
     assert inventory["data"]["total_unique_servers"] == 2
     assert inventory["data"]["conflicts"][0]["server_name"] == "weather"
+    claude_device = next(
+        device
+        for device in inventory["data"]["devices"]
+        if device["agent_type"] == "claude-code"
+    )
+    assert claude_device["gateway_version"] == "0.2.0"
+    assert claude_device["runtime_version"] == "3.10.14"
+    assert claude_device["platform"] == "linux"
+    assert claude_device["architecture"] == "x86_64"
+    assert claude_device["servers"][0]["server_version"] == "1.0.0"
+    assert claude_device["servers"][0]["protocol_version"] == "2026-07-28"
+    assert claude_device["servers"][0]["capabilities"] == ["resources", "tools"]
+    assert claude_device["servers"][0]["tool_count"] == 7
+    assert claude_device["servers"][0]["running"] is True
     assert "WEATHER_API_KEY" in serialized
+    assert "Authorization" in serialized
+    assert "Bearer " not in serialized
     assert "secret" not in serialized
     assert other_inventory["data"]["total_devices"] == 0
 
@@ -421,3 +460,52 @@ async def test_new_inventory_snapshot_marks_removed_servers_inactive() -> None:
 
     inventory = await get_telemetry_inventory(user_id="alice")
     assert inventory["data"]["total_unique_servers"] == 0
+
+
+async def test_summary_reports_online_devices_queue_depth_and_lifecycle() -> None:
+    await _prepare_telemetry_tables()
+    created = await create_telemetry_device(DeviceCreateRequest(name="Laptop"), "alice")
+    identity = await get_telemetry_identity(f"Bearer {created['data']['token']}")
+    now = datetime.now(timezone.utc)
+    await ingest_telemetry_events(
+        TelemetryBatchRequest(
+            events=[
+                TelemetryEventInput(
+                    event_id="queue-heartbeat-0001",
+                    event_type="heartbeat",
+                    session_id="session-queue-0001",
+                    queue_depth=4,
+                    occurred_at=now,
+                ),
+                TelemetryEventInput(
+                    event_id="lifecycle-exit-0001",
+                    event_type="server_lifecycle",
+                    session_id="session-queue-0001",
+                    server_id="weather",
+                    operation="exited",
+                    status="error",
+                    error_code="exit_code_9",
+                    server_version="1.0.0",
+                    queue_depth=0,
+                    occurred_at=now + timedelta(seconds=1),
+                ),
+            ]
+        ),
+        identity,
+    )
+
+    summary = await get_telemetry_summary(days=7, user_id="alice")
+    lifecycle = await get_telemetry_lifecycle(days=7, user_id="alice")
+
+    assert summary["data"]["active_devices"] == 1
+    assert summary["data"]["current_queue_depth"] == 0
+    assert summary["data"]["max_queue_depth"] == 4
+    assert lifecycle["data"]["events"][0] == {
+        "server_id": "weather",
+        "operation": "exited",
+        "status": "error",
+        "duration_ms": 0,
+        "error_code": "exit_code_9",
+        "server_version": "1.0.0",
+        "occurred_at": (now + timedelta(seconds=1)).replace(tzinfo=None).isoformat(),
+    }

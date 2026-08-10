@@ -6,6 +6,7 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from mcp_hub.logging_config import get_logger
 
@@ -16,17 +17,22 @@ logger = get_logger(__name__)
 class Event:
     topic: str
     publisher: str
-    payload: dict = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
 
 
 class EventBus:
-    def __init__(self, enable_persistence: bool = True):
-        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+    def __init__(self, enable_persistence: bool = True) -> None:
+        self._subscribers: dict[str, list[asyncio.Queue[Event]]] = {}
         self._lock = asyncio.Lock()
         self._enable_persistence = enable_persistence
 
-    async def publish(self, topic: str, publisher: str, payload: dict | None = None) -> int:
+    async def publish(
+        self,
+        topic: str,
+        publisher: str,
+        payload: dict[str, Any] | None = None,
+    ) -> int:
         """发布事件，返回接收者数量。同时持久化到数据库 events 表。"""
         event = Event(
             topic=topic,
@@ -45,9 +51,13 @@ class EventBus:
 
         return len(queues)
 
-    async def subscribe(self, topic: str, subscriber_id: str = "") -> asyncio.Queue:
+    async def subscribe(
+        self,
+        topic: str,
+        subscriber_id: str = "",
+    ) -> asyncio.Queue[Event]:
         """订阅事件，返回一个 Queue。同时持久化订阅关系到数据库。"""
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue[Event] = asyncio.Queue()
         async with self._lock:
             if topic not in self._subscribers:
                 self._subscribers[topic] = []
@@ -59,7 +69,7 @@ class EventBus:
 
         return q
 
-    async def unsubscribe(self, topic: str, queue: asyncio.Queue) -> bool:
+    async def unsubscribe(self, topic: str, queue: asyncio.Queue[Event]) -> bool:
         """取消订阅。同时从数据库移除订阅关系。"""
         async with self._lock:
             if topic in self._subscribers:
@@ -75,7 +85,7 @@ class EventBus:
     def get_topics(self) -> list[str]:
         return list(self._subscribers.keys())
 
-    async def get_stats(self) -> dict:
+    async def get_stats(self) -> dict[str, Any]:
         """获取总线统计（含数据库中的历史事件数）。"""
         stats = {
             "topics": len(self._subscribers),
@@ -96,7 +106,7 @@ class EventBus:
             stats["persisted_events"] = -1  # 标记数据库不可用
         return stats
 
-    async def get_history(self, topic: str, limit: int = 50) -> list[dict]:
+    async def get_history(self, topic: str, limit: int = 50) -> list[dict[str, Any]]:
         """从数据库查询事件历史。"""
         try:
             from sqlalchemy import text

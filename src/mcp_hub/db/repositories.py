@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from mcp_hub.db.models import (
     FavoriteModel,
@@ -18,11 +21,11 @@ from mcp_hub.db.models import (
 class ServerRepository:
     """Server 数据仓库。"""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     @staticmethod
-    def _server_to_dict(server: ServerModel) -> dict:
+    def _server_to_dict(server: ServerModel) -> dict[str, Any]:
         return {
             "id": server.id,
             "name": server.name,
@@ -61,12 +64,12 @@ class ServerRepository:
         page: int = 1,
         page_size: int = 20,
         security_level: str | None = None,
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """搜索 Server。"""
         query = select(ServerModel)
         count_query = select(func.count(ServerModel.id))
 
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
         if q:
             conditions.append(
                 or_(
@@ -86,7 +89,7 @@ class ServerRepository:
             count_query = count_query.where(cond)
 
         # Sort
-        sort_map = {
+        sort_map: dict[str, ColumnElement[Any]] = {
             "hot": ServerModel.download_count.desc(),
             "rating": ServerModel.rating.desc(),
             "downloads": ServerModel.download_count.desc(),
@@ -107,12 +110,12 @@ class ServerRepository:
 
         return [self._server_to_dict(s) for s in servers], total
 
-    async def get_by_id(self, server_id: str) -> dict | None:
+    async def get_by_id(self, server_id: str) -> dict[str, Any] | None:
         result = await self.session.execute(select(ServerModel).where(ServerModel.id == server_id))
         server = result.scalar_one_or_none()
         return self._server_to_dict(server) if server else None
 
-    async def get_installed(self) -> list[dict]:
+    async def get_installed(self) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel)
             .where(ServerModel.status != "not_installed")
@@ -127,7 +130,7 @@ class ServerRepository:
             .values(status=status, updated_at=func.now())
         )
         await self.session.commit()
-        return result.rowcount > 0
+        return cast(CursorResult[Any], result).rowcount > 0
 
     async def increment_download(self, server_id: str) -> None:
         await self.session.execute(
@@ -137,13 +140,13 @@ class ServerRepository:
         )
         await self.session.commit()
 
-    async def get_trending(self, limit: int = 20) -> list[dict]:
+    async def get_trending(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel).order_by(ServerModel.download_count.desc()).limit(limit)
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
-    async def get_top_rated(self, limit: int = 20) -> list[dict]:
+    async def get_top_rated(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel)
             .where(ServerModel.review_count > 0)
@@ -152,14 +155,14 @@ class ServerRepository:
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
-    async def get_new_releases(self, limit: int = 20) -> list[dict]:
+    async def get_new_releases(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel).order_by(ServerModel.created_at.desc()).limit(limit)
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
-    async def register_server(self, data: dict) -> str:
-        server_id = data.get("id", "")
+    async def register_server(self, data: dict[str, Any]) -> str:
+        server_id = str(data.get("id", ""))
         existing = await self.session.execute(
             select(ServerModel).where(ServerModel.id == server_id)
         )
@@ -186,12 +189,12 @@ class ServerRepository:
         await self.session.commit()
         return server_id
 
-    async def get_all(self) -> list[dict]:
+    async def get_all(self) -> list[dict[str, Any]]:
         """获取所有 Server 记录（包含未安装的）。"""
         result = await self.session.execute(select(ServerModel).order_by(ServerModel.name))
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
-    async def get_by_author(self, author: str) -> list[dict]:
+    async def get_by_author(self, author: str) -> list[dict[str, Any]]:
         """按作者查询发布的 Server。"""
         result = await self.session.execute(
             select(ServerModel)
@@ -224,7 +227,7 @@ class ServerRepository:
 
 
 class ReviewRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def rate(
@@ -234,17 +237,17 @@ class ReviewRepository:
         rating: int,
         content: str = "",
         parent_id: int | None = None,
-    ) -> dict:  # noqa: E501
+    ) -> dict[str, Any]:
         if parent_id:
             # 回复已有评价
-            review = ReviewModel(
+            reply = ReviewModel(
                 server_id=server_id,
                 user_id=user_id,
                 rating=rating,
                 content=content,
                 parent_id=parent_id,
             )
-            self.session.add(review)
+            self.session.add(reply)
             await self.session.commit()
             return {"rating": rating, "review_count": 0, "parent_id": parent_id}
 
@@ -285,7 +288,7 @@ class ReviewRepository:
 
         return {"rating": avg_rating, "review_count": count}
 
-    async def get_reviews(self, server_id: str, limit: int = 50) -> list[dict]:
+    async def get_reviews(self, server_id: str, limit: int = 50) -> list[dict[str, Any]]:
         # 先查父评论（顶层评价），limit 只对父评论生效
         parent_result = await self.session.execute(
             select(ReviewModel)
@@ -299,21 +302,21 @@ class ReviewRepository:
         parent_reviews = parent_result.scalars().all()
         parent_ids = [r.id for r in parent_reviews]
 
-        reviews: list[dict] = []
+        reviews: list[dict[str, Any]] = []
 
-        def _to_dict(r: ReviewModel) -> dict:
+        def _to_dict(review: ReviewModel) -> dict[str, Any]:
             return {
-                "id": r.id,
-                "server_id": r.server_id,
-                "user_id": r.user_id,
-                "parent_id": r.parent_id,
-                "rating": r.rating,
-                "content": r.content or "",
-                "created_at": str(r.created_at) if r.created_at else "",
+                "id": review.id,
+                "server_id": review.server_id,
+                "user_id": review.user_id,
+                "parent_id": review.parent_id,
+                "rating": review.rating,
+                "content": review.content or "",
+                "created_at": str(review.created_at) if review.created_at else "",
             }
 
-        for r in parent_reviews:
-            reviews.append(_to_dict(r))
+        for parent_review in parent_reviews:
+            reviews.append(_to_dict(parent_review))
 
         # 获取这些父评论的所有回复（不限数量）
         if parent_ids:
@@ -325,17 +328,21 @@ class ReviewRepository:
                 )
                 .order_by(ReviewModel.created_at.asc())
             )
-            for r in reply_result.scalars().all():
-                reviews.append(_to_dict(r))
+            for reply in reply_result.scalars().all():
+                reviews.append(_to_dict(reply))
 
         # 构建树结构：顶层评价按时间降序，回复在 replies 里
-        top = [r for r in reviews if r["parent_id"] is None]
-        reply_map: dict[int, list[dict]] = {}
-        for r in reviews:
-            if r["parent_id"] is not None:
-                reply_map.setdefault(r["parent_id"], []).append(r)
-        for t in top:
-            t["replies"] = reply_map.get(t["id"], [])
+        top = [review for review in reviews if review["parent_id"] is None]
+        reply_map: dict[int, list[dict[str, Any]]] = {}
+        for review_data in reviews:
+            parent_id_value = review_data["parent_id"]
+            if isinstance(parent_id_value, int):
+                reply_map.setdefault(parent_id_value, []).append(review_data)
+        for top_review in top:
+            review_id = top_review["id"]
+            top_review["replies"] = (
+                reply_map.get(review_id, []) if isinstance(review_id, int) else []
+            )
         return top
 
     async def get_review(self, review_id: int) -> ReviewModel | None:
@@ -359,7 +366,12 @@ class ReviewRepository:
             return True, ""
         return False, "无权限删除此评价"
 
-    async def delete_review(self, review_id: int, user_id: str, user_role: str = "user") -> dict:
+    async def delete_review(
+        self,
+        review_id: int,
+        user_id: str,
+        user_role: str = "user",
+    ) -> dict[str, Any]:
         review = await self.get_review(review_id)
         if not review:
             return {"success": False, "error": "评价不存在"}
@@ -388,10 +400,10 @@ class ReviewRepository:
 
 
 class UserRepository:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_by_id(self, user_id: str) -> dict | None:
+    async def get_by_id(self, user_id: str) -> dict[str, Any] | None:
         """根据 ID 查找用户（不创建）。"""
         result = await self.session.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
@@ -404,8 +416,8 @@ class UserRepository:
             "role": user.role,
         }
 
-    async def get_or_create(self, user_data: dict) -> dict:
-        user_id = user_data.get("id") or user_data.get("login", "")
+    async def get_or_create(self, user_data: dict[str, Any]) -> dict[str, Any]:
+        user_id = str(user_data.get("id") or user_data.get("login", ""))
         result = await self.session.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -457,7 +469,7 @@ class UserRepository:
 
         return is_favorited
 
-    async def get_favorites(self, user_id: str) -> list[dict]:
+    async def get_favorites(self, user_id: str) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel)
             .join(FavoriteModel, FavoriteModel.server_id == ServerModel.id)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 
 from mcp_hub.core.registry import Registry
@@ -12,7 +14,7 @@ router = APIRouter(tags=["security"])
 
 
 @router.get("/security/scan/{server_id:path}")
-async def scan_server(server_id: str):
+async def scan_server(server_id: str) -> dict[str, Any]:
     """扫描指定 Server 的安全性。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -47,7 +49,7 @@ async def scan_server(server_id: str):
 
 
 @router.post("/security/scan/{server_id:path}/refresh")
-async def refresh_scan(server_id: str):
+async def refresh_scan(server_id: str) -> dict[str, Any]:
     """强制重新扫描 Server 的安全性。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)

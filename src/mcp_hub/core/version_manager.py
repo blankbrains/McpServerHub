@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from typing import Any
 
 import httpx
 
 from mcp_hub.core.gateway_config import split_legacy_command
+from mcp_hub.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VersionManager:
     """真实版本管理 — 检查 npm/PyPI 版本 + 更新 + 回滚。"""
 
-    async def check_updates(self) -> list[dict]:
+    async def check_updates(self) -> list[dict[str, Any]]:
         """检查所有已安装 Server 的最新版本。"""
         from mcp_hub.db.database import async_session_factory
         from mcp_hub.db.repositories import ServerRepository
@@ -24,7 +25,7 @@ class VersionManager:
             repo = ServerRepository(session)
             servers = await repo.get_installed()
 
-        updates = []
+        updates: list[dict[str, Any]] = []
         async with httpx.AsyncClient(timeout=10) as client:
             for s in servers:
                 sid = s["id"]
@@ -69,19 +70,24 @@ class VersionManager:
                         break
                 resp = await client.get(f"https://registry.npmjs.org/{pkg}/latest", timeout=10)
                 if resp.status_code == 200:
-                    return resp.json().get("version", "")
+                    data = resp.json()
+                    version = data.get("version") if isinstance(data, dict) else None
+                    return version if isinstance(version, str) and version else None
 
             # PyPI packages
             if "pip" in install_cmd or "uvx" in install_cmd:
                 pkg = server_id.split("/")[-1].replace("mcp-server-", "")
                 resp = await client.get(f"https://pypi.org/pypi/{pkg}/json", timeout=10)
                 if resp.status_code == 200:
-                    return resp.json().get("info", {}).get("version", "")
+                    data = resp.json()
+                    info = data.get("info") if isinstance(data, dict) else None
+                    version = info.get("version") if isinstance(info, dict) else None
+                    return version if isinstance(version, str) and version else None
         except Exception:
             logger.debug("获取最新版本失败", exc_info=True)
         return None
 
-    async def update_server(self, server_id: str) -> dict:
+    async def update_server(self, server_id: str) -> dict[str, Any]:
         """更新指定 Server 到最新版本。"""
         updates = await self.check_updates()
         target = [u for u in updates if u["server_id"] == server_id]
@@ -99,7 +105,11 @@ class VersionManager:
             await self._record_action(server_id, u["latest"], "update")
         return result
 
-    async def rollback_server(self, server_id: str, target_version: str | None = None) -> dict:
+    async def rollback_server(
+        self,
+        server_id: str,
+        target_version: str | None = None,
+    ) -> dict[str, Any]:
         """回滚到指定版本或上一版本。"""
         from sqlalchemy import text
 
@@ -164,9 +174,14 @@ class VersionManager:
                 {"id": server_id},
             )
             r = row.fetchone()
-            return r[0] if r else None
+            value = r[0] if r else None
+            return value if isinstance(value, str) else None
 
-    async def _execute_update(self, install_cmd: str, new_version: str) -> dict:
+    async def _execute_update(
+        self,
+        install_cmd: str,
+        new_version: str,
+    ) -> dict[str, Any]:
         """执行真实的版本升级。"""
         if "npx" in install_cmd:
             try:

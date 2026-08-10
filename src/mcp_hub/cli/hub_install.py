@@ -57,7 +57,7 @@ def _install_hub_cli() -> bool:
 @click.command("hub-install")
 @click.argument("server_id", required=False)
 @click.option("--force", is_flag=True, help="强制重新安装 MCP Hub")
-def hub_install(server_id: str | None, force: bool):
+def hub_install(server_id: str | None, force: bool) -> None:
     """自动检测/安装 MCP Hub，然后安装指定 Server。
 
     用法:
@@ -65,7 +65,7 @@ def hub_install(server_id: str | None, force: bool):
       mcp-hub hub-install @org/server-name                 # 安装 Hub + 指定 Server
     """
 
-    async def _run():
+    async def _run() -> None:
         console.print(Panel.fit("[bold blue]🔵 MCP Hub Installer[/bold blue]"))
 
         # Step 1: Check/Install MCP Hub

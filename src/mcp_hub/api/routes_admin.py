@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
 from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select, text
+from sqlalchemy.sql.elements import ColumnElement
 
 from mcp_hub.api.dependencies import get_admin_user
 from mcp_hub.db.database import async_session_factory
@@ -22,15 +27,10 @@ router = APIRouter(tags=["admin"])
 logger = get_logger(__name__)
 
 
-def _time_filter(days: int) -> text:
-    return text(f"created_at >= datetime('now', '-{days} days')")
-
-
-async def _pg_time_filter(session, days: int) -> text:
-    bind_url = str(session.get_bind().url)
-    if "postgresql" in bind_url:
-        return text(f"created_at >= NOW() - INTERVAL '{days} days'")
-    return _time_filter(days)
+def _time_filter(days: int) -> ColumnElement[bool]:
+    """Return a database-portable UTC window for usage events."""
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    return UsageStatsModel.created_at >= since
 
 
 # ── 审计日志 ──────────────────────────────────────────────
@@ -56,12 +56,13 @@ async def _audit(user_id: str, action: str, detail: str = "") -> None:
 
 
 @router.get("/admin/overview")
-async def admin_overview(admin_user: str = Depends(get_admin_user)):
+async def admin_overview(
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
 
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
-        days30 = text("created_at >= NOW() - INTERVAL '30 days'") if is_pg else _time_filter(30)
+        days7 = _time_filter(7)
+        days30 = _time_filter(30)
 
         # 基础统计
         total_users = (
@@ -90,11 +91,7 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
         ).scalar() or 0
 
         # 每日趋势
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        date_func = func.date(UsageStatsModel.created_at)
         trend_result = await session.execute(
             select(
                 date_func.label("day"),
@@ -103,7 +100,7 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
             )
             .select_from(UsageStatsModel)
             .where(days30)
-            .group_by(text("day" if is_pg else "day"))
+            .group_by(text("day"))
             .order_by(text("day"))
         )
         daily_trend = [
@@ -122,8 +119,8 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
             .limit(10)
         )
         top_servers = []
-        for row in top_servers_result.fetchall():
-            sid = row[0]
+        for server_row in top_servers_result.fetchall():
+            sid = server_row[0]
             srv = await session.execute(select(ServerModel.name).where(ServerModel.id == sid))
             srv_name = srv.scalar() or sid
             calls_7d = (
@@ -135,7 +132,12 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
                 )
             ).scalar() or 0
             top_servers.append(
-                {"id": sid, "name": srv_name, "installs": row[1], "calls_7d": calls_7d}
+                {
+                    "id": sid,
+                    "name": srv_name,
+                    "installs": server_row[1],
+                    "calls_7d": calls_7d,
+                }
             )
 
         # Top 10 用户
@@ -152,16 +154,16 @@ async def admin_overview(admin_user: str = Depends(get_admin_user)):
             .limit(10)
         )
         top_users = []
-        for row in top_users_result.fetchall():
-            uid = row[0]
+        for user_row in top_users_result.fetchall():
+            uid = user_row[0]
             usr = await session.execute(select(UserModel.display_name).where(UserModel.id == uid))
             name = usr.scalar() or uid
             top_users.append(
                 {
                     "user_id": uid,
                     "display_name": name,
-                    "calls_7d": row[1] or 0,
-                    "tokens_7d": row[2] or 0,
+                    "calls_7d": user_row[1] or 0,
+                    "tokens_7d": user_row[2] or 0,
                 }
             )
 
@@ -194,13 +196,12 @@ async def admin_users(
     sort: str = "calls",
     page: int = 1,
     page_size: int = Query(20, le=100),
-):
+) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         if role not in ("", "user", "admin"):
             return {"success": False, "error": "role 必须是 user 或 admin"}
-        is_pg = "postgresql" in str(session.get_bind().url)
-        days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
+        days7 = _time_filter(7)
 
         # 子查询：7 日调用统计
         stats_sub = (
@@ -292,13 +293,15 @@ async def admin_users(
 # ── 3. 用户详情 ───────────────────────────────────────────
 
 
-@router.get("/admin/users/{user_id:path}")
-async def admin_user_detail(user_id: str, admin_user: str = Depends(get_admin_user)):
+@router.get("/admin/users/{user_id}")
+async def admin_user_detail(
+    user_id: str,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
 
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
-        days30 = text("created_at >= NOW() - INTERVAL '30 days'") if is_pg else _time_filter(30)
+        days7 = _time_filter(7)
+        days30 = _time_filter(30)
 
         # 用户基本信息
         usr_result = await session.execute(select(UserModel).where(UserModel.id == user_id))
@@ -382,11 +385,7 @@ async def admin_user_detail(user_id: str, admin_user: str = Depends(get_admin_us
             )
 
         # 每日趋势
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        date_func = func.date(UsageStatsModel.created_at)
         trend_result = await session.execute(
             select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
             .select_from(UsageStatsModel)
@@ -434,8 +433,11 @@ async def admin_user_detail(user_id: str, admin_user: str = Depends(get_admin_us
 # ── 4. 用户 Server 列表 ────────────────────────────────────
 
 
-@router.get("/admin/users/{user_id:path}/servers")
-async def admin_user_servers(user_id: str, admin_user: str = Depends(get_admin_user)):
+@router.get("/admin/users/{user_id}/servers")
+async def admin_user_servers(
+    user_id: str,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         result = await session.execute(
             select(UserServerModel).where(UserServerModel.user_id == user_id).limit(50)
@@ -459,18 +461,15 @@ async def admin_user_servers(user_id: str, admin_user: str = Depends(get_admin_u
 # ── 5. 用户每日趋势 ───────────────────────────────────────
 
 
-@router.get("/admin/users/{user_id:path}/usage/daily")
-async def admin_user_daily(user_id: str, days: int = 30, admin_user: str = Depends(get_admin_user)):
+@router.get("/admin/users/{user_id}/usage/daily")
+async def admin_user_daily(
+    user_id: str,
+    days: int = 30,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        time_f = (
-            text(f"created_at >= NOW() - INTERVAL '{days} days'") if is_pg else _time_filter(days)
-        )
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        time_f = _time_filter(days)
+        date_func = func.date(UsageStatsModel.created_at)
         result = await session.execute(
             select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
             .select_from(UsageStatsModel)
@@ -488,10 +487,12 @@ async def admin_user_daily(user_id: str, days: int = 30, admin_user: str = Depen
 # ── 6. 修改角色 ───────────────────────────────────────────
 
 
-@router.patch("/admin/users/{user_id:path}/role")
+@router.patch("/admin/users/{user_id}/role")
 async def admin_update_role(
-    user_id: str, data: dict = Body(...), admin_user: str = Depends(get_admin_user)
-):
+    user_id: str,
+    data: dict[str, Any] = Body(...),
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     role = data.get("role", "")
     if role not in ("user", "admin"):
         return {"success": False, "error": "角色只能是 user 或 admin"}
@@ -521,13 +522,12 @@ async def admin_servers(
     sort: str = "installs",
     page: int = 1,
     page_size: int = Query(20, le=100),
-):
+) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         if security_level not in ("", "verified", "reviewed", "unreviewed", "blocked"):
             return {"success": False, "error": "无效的安全等级"}
-        is_pg = "postgresql" in str(session.get_bind().url)
-        days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
+        days7 = _time_filter(7)
         calls_subquery = (
             select(
                 UsageStatsModel.server_id.label("server_id"),
@@ -625,17 +625,18 @@ async def admin_servers(
 # ── 8-10. Server 详情 + 用户 + 趋势 ────────────────────────
 
 
-@router.get("/admin/servers/{server_id:path}")
-async def admin_server_detail(server_id: str, admin_user: str = Depends(get_admin_user)):
+async def admin_server_detail(
+    server_id: str,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         srv = await session.execute(select(ServerModel).where(ServerModel.id == server_id))
         s = srv.scalar_one_or_none()
         if not s:
             return {"success": False, "error": "Server 不存在"}
 
-        is_pg = "postgresql" in str(session.get_bind().url)
-        days7 = text("created_at >= NOW() - INTERVAL '7 days'") if is_pg else _time_filter(7)
-        days30 = text("created_at >= NOW() - INTERVAL '30 days'") if is_pg else _time_filter(30)
+        days7 = _time_filter(7)
+        days30 = _time_filter(30)
 
         install_count = (
             await session.execute(
@@ -689,11 +690,7 @@ async def admin_server_detail(server_id: str, admin_user: str = Depends(get_admi
             )
 
         # 趋势
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        date_func = func.date(UsageStatsModel.created_at)
         trend_result = await session.execute(
             select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
             .select_from(UsageStatsModel)
@@ -749,7 +746,10 @@ async def admin_server_detail(server_id: str, admin_user: str = Depends(get_admi
 
 
 @router.get("/admin/servers/{server_id:path}/users")
-async def admin_server_users(server_id: str, admin_user: str = Depends(get_admin_user)):
+async def admin_server_users(
+    server_id: str,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         result = await session.execute(
             select(UserServerModel).where(UserServerModel.server_id == server_id).limit(50)
@@ -771,18 +771,13 @@ async def admin_server_users(server_id: str, admin_user: str = Depends(get_admin
 
 @router.get("/admin/servers/{server_id:path}/usage/daily")
 async def admin_server_daily(
-    server_id: str, days: int = 30, admin_user: str = Depends(get_admin_user)
-):
+    server_id: str,
+    days: int = 30,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        time_f = (
-            text(f"created_at >= NOW() - INTERVAL '{days} days'") if is_pg else _time_filter(days)
-        )
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        time_f = _time_filter(days)
+        date_func = func.date(UsageStatsModel.created_at)
         result = await session.execute(
             select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
             .select_from(UsageStatsModel)
@@ -797,21 +792,22 @@ async def admin_server_daily(
     return {"success": True, "data": trend}
 
 
+# 注册通用详情路由时必须晚于上面的 /users 和 /usage/daily，
+# 否则 path 转换器会抢先吞掉这些更具体的 GET 路径。
+router.get("/admin/servers/{server_id:path}")(admin_server_detail)
+
+
 # ── 11-13. 使用分析 ───────────────────────────────────────
 
 
 @router.get("/admin/analytics/daily")
-async def admin_analytics_daily(days: int = 30, admin_user: str = Depends(get_admin_user)):
+async def admin_analytics_daily(
+    days: int = 30,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        time_f = (
-            text(f"created_at >= NOW() - INTERVAL '{days} days'") if is_pg else _time_filter(days)
-        )
-        date_func = (
-            func.date(UsageStatsModel.created_at)
-            if is_pg
-            else func.date(UsageStatsModel.created_at)
-        )
+        time_f = _time_filter(days)
+        date_func = func.date(UsageStatsModel.created_at)
         result = await session.execute(
             select(
                 date_func.label("day"),
@@ -844,42 +840,60 @@ async def admin_top_servers(
     days: int = 7,
     limit: int = 10,
     admin_user: str = Depends(get_admin_user),
-):
+) -> dict[str, Any]:
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        time_f = (
-            text(f"created_at >= NOW() - INTERVAL '{days} days'") if is_pg else _time_filter(days)
-        )
+        time_f = _time_filter(days)
+        if metric not in {"calls", "tokens", "installs"}:
+            return {"success": False, "error": "metric 必须是 calls、tokens 或 installs"}
 
-        if metric == "tokens":
-            order_col = func.sum(UsageStatsModel.token_count)
-        elif metric == "installs":
-            order_col = func.count(UserServerModel.server_id)
-        else:
-            order_col = func.count()
-
-        result = await session.execute(
-            select(
-                UsageStatsModel.server_id,
-                func.count().label("calls"),
-                func.sum(UsageStatsModel.token_count).label("tokens"),
+        ranked_rows: list[tuple[str, int, int, int]] = []
+        if metric == "installs":
+            install_since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+            result = await session.execute(
+                select(
+                    UserServerModel.server_id,
+                    func.count().label("installs"),
+                )
+                .where(UserServerModel.created_at >= install_since)
+                .group_by(UserServerModel.server_id)
+                .order_by(func.count().desc())
+                .limit(limit)
             )
-            .select_from(UsageStatsModel)
-            .where(time_f)
-            .group_by(UsageStatsModel.server_id)
-            .order_by(order_col.desc())
-            .limit(limit)
-        )
-        servers = []
-        for row in result.fetchall():
-            sid = row[0]
+            for row in result.fetchall():
+                ranked_rows.append((row[0], 0, 0, int(row[1] or 0)))
+        else:
+            order_col: ColumnElement[Any] = (
+                func.sum(UsageStatsModel.token_count)
+                if metric == "tokens"
+                else func.count()
+            )
+            result = await session.execute(
+                select(
+                    UsageStatsModel.server_id,
+                    func.count().label("calls"),
+                    func.sum(UsageStatsModel.token_count).label("tokens"),
+                )
+                .select_from(UsageStatsModel)
+                .where(time_f)
+                .group_by(UsageStatsModel.server_id)
+                .order_by(order_col.desc())
+                .limit(limit)
+            )
+            ranked_rows.extend(
+                (row[0], int(row[1] or 0), int(row[2] or 0), 0)
+                for row in result.fetchall()
+            )
+
+        servers: list[dict[str, Any]] = []
+        for sid, calls, tokens, installs in ranked_rows:
             srv = await session.execute(select(ServerModel.name).where(ServerModel.id == sid))
             servers.append(
                 {
                     "server_id": sid,
                     "name": srv.scalar() or sid,
-                    "calls": row[1] or 0,
-                    "tokens": row[2] or 0,
+                    "calls": calls,
+                    "tokens": tokens,
+                    "installs": installs,
                 }
             )
     return {"success": True, "data": servers}
@@ -891,11 +905,15 @@ async def admin_top_users(
     days: int = 7,
     limit: int = 10,
     admin_user: str = Depends(get_admin_user),
-):
+) -> dict[str, Any]:
     async with async_session_factory() as session:
-        is_pg = "postgresql" in str(session.get_bind().url)
-        time_f = (
-            text(f"created_at >= NOW() - INTERVAL '{days} days'") if is_pg else _time_filter(days)
+        time_f = _time_filter(days)
+        if metric not in {"calls", "tokens"}:
+            return {"success": False, "error": "metric 必须是 calls 或 tokens"}
+        order_col: ColumnElement[Any] = (
+            func.sum(UsageStatsModel.token_count)
+            if metric == "tokens"
+            else func.count()
         )
 
         result = await session.execute(
@@ -907,7 +925,7 @@ async def admin_top_users(
             .select_from(UsageStatsModel)
             .where(time_f)
             .group_by(UsageStatsModel.user_id)
-            .order_by(text("calls DESC"))
+            .order_by(order_col.desc())
             .limit(limit)
         )
         users = []
@@ -933,7 +951,7 @@ async def admin_reviews(
     page: int = 1,
     page_size: int = Query(20, le=100),
     admin_user: str = Depends(get_admin_user),
-):
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         count_result = await session.execute(select(func.count()).select_from(ReviewModel))
         total = count_result.scalar() or 0
@@ -969,7 +987,10 @@ async def admin_reviews(
 
 
 @router.delete("/admin/reviews/{review_id}")
-async def admin_delete_review(review_id: int, admin_user: str = Depends(get_admin_user)):
+async def admin_delete_review(
+    review_id: int,
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         r = await session.execute(select(ReviewModel).where(ReviewModel.id == review_id))
         review = r.scalar_one_or_none()
@@ -993,7 +1014,7 @@ async def admin_audit_log(
     page: int = 1,
     page_size: int = Query(50, le=100),
     admin_user: str = Depends(get_admin_user),
-):
+) -> dict[str, Any]:
     async with async_session_factory() as session:
         count_stmt = (
             select(func.count())
@@ -1035,8 +1056,10 @@ async def admin_audit_log(
 
 @router.post("/admin/servers/{server_id:path}/toggle")
 async def admin_toggle_server(
-    server_id: str, data: dict = Body(...), admin_user: str = Depends(get_admin_user)
-):
+    server_id: str,
+    data: dict[str, Any] = Body(...),
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """启用/禁用或下架 Server。action: block/unblock/feature"""
     action = data.get("action", "")
     async with async_session_factory() as session:
@@ -1063,8 +1086,10 @@ async def admin_toggle_server(
 
 @router.post("/admin/servers/{server_id:path}/security")
 async def admin_set_security(
-    server_id: str, data: dict = Body(...), admin_user: str = Depends(get_admin_user)
-):
+    server_id: str,
+    data: dict[str, Any] = Body(...),
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """手动调整 Server 安全等级。level: verified/reviewed/unreviewed/blocked"""
     level = data.get("level", "")
     if level not in ("verified", "reviewed", "unreviewed", "blocked"):
@@ -1083,7 +1108,9 @@ async def admin_set_security(
 
 
 @router.get("/admin/export/users")
-async def admin_export_users(admin_user: str = Depends(get_admin_user)):
+async def admin_export_users(
+    admin_user: str = Depends(get_admin_user),
+) -> Response:
     """导出用户列表为 CSV。"""
     async with async_session_factory() as session:
         result = await session.execute(
@@ -1100,8 +1127,6 @@ async def admin_export_users(admin_user: str = Depends(get_admin_user)):
     for r in rows:
         w.writerow([r[0], r[1], r[2], str(r[3]) if r[3] else ""])
 
-    from fastapi.responses import Response
-
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
@@ -1110,7 +1135,9 @@ async def admin_export_users(admin_user: str = Depends(get_admin_user)):
 
 
 @router.get("/admin/export/servers")
-async def admin_export_servers(admin_user: str = Depends(get_admin_user)):
+async def admin_export_servers(
+    admin_user: str = Depends(get_admin_user),
+) -> Response:
     """导出 Server 列表为 CSV。"""
     async with async_session_factory() as session:
         result = await session.execute(
@@ -1133,8 +1160,6 @@ async def admin_export_servers(admin_user: str = Depends(get_admin_user)):
     for r in rows:
         w.writerow([r[0], r[1], r[2], r[3], r[4]])
 
-    from fastapi.responses import Response
-
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
@@ -1146,9 +1171,11 @@ async def admin_export_servers(admin_user: str = Depends(get_admin_user)):
 
 
 @router.get("/admin/categories")
-async def admin_categories(admin_user: str = Depends(get_admin_user)):
+async def admin_categories(
+    admin_user: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """获取所有分类及统计。"""
-    cats = [
+    cats: list[dict[str, Any]] = [
         {"id": "ai", "name": "AI & 机器学习", "icon": "🤖"},
         {"id": "browser", "name": "浏览器 & Web", "icon": "🌐"},
         {"id": "database", "name": "数据库", "icon": "🗄️"},

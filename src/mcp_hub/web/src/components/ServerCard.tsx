@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import type { ServerInfo } from '../api/client'
-import StatusBadge from './StatusBadge'
 
 interface ServerCardProps {
   server: ServerInfo
@@ -27,7 +26,6 @@ function SecBadge({ level }: { level: string }) {
 }
 
 export default function ServerCard({ server }: ServerCardProps) {
-  const stars = '⭐'.repeat(Math.round(server.rating)) + '☆'.repeat(5 - Math.round(server.rating))
   const securityLabels: Record<string, string> = {
     verified: '🔒 安全认证',
     reviewed: '⚪ 已审查',
@@ -52,7 +50,7 @@ export default function ServerCard({ server }: ServerCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <h3 className="font-semibold text-gray-900 text-sm truncate">{server.id}</h3>
-            <StatusBadge status={server.status} />
+            <span className="text-xs text-gray-400">v{server.version || '?'}</span>
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{name}</p>
         </div>

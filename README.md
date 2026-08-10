@@ -44,10 +44,10 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 | 模式 | 适用场景 | 门槛 |
 |------|---------|:--:|
 | **SaaS（推荐）** | 搜索/对比/追踪 Server，本地 Gateway 代理与脱敏监控 | 浏览器 + 本地 CLI |
-| **自托管** | 团队/企业集中管理 MCP Server 进程，实时监控 | 需服务器 |
+| **自托管** | 管理员在可信服务器上集中运行 MCP Server 进程 | 需服务器并显式开启进程管理 |
 
 **SaaS 用户流程**：登录 → 追踪 Server → 创建设备 → 在本地运行 `mcp-hub agent setup` → 重启 Agent → 查看监控
-**自托管用户流程**：部署 Hub → 一键安装 → 集中管理所有 MCP Server 进程 + 实时健康监控
+**自托管管理员流程**：部署 Hub → 设置 `MCP_HUB_ALLOW_SERVER_PROCESS_MANAGEMENT=true` → 由管理员集中管理 Hub 主机进程
 
 ---
 
@@ -66,19 +66,19 @@ MCP（Model Context Protocol）正在爆发式增长 — 983+ Server，被所有
 - **配置草稿**：保存多套配置方案（工作用/个人用），一键切换
 - **配置方案市场**：发布你的配置方案，浏览他人方案，一键导入
 - **多格式生成**：JSON Agent 使用 `mcpServers`/`servers`，Codex 使用 `~/.codex/config.toml`
-- **安全迁移**：`mcp-hub agent setup` 先预览和确认，再备份原配置并迁移 stdio Server
+- **安全迁移**：`mcp-hub agent setup` 先预览和确认，再备份原配置并迁移 stdio、Streamable HTTP 与 SSE Server
 - **完整进程配置**：保留结构化 `command`、`args`、按 Server 授权的 `env`、`cwd` 和启用状态
 
 ### 📦 Server 管理
-- **我的 Server**：配置追踪 / 进程管理 双视图切换
-- **配置追踪**：追踪 Server → 查看安装命令 → 一键复制 → 粘贴到本地 Agent
-- **进程管理**（自托管）：批量操作、启动/停止/重启、调用数据、可靠性评分
+- **我的 Server**：个人追踪、Gateway 接入状态、同步开关、真实调用与 Token 指标
+- **配置同步**：首次运行 `agent setup`，后续用 `mcp-hub config sync` 更新 `gateway.json`
+- **进程管理**（自托管）：仅管理员且显式启用后可操作 Hub 主机进程
 - **版本更新提醒**：自动检查已追踪 Server 是否有新版本，标记 🆕
 - **安全指示灯**：绿/黄/红/灰 四色标识安全等级
 
 ### 📊 监控 & 分析
 - **个人概览**：已追踪/已收藏/有更新/安全风险 四维统计
-- **监控大屏**：实时运行状态、调用次数、Token 消耗、可靠性排行榜
+- **监控大屏**：设备在线状态、真实调用次数、估算 Token、延迟、错误和本地资源采样
 - **多 Agent 遥测**：为 Claude Code、Claude Desktop、Codex 等客户端创建独立设备令牌，数据按 Agent 隔离
 - **调用性能**：调用量、成功率、平均/P95 延迟、输入输出估算 Token 与传输字节
 - **工具与协议**：按 Server/工具聚合，并监控 `tools/call`、`resources/read`、`prompts/get`
@@ -181,11 +181,21 @@ mcp-hub agent setup \
 CLI 会执行以下操作：
 
 1. 自动查找 Agent 配置，或通过 `--source-config` 指定文件。
-2. 展示将迁移的 stdio Server 和保留的远程 Server。
+2. 展示将迁移的 stdio、Streamable HTTP 和 SSE Server。
 3. 获得确认后创建带时间戳的原文件备份。
-4. 将完整本地进程配置写入 Agent 独立的 `gateway.json`。
-5. 在 Agent 配置中保留远程 HTTP/SSE Server，并添加唯一的 `mcp-hub` 入口。
-6. 上报不含参数、响应、环境变量值和完整命令的设备清单。
+4. 将完整本地连接配置写入 Agent 独立的 `gateway.json`。
+5. 用唯一的 `mcp-hub` 入口替换受支持的直接连接。
+6. 上报不含 URL、请求头值、参数、响应、环境变量值和完整命令的设备清单。
+
+后续在网页调整个人 Server 后，同步 Gateway：
+
+```bash
+mcp-hub config sync \
+  --agent codex \
+  --server https://<your-hub-host>
+```
+
+同步会备份 `gateway.json`，保留本地环境变量、请求头和工作目录，不覆盖 Agent 主配置。
 
 本地诊断：
 

@@ -19,6 +19,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 import httpx
 
@@ -608,7 +609,7 @@ class SecurityScanner:
         self.reputation_checker = ReputationChecker()
         self.code_pattern_checker = CodePatternChecker()
 
-    async def scan(self, server_data: dict) -> ScanReport:
+    async def scan(self, server_data: dict[str, Any]) -> ScanReport:
         """对 Server 执行完整安全扫描。
 
         Args:
@@ -695,7 +696,11 @@ class SecurityScanner:
             score += f.score_impact
         return max(0, min(100, score))
 
-    def _determine_level(self, score: int, _server_data: dict) -> SecurityLevel:
+    def _determine_level(
+        self,
+        score: int,
+        _server_data: dict[str, Any],
+    ) -> SecurityLevel:
         """根据分数和元数据确定安全等级。"""
         # 如果分数极低，直接 blocked
         if score < 50:
@@ -724,7 +729,7 @@ class SecurityScanner:
         ]
 
         if report.findings:
-            sev_counts = {}
+            sev_counts: dict[str, int] = {}
             for f in report.findings:
                 sev_counts[f.severity] = sev_counts.get(f.severity, 0) + 1
             lines.append(f"  发现: {len(report.findings)} 项问题")

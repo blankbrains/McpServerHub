@@ -14,10 +14,10 @@ from mcp_hub.core.auth import AuthService
 
 
 @click.command("login")
-def login():
+def login() -> None:
     """使用 GitHub 登录。"""
 
-    async def _run():
+    async def _run() -> None:
         auth = AuthService()
         url = auth.get_github_login_url()
 
@@ -57,7 +57,7 @@ def login():
 
 
 @click.command("logout")
-def logout():
+def logout() -> None:
     """退出登录。"""
     token_file = Path.home() / ".config" / "mcp-hub" / "token.json"
     if token_file.exists():
@@ -66,7 +66,7 @@ def logout():
 
 
 @click.command("whoami")
-def whoami():
+def whoami() -> None:
     """查看当前用户。"""
     token_file = Path.home() / ".config" / "mcp-hub" / "token.json"
     if token_file.exists():

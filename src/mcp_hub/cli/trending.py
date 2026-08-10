@@ -12,11 +12,11 @@ from mcp_hub.core.registry import Registry
 @click.command("trending")
 @click.option("--category", help="按分类筛选")
 @click.option("--json", "json_output", is_flag=True)
-def trending(_category: str | None, json_output: bool):
+def trending(_category: str | None, json_output: bool) -> None:
     """热门趋势榜。"""
     import json
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         results = await registry.get_trending()
         if json_output:
@@ -30,10 +30,10 @@ def trending(_category: str | None, json_output: bool):
 
 
 @click.command("top-rated")
-def top_rated():
+def top_rated() -> None:
     """评分最高榜。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         results = await registry.get_top_rated()
         click.echo("\n⭐ 评分最高:\n")
@@ -45,10 +45,10 @@ def top_rated():
 
 
 @click.command("most-downloaded")
-def most_downloaded():
+def most_downloaded() -> None:
     """下载最多榜。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         results = await registry.get_trending()
         click.echo("\n📥 下载最多:\n")
@@ -59,10 +59,10 @@ def most_downloaded():
 
 
 @click.command("new-releases")
-def new_releases():
+def new_releases() -> None:
     """最新发布榜。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         results = await registry.get_new_releases()
         click.echo("\n🆕 最新发布:\n")

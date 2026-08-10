@@ -23,7 +23,7 @@ console = Console()
 @click.argument("server_name", required=False)
 @click.option("--all", "scan_all", is_flag=True, help="监控所有已安装 Server")
 @click.option("--watch", is_flag=True, help="持续监控（每 10 秒刷新）")
-def monitor(server_name: str | None, scan_all: bool, watch: bool):
+def monitor(server_name: str | None, scan_all: bool, watch: bool) -> None:
     """查看 MCP Server 的健康状态与可靠性。
 
     显示 Server 的:
@@ -39,7 +39,7 @@ def monitor(server_name: str | None, scan_all: bool, watch: bool):
       mcp-hub monitor --watch                  持续刷新
     """
 
-    async def _run():
+    async def _run() -> None:
         if scan_all:
             await _show_all_monitor()
         elif server_name:
@@ -60,7 +60,7 @@ def monitor(server_name: str | None, scan_all: bool, watch: bool):
     asyncio.run(_run())
 
 
-async def _show_server_monitor(server_id: str):
+async def _show_server_monitor(server_id: str) -> None:
     """显示单个 Server 的监控数据。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -126,7 +126,7 @@ async def _show_server_monitor(server_id: str):
     _display_name_short = server_id.split("/")[-1] if "/" in server_id else server_id
 
 
-async def _show_all_monitor():
+async def _show_all_monitor() -> None:
     """显示所有 Server 的健康概况。"""
     registry = Registry()
     db_servers = await registry.search(q="", page=1, page_size=1000)
@@ -190,13 +190,13 @@ async def _show_all_monitor():
 @click.command("reliability")
 @click.option("--limit", default=20, help="显示数量")
 @click.option("--json", "json_output", is_flag=True, help="JSON 输出")
-def reliability(limit: int, json_output: bool):
+def reliability(limit: int, json_output: bool) -> None:
     """查看最稳定 MCP Server 排行榜。
 
     基于历史健康检查数据计算可靠性评分 (0-100)，按评分降序排列。
     """
 
-    async def _run():
+    async def _run() -> None:
         console.print("[bold]📊 正在计算 Server 可靠性评分...[/bold]")
         top = await Monitor.get_top_reliable(limit=limit)
 

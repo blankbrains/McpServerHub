@@ -15,10 +15,10 @@ from mcp_hub.core.registry import Registry
 @click.argument("path", required=True, type=click.Path(exists=True))
 @click.option("--visibility", type=click.Choice(["public", "private"]), default="public")
 @click.option("--draft", is_flag=True, help="草稿模式")
-def publish(path: str, visibility: str, draft: bool):
+def publish(path: str, visibility: str, draft: bool) -> None:
     """发布 MCP Server。"""
 
-    async def _run():
+    async def _run() -> None:
         p = Path(path)
         # Read package metadata
         package_json = p / "package.json"
@@ -64,10 +64,10 @@ def publish(path: str, visibility: str, draft: bool):
 
 @click.command("my-servers")
 @click.argument("author", required=False, default="")
-def my_servers(author: str):
+def my_servers(author: str) -> None:
     """查看我发布的 Server。"""
 
-    async def _run():
+    async def _run() -> None:
         if not author:
             click.echo("📦 请指定发布者名称, 例如: mcp-hub my-servers anthropic")
             click.echo("   或先登录 (mcp-hub login) 后使用")
@@ -90,10 +90,10 @@ def my_servers(author: str):
 @click.command("unpublish")
 @click.argument("server_id", required=True)
 @click.confirmation_option(prompt="确定要下架吗？")
-def unpublish(server_id: str):
+def unpublish(server_id: str) -> None:
     """下架 Server。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         success = await registry.unpublish_server(server_id)
         if success:
@@ -108,10 +108,10 @@ def unpublish(server_id: str):
 @click.argument("server_id", required=True)
 @click.option("--period", default="30d", help="统计周期 (7d/30d/90d)")
 @click.option("--history", is_flag=True, help="显示操作历史")
-def stats(server_id: str, period: str, history: bool):
+def stats(server_id: str, period: str, history: bool) -> None:
     """查看 Server 统计数据。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         s = await registry.get_by_id(server_id)
         if not s:

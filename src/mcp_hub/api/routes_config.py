@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 import re
-import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 import tomli_w
 from fastapi import APIRouter, Depends, File, Header, UploadFile
-from fastapi.responses import FileResponse, Response
-from sqlalchemy import delete, select, text
+from fastapi.responses import Response
+from sqlalchemy import delete, or_, select, text
 
 from mcp_hub.api.dependencies import get_admin_user, get_current_user
 from mcp_hub.core.gateway_config import split_legacy_command
@@ -50,7 +48,7 @@ def _extract_package_name(command: str) -> str | None:
     return None
 
 
-async def _resolve_package_online(pkg_name: str) -> dict | None:
+async def _resolve_package_online(pkg_name: str) -> dict[str, Any] | None:
     """尝试从 npm 和 PyPI 查询包的元信息。"""
     if pkg_name.startswith("@"):
         # npm scoped package: @org/name
@@ -117,13 +115,19 @@ async def _resolve_package_online(pkg_name: str) -> dict | None:
 async def download_config(
     agent: str = "generic",
     user_id: str = Depends(get_current_user),
-):
+) -> Response:
     """下载当前用户追踪 Server 的配置 (mcp.json)。"""
     registry = Registry()
     async with async_session_factory() as session:
         result = await session.execute(
             select(UserServerModel.server_id)
-            .where(UserServerModel.user_id == user_id)
+            .where(
+                UserServerModel.user_id == user_id,
+                or_(
+                    UserServerModel.enabled.is_(True),
+                    UserServerModel.enabled.is_(None),
+                ),
+            )
             .order_by(UserServerModel.created_at)
         )
         server_ids = [row[0] for row in result.fetchall()]
@@ -132,7 +136,8 @@ async def download_config(
 
     config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
     server_key = config_spec["server_key"]
-    config = {server_key: {}}
+    selected_servers: dict[str, Any] = {}
+    config: dict[str, Any] = {server_key: selected_servers}
     for server_id in server_ids:
         s = await registry.get_by_id(server_id)
         if not s:
@@ -141,7 +146,7 @@ async def download_config(
         name = s["id"].split("/")[-1]
         if cmd:
             fragment = get_config_for_agent(name, cmd, agent)
-            config[server_key][name] = fragment["config_content"][server_key][name]
+            selected_servers[name] = fragment["config_content"][server_key][name]
 
     if config_spec.get("format") == "toml":
         content = tomli_w.dumps(config)
@@ -159,7 +164,9 @@ async def download_config(
 
 
 @router.get("/config/user-servers")
-async def get_user_servers(user_id: str = Depends(get_current_user)):
+async def get_user_servers(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """获取当前用户的 Server 配置列表（用户隔离）。"""
     async with async_session_factory() as session:
         result = await session.execute(
@@ -167,7 +174,7 @@ async def get_user_servers(user_id: str = Depends(get_current_user)):
             .where(UserServerModel.user_id == user_id)
             .order_by(UserServerModel.created_at)
         )
-        servers = []
+        servers: list[dict[str, Any]] = []
         for row in result.scalars().all():
             servers.append(
                 {
@@ -183,7 +190,10 @@ async def get_user_servers(user_id: str = Depends(get_current_user)):
 
 
 @router.post("/config/user-servers/save")
-async def save_user_servers(data: dict, user_id: str = Depends(get_current_user)):
+async def save_user_servers(
+    data: dict[str, Any],
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """保存当前用户的 Server 配置列表（覆盖式）。"""
     servers = data.get("servers", [])
     if not isinstance(servers, list):
@@ -194,6 +204,8 @@ async def save_user_servers(data: dict, user_id: str = Depends(get_current_user)
         await session.execute(delete(UserServerModel).where(UserServerModel.user_id == user_id))
         # 写入新记录
         for s in servers:
+            if not isinstance(s, dict):
+                continue
             sid = s.get("hub_id") or s.get("name", "")
             if sid:
                 session.add(
@@ -212,7 +224,10 @@ async def save_user_servers(data: dict, user_id: str = Depends(get_current_user)
 
 
 @router.post("/config/user-servers/toggle")
-async def toggle_server_enabled(data: dict, user_id: str = Depends(get_current_user)):
+async def toggle_server_enabled(
+    data: dict[str, Any],
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """直接切换单个 Server 的启用/禁用状态（无需加载全部再保存）。"""
     server_id = data.get("server_id", "")
     enabled = data.get("enabled", True)
@@ -235,7 +250,10 @@ async def toggle_server_enabled(data: dict, user_id: str = Depends(get_current_u
 
 
 @router.delete("/config/user-servers/{server_id:path}")
-async def remove_user_server(server_id: str, user_id: str = Depends(get_current_user)):
+async def remove_user_server(
+    server_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """从用户配置中移除单个 Server。"""
     async with async_session_factory() as session:
         await session.execute(
@@ -254,7 +272,7 @@ async def upload_config(
     user_id: str = Depends(get_current_user),
     x_agent_id: str = Header(""),
     x_track_servers: str = Header("false"),
-):
+) -> dict[str, Any]:
     """上传本地的 claude_desktop_config.json，匹配市场中的 Server。
 
     返回上传配置中每个 Server 在 Hub 市场中的匹配情况，
@@ -265,8 +283,12 @@ async def upload_config(
         config = json.loads(content)
     except json.JSONDecodeError as err:
         raise ConfigError("无效的 JSON 文件") from err
+    if not isinstance(config, dict):
+        raise ConfigError("配置文件根节点必须是对象")
 
     servers_map = config.get("mcpServers", {})
+    if not isinstance(servers_map, dict):
+        raise ConfigError("mcpServers 必须是对象")
 
     if not servers_map:
         return {
@@ -288,13 +310,24 @@ async def upload_config(
     from mcp_hub.db.models import UserServerModel
 
     registry = Registry()
-    matched = []
-    unmatched = []
-    not_in_hub = []
-    all_tracked = []
+    matched: list[dict[str, Any]] = []
+    unmatched: list[dict[str, Any]] = []
+    not_in_hub: list[dict[str, Any]] = []
+    all_tracked: list[dict[str, Any]] = []
     track_servers = x_track_servers.lower() == "true"
 
-    for name, cfg in servers_map.items():
+    for raw_name, cfg in servers_map.items():
+        name = str(raw_name)
+        if not isinstance(cfg, dict):
+            not_in_hub.append(
+                {
+                    "local_name": name,
+                    "local_command": "",
+                    "server_count": 1,
+                    "matched": False,
+                }
+            )
+            continue
         cmd = cfg.get("command", "") + " " + " ".join(cfg.get("args", []))
         cmd = cmd.strip()
 
@@ -416,10 +449,6 @@ async def upload_config(
                 )
             await session.commit()
 
-        for ts in all_tracked:
-            with contextlib.suppress(Exception):
-                await registry.update_status(ts["server_id"], "stopped")
-
     return {
         "success": True,
         "data": {
@@ -437,8 +466,8 @@ async def upload_config(
     }
 
 
-@router.post("/config/build")
-async def build_config(data: dict):
+@router.post("/config/build", response_model=None)
+async def build_config(data: dict[str, Any]) -> Response | dict[str, Any]:
     """根据指定的 Server ID 列表生成 mcp.json 配置文件。
 
     请求体: {"servers": ["@anthropic/web-search", "@github/github-mcp-server"]}
@@ -454,7 +483,8 @@ async def build_config(data: dict):
     registry = Registry()
     config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
     server_key = config_spec["server_key"]
-    config = {server_key: {}}
+    server_configs: dict[str, Any] = {}
+    config: dict[str, Any] = {server_key: server_configs}
 
     for sid in server_ids:
         server = await registry.get_by_id(sid)
@@ -463,7 +493,7 @@ async def build_config(data: dict):
             name = sid.split("/")[-1]
             if cmd:
                 fragment = get_config_for_agent(name, cmd, agent)
-                config[server_key][name] = fragment["config_content"][server_key][name]
+                server_configs[name] = fragment["config_content"][server_key][name]
 
     if config_spec.get("format") == "toml":
         return Response(
@@ -479,14 +509,15 @@ async def build_config(data: dict):
 
 
 @router.post("/config/generate")
-async def generate_config(_admin_id: str = Depends(get_admin_user)):
+async def generate_config(_admin_id: str = Depends(get_admin_user)) -> Response:
     """生成完整的 mcp.json 配置文件，包含所有已安装 Server + Hub 网关。"""
     from mcp_hub.core.config_manager import get_config_for_agent
 
     registry = Registry()
     installed = await registry.get_installed()
 
-    config = {"mcpServers": {}}
+    generated_servers: dict[str, Any] = {}
+    config: dict[str, Any] = {"mcpServers": generated_servers}
 
     # 添加所有已安装的 Server
     for s in installed:
@@ -494,22 +525,19 @@ async def generate_config(_admin_id: str = Depends(get_admin_user)):
         name = s["id"].split("/")[-1]
         if cmd:
             fragment = get_config_for_agent(name, cmd, "generic")
-            config["mcpServers"][name] = fragment["config_content"]["mcpServers"][name]
+            generated_servers[name] = fragment["config_content"]["mcpServers"][name]
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(config, tmp, indent=2, ensure_ascii=False)
-
-    return FileResponse(
-        tmp.name,
+    return Response(
+        content=json.dumps(config, indent=2, ensure_ascii=False),
         media_type="application/json",
-        filename="mcp-hub-config.json",
+        headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
     )
 
 
 @router.get("/config/from-local")
-async def config_from_local(_admin_id: str = Depends(get_admin_user)):
+async def config_from_local(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """尝试读取本地的 mcp.json 配置文件。
 
     扫描所有已知 Agent 的标准路径：
@@ -519,7 +547,7 @@ async def config_from_local(_admin_id: str = Depends(get_admin_user)):
     from mcp_hub.core.config_manager import AGENT_CONFIGS
 
     # 从 AGENT_CONFIGS 收集所有已知路径，去重
-    seen = set()
+    seen: set[str] = set()
     paths: list[tuple[str, Path]] = []  # (agent_label, path)
     for _agent_key, cfg in AGENT_CONFIGS.items():
         for p in cfg["paths"]:
@@ -539,7 +567,7 @@ async def config_from_local(_admin_id: str = Depends(get_admin_user)):
             seen.add(ep_str)
             paths.append((label, ep))
 
-    results = []
+    results: list[dict[str, Any]] = []
     for agent_label, p in paths:
         if p.exists():
             try:
@@ -579,7 +607,9 @@ async def config_from_local(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.get("/local/discover")
-async def local_discover(_admin_id: str = Depends(get_admin_user)):
+async def local_discover(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """扫描本机所有 AI Agent 的 MCP 配置文件。
 
     自动发现 Claude Code、Claude Desktop、Cursor、Codex、Trae、
@@ -593,7 +623,9 @@ async def local_discover(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.get("/local/compare")
-async def local_compare(_admin_id: str = Depends(get_admin_user)):
+async def local_compare(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """跨 Agent 对比 MCP 配置。
 
     返回每个 MCP Server 在各 Agent 中的分布情况：
@@ -620,7 +652,9 @@ async def local_compare(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.get("/local/conflicts")
-async def local_conflicts(_admin_id: str = Depends(get_admin_user)):
+async def local_conflicts(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """检测本地 MCP 配置冲突。
 
     发现同名 Server 在不同 Agent 中配置了不同的命令或参数，
@@ -650,7 +684,9 @@ async def local_conflicts(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.get("/config/diff")
-async def config_diff(_admin_id: str = Depends(get_admin_user)):
+async def config_diff(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """对比本地 mcp.json 与 Hub 上的配置差异。
 
     返回：
@@ -667,7 +703,10 @@ async def config_diff(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.post("/config/backup")
-async def config_backup(data: dict, _admin_id: str = Depends(get_admin_user)):
+async def config_backup(
+    data: dict[str, Any],
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """备份当前配置。可附带 label 标签。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -678,7 +717,9 @@ async def config_backup(data: dict, _admin_id: str = Depends(get_admin_user)):
 
 
 @router.get("/config/backups")
-async def config_backups_list(_admin_id: str = Depends(get_admin_user)):
+async def config_backups_list(
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """列出所有配置备份。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -688,7 +729,10 @@ async def config_backups_list(_admin_id: str = Depends(get_admin_user)):
 
 
 @router.post("/config/restore/{filename:path}")
-async def config_restore(filename: str, _admin_id: str = Depends(get_admin_user)):
+async def config_restore(
+    filename: str,
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """从指定备份恢复配置。"""
     from mcp_hub.core.config_manager import ConfigManager
 
@@ -698,7 +742,10 @@ async def config_restore(filename: str, _admin_id: str = Depends(get_admin_user)
 
 
 @router.post("/servers/pre-check")
-async def server_pre_check(data: dict, _admin_id: str = Depends(get_admin_user)):
+async def server_pre_check(
+    data: dict[str, Any],
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """安装前环境预检。
 
     请求体: {"command": "uvx mcp-server-web-search"}
@@ -716,7 +763,10 @@ async def server_pre_check(data: dict, _admin_id: str = Depends(get_admin_user))
 
 
 @router.post("/servers/dependency-analyze")
-async def server_dependency_analyze(data: dict, _admin_id: str = Depends(get_admin_user)):
+async def server_dependency_analyze(
+    data: dict[str, Any],
+    _admin_id: str = Depends(get_admin_user),
+) -> dict[str, Any]:
     """分析 MCP Server 的完整依赖链。
 
     请求体: {"server_id": "@anthropic/web-search", "command": "uvx mcp-server-web-search"}
@@ -774,7 +824,9 @@ async def server_dependency_analyze(data: dict, _admin_id: str = Depends(get_adm
 
 
 @router.get("/config/groups")
-async def list_groups(user_id: str = Depends(get_current_user)):
+async def list_groups(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """列出当前用户的所有分组及其包含的 Server。"""
     from sqlalchemy import text
 
@@ -809,7 +861,10 @@ async def list_groups(user_id: str = Depends(get_current_user)):
 
 
 @router.post("/config/groups/set")
-async def set_server_group(data: dict, user_id: str = Depends(get_current_user)):
+async def set_server_group(
+    data: dict[str, Any],
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """为指定 Server 设置分组。"""
     from sqlalchemy import text
 
@@ -835,7 +890,10 @@ async def set_server_group(data: dict, user_id: str = Depends(get_current_user))
 
 
 @router.post("/config/groups/batch")
-async def batch_set_group(data: dict, user_id: str = Depends(get_current_user)):
+async def batch_set_group(
+    data: dict[str, Any],
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """批量设置多个 Server 的分组（启用/禁用整个分组时用）。"""
     from sqlalchemy import text
 
@@ -843,20 +901,21 @@ async def batch_set_group(data: dict, user_id: str = Depends(get_current_user)):
 
     group_name = data.get("group_name", "")
     action = data.get("action", "")  # "enable" or "disable"
-    enabled = True if action == "enable" else (False if action == "disable" else None)
 
     if not group_name:
         return {"success": False, "error": "需要 group_name"}
+    if action not in {"enable", "disable"}:
+        return {"success": False, "error": "action 必须是 enable 或 disable"}
+    enabled = action == "enable"
 
     async with async_session_factory() as session:
-        if enabled is not None:
-            await session.execute(
-                text(
-                    "UPDATE user_servers SET enabled = :en "
-                    "WHERE user_id = :uid AND group_name = :gname"
-                ),
-                {"en": enabled, "uid": user_id, "gname": group_name},
-            )
+        await session.execute(
+            text(
+                "UPDATE user_servers SET enabled = :en "
+                "WHERE user_id = :uid AND group_name = :gname"
+            ),
+            {"en": enabled, "uid": user_id, "gname": group_name},
+        )
         await session.commit()
 
     msg = f"已{'启用' if enabled else '禁用'}分组 '{group_name}' 中的所有 Server"

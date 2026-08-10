@@ -50,6 +50,18 @@ def _require_env(key: str) -> str:
     return value
 
 
+def _env_bool(key: str, default: bool = False) -> bool:
+    value = os.getenv(key)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise OSError(f"{key} 必须是 true/false、yes/no、on/off 或 1/0")
+
+
 class Settings:
     """所有配置项集中管理 — 敏感字段无默认值，仅从 .env 读取。"""
 
@@ -72,6 +84,10 @@ class Settings:
     CORS_ORIGINS: str = os.getenv("MCP_HUB_CORS_ORIGINS", "http://localhost:3987")
     LOG_DIR: str = os.getenv("MCP_HUB_LOG_DIR", "~/.config/mcp-hub/logs")
     WORKERS: int = int(os.getenv("MCP_HUB_WORKERS", "2"))
+    ALLOW_SERVER_PROCESS_MANAGEMENT: bool = _env_bool(
+        "MCP_HUB_ALLOW_SERVER_PROCESS_MANAGEMENT",
+        False,
+    )
 
     @property
     def cors_origins_list(self) -> list[str]:

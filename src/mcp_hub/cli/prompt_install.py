@@ -51,7 +51,7 @@ def _check_hub_installed() -> bool:
 @click.argument("server_id", required=True)
 @click.option("--copy", is_flag=True, help="自动复制到剪贴板")
 @click.option("--json-output", "json_out", is_flag=True, help="JSON 格式输出")
-def prompt_install(server_id: str, copy: bool, json_out: bool):
+def prompt_install(server_id: str, copy: bool, json_out: bool) -> None:
     """生成安装提示词 — 发给 AI 即可自动安装。
 
     用法:

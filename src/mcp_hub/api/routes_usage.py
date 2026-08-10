@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 
 from mcp_hub.api.dependencies import get_current_user
@@ -19,9 +21,9 @@ logger = get_logger(__name__)
 
 @router.post("/usage/record")
 async def record_usage(
-    data: dict,
+    data: dict[str, Any],
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """记录一次 MCP 工具调用。
 
     由用户本地运行的 `mcp serve` 网关 HTTP 上报。
@@ -109,7 +111,7 @@ async def get_usage_stats(
     server_id: str = "",
     user_id: str = Depends(get_current_user),
     days: int = Query(7, ge=1, le=365),
-):
+) -> dict[str, Any]:
     """查询当前用户的使用统计。
 
     Query params:
@@ -147,7 +149,7 @@ async def get_usage_stats(
         )
 
         rows = result.fetchall()
-        stats = []
+        stats: list[dict[str, Any]] = []
         for row in rows:
             total = row[1] or 0
             ok = row[4] or 0

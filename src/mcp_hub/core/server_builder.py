@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 Language = Literal["python", "typescript"]
 
@@ -28,7 +28,7 @@ class ToolTemplate:
     name: str
     description: str
     enabled: bool = True
-    params: list[dict] = field(
+    params: list[dict[str, Any]] = field(
         default_factory=lambda: [
             {"name": "message", "type": "string", "description": "输入消息", "required": True},
         ]
@@ -52,7 +52,11 @@ class ToolTemplate:
 # ── 默认代码生成器 ─────────────────────────────────────────
 
 
-def _make_python_tool_code(name: str, description: str, params: list[dict]) -> str:
+def _make_python_tool_code(
+    name: str,
+    description: str,
+    params: list[dict[str, Any]],
+) -> str:
     """生成 Python 工具实现代码。"""
     param_docs = "\n        ".join(f"{p['name']} ({p['type']}): {p['description']}" for p in params)
     signature = ", ".join(f"{p['name']}: {p['type']}" for p in params)
@@ -70,7 +74,11 @@ async def {name}({signature}) -> list[types.TextContent]:
     return [types.TextContent(type="text", text=result)]'''  # noqa: E501
 
 
-def _make_ts_tool_code(name: str, _description: str, params: list[dict]) -> str:
+def _make_ts_tool_code(
+    name: str,
+    _description: str,
+    params: list[dict[str, Any]],
+) -> str:
     """生成 TypeScript 工具实现代码。"""
     param_interface = "\n  ".join(f"{p['name']}: {p['type']};" for p in params)
     param_access = "\n      ".join(

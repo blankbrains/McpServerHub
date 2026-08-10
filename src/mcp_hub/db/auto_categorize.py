@@ -184,7 +184,7 @@ def auto_categorize(
     return matched[:3]  # 最多 3 个分类
 
 
-async def recategorize_all():
+async def recategorize_all() -> None:
     """重新分类所有 Server。"""
     from sqlalchemy import select
 

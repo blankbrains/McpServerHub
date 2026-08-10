@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -24,7 +26,10 @@ class FavoriteRequest(BaseModel):
 
 
 @router.post("/community/rate")
-async def rate_server(req: RateRequest, user_id: str = Depends(get_current_user)):  # noqa: E501
+async def rate_server(
+    req: RateRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """评价 Server。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
@@ -33,7 +38,7 @@ async def rate_server(req: RateRequest, user_id: str = Depends(get_current_user)
 
 
 @router.get("/community/reviews/{server_id:path}")
-async def get_reviews(server_id: str):
+async def get_reviews(server_id: str) -> dict[str, Any]:
     """获取评价列表。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
@@ -42,7 +47,10 @@ async def get_reviews(server_id: str):
 
 
 @router.post("/community/review/delete/{review_id}")
-async def delete_review(review_id: int, user_id: str = Depends(get_current_user)):
+async def delete_review(
+    review_id: int,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """删除评价（仅评价作者可删除——服务器端验证）。"""
     async with get_session() as session:
         repo = ReviewRepository(session)
@@ -51,7 +59,10 @@ async def delete_review(review_id: int, user_id: str = Depends(get_current_user)
 
 
 @router.post("/community/favorite")
-async def favorite_server(req: FavoriteRequest, user_id: str = Depends(get_current_user)):
+async def favorite_server(
+    req: FavoriteRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """收藏 Server。"""
     async with get_session() as session:
         repo = UserRepository(session)
@@ -60,7 +71,9 @@ async def favorite_server(req: FavoriteRequest, user_id: str = Depends(get_curre
 
 
 @router.get("/community/favorites")
-async def list_favorite_servers(user_id: str = Depends(get_current_user)):
+async def list_favorite_servers(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """获取当前用户收藏的 Server。"""
     async with get_session() as session:
         repo = UserRepository(session)

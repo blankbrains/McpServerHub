@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -13,7 +15,7 @@ auth_service = AuthService()
 
 
 @router.get("/auth/login")
-async def login():
+async def login() -> RedirectResponse:
     """跳转到 GitHub OAuth 授权页。"""
     url = auth_service.get_github_login_url()
     return RedirectResponse(url=url, status_code=302)
@@ -24,7 +26,7 @@ async def callback(
     code: str = Query(""),
     _state: str = Query(""),
     error: str | None = Query(None),
-):
+) -> HTMLResponse:
     """GitHub OAuth 回调处理。"""
     if error:
         raise AuthError(f"GitHub 授权失败: {error}")
@@ -56,7 +58,7 @@ async def callback(
 
 
 @router.get("/auth/me")
-async def get_current_user(request: Request):
+async def get_current_user(request: Request) -> dict[str, Any]:
     """获取当前登录用户信息。"""
     auth_header = request.headers.get("Authorization", "")
     token = ""
@@ -101,6 +103,6 @@ async def get_current_user(request: Request):
 
 
 @router.post("/auth/logout")
-async def logout():
+async def logout() -> dict[str, Any]:
     """退出登录（客户端清除 token 即可，服务端无状态）。"""
     return {"success": True, "message": "已退出登录"}

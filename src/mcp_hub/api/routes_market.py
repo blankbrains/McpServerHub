@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Query
 
 from mcp_hub.core.registry import Registry
@@ -22,7 +24,7 @@ async def search_servers(
     security_level: str | None = Query(
         None, description="安全等级: verified/reviewed/unreviewed/blocked"
     ),
-):
+) -> SearchResponse:
     """搜索 MCP Server。"""
     registry = Registry()
     results, total = await registry.search(
@@ -41,7 +43,7 @@ async def search_servers(
 
 
 @router.get("/market/servers/{server_id:path}")
-async def get_server(server_id: str):
+async def get_server(server_id: str) -> dict[str, Any]:
     """获取 Server 详情。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -51,7 +53,7 @@ async def get_server(server_id: str):
 
 
 @router.get("/market/trending")
-async def get_trending():
+async def get_trending() -> dict[str, Any]:
     """热门趋势榜。"""
     registry = Registry()
     results = await registry.get_trending()
@@ -59,7 +61,7 @@ async def get_trending():
 
 
 @router.get("/market/top-rated")
-async def get_top_rated():
+async def get_top_rated() -> dict[str, Any]:
     """评分最高榜。"""
     registry = Registry()
     results = await registry.get_top_rated()
@@ -67,7 +69,7 @@ async def get_top_rated():
 
 
 @router.get("/market/new-releases")
-async def get_new_releases():
+async def get_new_releases() -> dict[str, Any]:
     """最新发布。"""
     registry = Registry()
     results = await registry.get_new_releases()
@@ -75,14 +77,14 @@ async def get_new_releases():
 
 
 @router.get("/market/categories")
-async def get_categories():
+async def get_categories() -> dict[str, Any]:
     """获取分类列表。"""
     from sqlalchemy import func, select
 
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
 
-    categories = [
+    categories: list[dict[str, Any]] = [
         {"id": "browser", "name": "浏览器 & 搜索", "icon": "🌐"},
         {"id": "database", "name": "数据库", "icon": "🗄️"},
         {"id": "developer-tools", "name": "开发者工具", "icon": "🛠️"},
@@ -125,7 +127,7 @@ async def get_recommendations(
     server_id: str = "",
     user_id: str = "",
     limit: int = 6,
-):
+) -> dict[str, Any]:
     """智能推荐。
 
     - 若传 server_id：返回同类/同作者的 Server（"看了还看了"）

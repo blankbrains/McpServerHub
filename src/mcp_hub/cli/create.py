@@ -107,7 +107,7 @@ def create(
     tools: str | None,
     output: str,
     yes: bool,
-):
+) -> None:
     """交互式创建 MCP Server 项目。
 
     用法:
@@ -117,7 +117,7 @@ def create(
       mcp-hub create my-server --language typescript
     """
 
-    async def _run():
+    async def _run() -> None:
         from pathlib import Path
 
         _proj_name = name

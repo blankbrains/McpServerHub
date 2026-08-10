@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from mcp_hub.core.config_manager import (  # noqa: F401  # re-export
     AGENT_CONFIGS,
@@ -18,17 +19,17 @@ from mcp_hub.models.server import ServerMeta
 
 
 class Installer:
-    def __init__(self, config_dir: Path | None = None):
+    def __init__(self, config_dir: Path | None = None) -> None:
         self.config_dir = config_dir or Path.home() / ".config" / "mcp-hub"
 
-    async def install(self, meta: ServerMeta) -> dict:
+    async def install(self, meta: ServerMeta) -> dict[str, Any]:
         if not meta.install:
             return {"success": False, "error": "安装配置缺失"}
         result = await self._execute_install(meta.install.command)
         if not result["success"]:
             return result
 
-        configs = []
+        configs: list[dict[str, Any]] = []
         for agent_key in AGENT_CONFIGS:
             cfg = get_config_for_agent(meta.display_name, meta.install.command, agent_key)
             configs.append(cfg)
@@ -44,7 +45,7 @@ class Installer:
             "configs": configs,
         }
 
-    async def _execute_install(self, command: str) -> dict:
+    async def _execute_install(self, command: str) -> dict[str, Any]:
         try:
             executable, parsed_args = split_legacy_command(command)
         except ValueError:
@@ -73,7 +74,7 @@ class Installer:
         except Exception as e:
             return {"success": False, "error": f"安装异常: {str(e)}"}
 
-    async def _record_install(self, meta: ServerMeta):
+    async def _record_install(self, meta: ServerMeta) -> None:
         """记录安装历史到数据库。"""
         from sqlalchemy import text
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Query
 from sqlalchemy import func, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import ServerModel
@@ -48,19 +51,19 @@ LANGUAGES = {
 
 
 @router.get("/search/tags")
-async def get_tags():
+async def get_tags() -> dict[str, Any]:
     """获取可筛选的标签列表。"""
     return {"success": True, "data": [{"id": k, "name": k, "count": 0} for k in SEARCH_TAGS]}
 
 
 @router.get("/search/languages")
-async def get_languages():
+async def get_languages() -> dict[str, Any]:
     """获取编程语言列表。"""
     return {"success": True, "data": [{"id": k.lower(), "name": k} for k in LANGUAGES]}
 
 
 @router.get("/search/authors")
-async def get_authors():
+async def get_authors() -> dict[str, Any]:
     """获取常见作者/组织。"""
     async with async_session_factory() as session:
         from sqlalchemy import text
@@ -89,12 +92,12 @@ async def advanced_search(
     sort: str = Query("hot", description="排序"),
     page: int = Query(1, ge=1),
     page_size: int = Query(9, ge=1, le=100),
-):
+) -> dict[str, Any]:
     """高级搜索 — 9 维筛选。"""
     async with async_session_factory() as session:
         query = select(ServerModel)
         count_query = select(func.count(ServerModel.id))
-        conditions = []
+        conditions: list[ColumnElement[bool]] = []
 
         # 1) 关键词全文检索
         if q:
@@ -149,7 +152,7 @@ async def advanced_search(
             count_query = count_query.where(cond)
 
         # 排序
-        sort_map = {
+        sort_map: dict[str, ColumnElement[Any]] = {
             "hot": ServerModel.download_count.desc(),
             "rating": ServerModel.rating.desc(),
             "downloads": ServerModel.download_count.desc(),

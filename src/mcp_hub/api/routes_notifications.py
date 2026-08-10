@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
@@ -20,7 +22,7 @@ async def list_notifications(
     unread_only: bool = False,
     page: int = 1,
     page_size: int = 50,
-):
+) -> dict[str, Any]:
     """获取当前用户的通知列表（未读优先）。"""
     async with async_session_factory() as session:
         stmt = select(NotificationModel).where(NotificationModel.user_id == user_id)
@@ -49,7 +51,7 @@ async def list_notifications(
         result = await session.execute(stmt)
         rows = result.scalars().all()
 
-        items = []
+        items: list[dict[str, Any]] = []
         for r in rows:
             items.append(
                 {
@@ -77,7 +79,10 @@ async def list_notifications(
 
 
 @router.post("/notifications/{notif_id}/read")
-async def mark_read(notif_id: int, user_id: str = Depends(get_current_user)):
+async def mark_read(
+    notif_id: int,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """标记单条通知为已读。"""
     async with async_session_factory() as session:
         await session.execute(
@@ -90,7 +95,9 @@ async def mark_read(notif_id: int, user_id: str = Depends(get_current_user)):
 
 
 @router.post("/notifications/read-all")
-async def mark_all_read(user_id: str = Depends(get_current_user)):
+async def mark_all_read(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """标记所有通知为已读。"""
     async with async_session_factory() as session:
         await session.execute(
@@ -103,32 +110,39 @@ async def mark_all_read(user_id: str = Depends(get_current_user)):
 
 
 @router.delete("/notifications/{notif_id}")
-async def delete_notification(notif_id: int, user_id: str = Depends(get_current_user)):
+async def delete_notification(
+    notif_id: int,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """删除当前用户的一条通知。"""
     async with async_session_factory() as session:
-        result = await session.execute(
-            delete(NotificationModel).where(
+        notification = await session.scalar(
+            select(NotificationModel).where(
                 NotificationModel.id == notif_id,
                 NotificationModel.user_id == user_id,
             )
         )
-        if not result.rowcount:
+        if notification is None:
             raise HTTPException(status_code=404, detail="通知不存在")
+        await session.delete(notification)
         await session.commit()
     return {"success": True, "message": "通知已删除"}
 
 
 @router.get("/notifications/unread-count")
-async def unread_count(user_id: str = Depends(get_current_user)):
+async def unread_count(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """获取未读通知数量（供导航栏铃铛使用）。"""
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(NotificationModel).where(
-                NotificationModel.user_id == user_id,
-                NotificationModel.is_read == False,  # noqa: E712
+        count = (
+            await session.scalar(
+                select(func.count(NotificationModel.id)).where(
+                    NotificationModel.user_id == user_id,
+                    NotificationModel.is_read == False,  # noqa: E712
+                )
             )
-        )
-        count = len(result.scalars().all())
+        ) or 0
     return {"success": True, "data": {"count": count}}
 
 
@@ -139,7 +153,7 @@ async def create_notification(
     message: str = "",
     server_id: str = "",
     link: str = "",
-):
+) -> None:
     """内部函数：创建一条通知。不抛异常。"""
     try:
         async with async_session_factory() as session:

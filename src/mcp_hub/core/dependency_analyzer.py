@@ -13,11 +13,12 @@ import os
 import re
 import shutil
 from dataclasses import dataclass, field
+from typing import Any
 
 from mcp_hub.core.gateway_config import split_legacy_command
 
 # 已知的 MCP Server 常见环境变量需求模式
-KNOWN_ENV_PATTERNS: dict[str, dict] = {
+KNOWN_ENV_PATTERNS: dict[str, dict[str, Any]] = {
     # API Keys
     "OPENAI_API_KEY": {
         "description": "OpenAI API 密钥",

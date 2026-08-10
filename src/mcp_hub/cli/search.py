@@ -27,7 +27,7 @@ console = Console()
 )
 @click.option("--sort", type=click.Choice(["hot", "rating", "downloads", "new"]), default="hot")
 @click.option("--page", default=1, type=int)
-@click.option("--json-output", "json", is_flag=True, help="JSON 格式输出")
+@click.option("--json-output", "json_output", is_flag=True, help="JSON 格式输出")
 def search(
     query: str,
     category: str | None,
@@ -35,11 +35,11 @@ def search(
     security_level: str | None,
     sort: str,
     page: int,
-    json: bool,
-):
+    json_output: bool,
+) -> None:
     """搜索 MCP Server。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         results, total = await registry.search(
             q=query,
@@ -51,7 +51,7 @@ def search(
             security_level=security_level,
         )
 
-        if json:
+        if json_output:
             response = {"success": True, "data": results, "meta": {"total": total}}
             console.print_json(json.dumps(response))
             return
@@ -97,10 +97,10 @@ def search(
 @click.command("info")
 @click.argument("server_id", required=True)
 @click.option("--json", "json_output", is_flag=True)
-def info(server_id: str, json_output: bool):
+def info(server_id: str, json_output: bool) -> None:
     """查看 Server 详情。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         s = await registry.get_by_id(server_id)
         if not s:
@@ -163,10 +163,10 @@ def info(server_id: str, json_output: bool):
 @click.command("compare")
 @click.argument("server_a", required=True)
 @click.argument("server_b", required=True)
-def compare(server_a: str, server_b: str):
+def compare(server_a: str, server_b: str) -> None:
     """对比两个 Server。"""
 
-    async def _run():
+    async def _run() -> None:
         registry = Registry()
         a = await registry.get_by_id(server_a)
         b = await registry.get_by_id(server_b)

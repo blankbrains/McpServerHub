@@ -40,19 +40,19 @@ def mount_web_dashboard(app: FastAPI, static_dir: Path) -> None:
             root_files[name] = path
 
     @app.get("/favicon.svg")
-    async def _favicon():
+    async def _favicon() -> FileResponse:
         if "favicon.svg" in root_files:
             return FileResponse(str(root_files["favicon.svg"]))
         return FileResponse(str(index_html))
 
     @app.get("/logo.svg")
-    async def _logo():
+    async def _logo() -> FileResponse:
         if "logo.svg" in root_files:
             return FileResponse(str(root_files["logo.svg"]))
         return FileResponse(str(index_html))
 
     @app.api_route("/{path:path}", methods=["GET"])
-    async def _spa_fallback(path: str):
+    async def _spa_fallback(path: str) -> FileResponse:
         if path in root_files:
             return FileResponse(str(root_files[path]))
         return FileResponse(str(index_html))

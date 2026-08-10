@@ -244,9 +244,9 @@ class Optimizer:
         return name
 
     @staticmethod
-    def compress_schema(schema: dict) -> dict:
+    def compress_schema(schema: dict[str, Any]) -> dict[str, Any]:
         """压缩 JSON Schema（移除冗余字段）。"""
-        compressed = {}
+        compressed: dict[str, Any] = {}
         for key, value in schema.items():
             if key == "title":
                 continue  # title 在 MCP 上下文中冗余
@@ -268,8 +268,15 @@ class Optimizer:
 
     @staticmethod
     def optimize_tool(
-        name: str, description: str, input_schema: dict | None
-    ) -> tuple[str, str, dict | None, list[OptimizationSuggestion]]:  # noqa: E501
+        name: str,
+        description: str,
+        input_schema: dict[str, Any] | None,
+    ) -> tuple[
+        str,
+        str,
+        dict[str, Any] | None,
+        list[OptimizationSuggestion],
+    ]:
         """优化单个工具定义，返回 (优化后的name, 优化后的description, 优化后的schema, 建议列表)。"""
         suggestions: list[OptimizationSuggestion] = []
         old_name = name
@@ -363,7 +370,7 @@ class TokenAnalyzer:
 
     # ── 公共接口 ──────────────────────────────────────────
 
-    def analyze_server(self, server_data: dict) -> AnalysisReport:
+    def analyze_server(self, server_data: dict[str, Any]) -> AnalysisReport:
         """分析单个 Server 的 Token 消耗。
 
         Args:
@@ -372,7 +379,7 @@ class TokenAnalyzer:
         Returns:
             包含完整 token 消耗分析的 AnalysisReport。
         """
-        server_id = server_data.get("id", "") or server_data.get("name", "unknown")
+        server_id = str(server_data.get("id", "") or server_data.get("name", "unknown"))
 
         # 检查是否有实际的工具定义
         tool_defs = self._extract_tool_definitions(server_data)
@@ -383,14 +390,14 @@ class TokenAnalyzer:
         else:
             return self._estimate_from_metadata(server_id, server_data)
 
-    def analyze_all(self, servers: list[dict]) -> list[AnalysisReport]:
+    def analyze_all(self, servers: list[dict[str, Any]]) -> list[AnalysisReport]:
         """批量分析多个 Server。"""
         return [self.analyze_server(s) for s in servers]
 
     def optimize(  # noqa: PLR0912
         self,
-        server_data: dict,
-        tool_definitions: list[dict] | None = None,
+        server_data: dict[str, Any],
+        tool_definitions: list[dict[str, Any]] | None = None,
     ) -> OptimizationResult:
         """生成 Server 的优化后工具定义。
 
@@ -401,18 +408,20 @@ class TokenAnalyzer:
         Returns:
             包含优化前后对比和节省量的 OptimizationResult。
         """
-        server_id = server_data.get("id", "") or server_data.get("name", "unknown")
+        server_id = str(server_data.get("id", "") or server_data.get("name", "unknown"))
         tools = tool_definitions or self._extract_tool_definitions(server_data)
 
         all_suggestions: list[OptimizationSuggestion] = []
-        optimized_tools: list[dict] = []
+        optimized_tools: list[dict[str, Any]] = []
         original_total = 0
         optimized_total = 0
 
         for tool in tools:
-            name = tool.get("name", "")
-            description = tool.get("description", "")
+            name = str(tool.get("name", ""))
+            description = str(tool.get("description", ""))
             input_schema = tool.get("inputSchema") or tool.get("input_schema", {})
+            if not isinstance(input_schema, dict):
+                input_schema = {}
 
             # 原始 token 数
             original_tool_str = json.dumps(
@@ -434,7 +443,7 @@ class TokenAnalyzer:
             )
             all_suggestions.extend(suggestions)
 
-            optimized_tool = {
+            optimized_tool: dict[str, Any] = {
                 "name": new_name,
                 "description": new_desc,
             }
@@ -466,13 +475,18 @@ class TokenAnalyzer:
 
     # ── 内部方法 ──────────────────────────────────────────
 
-    def _extract_tool_definitions(self, server_data: dict) -> list[dict]:
+    def _extract_tool_definitions(
+        self,
+        server_data: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         """从 server_data 中提取工具定义列表。"""
         # 尝试多种可能的字段名
         for key in ("tool_definitions", "tools", "tools_list", "tool_list"):
             val = server_data.get(key)
-            if val and isinstance(val, list) and len(val) > 0:
-                return val
+            if isinstance(val, list):
+                tools = [tool for tool in val if isinstance(tool, dict)]
+                if tools:
+                    return tools
 
         # 尝试从 install_command 和描述生成样例工具
         return []
@@ -480,8 +494,8 @@ class TokenAnalyzer:
     def _analyze_with_definitions(
         self,
         server_id: str,
-        tool_defs: list[dict],
-        server_data: dict,
+        tool_defs: list[dict[str, Any]],
+        server_data: dict[str, Any],
     ) -> AnalysisReport:
         """使用实际的工具定义进行分析。"""
         tools_detail: list[ToolTokenDetail] = []
@@ -489,9 +503,11 @@ class TokenAnalyzer:
         total_optimization = 0
 
         for tool in tool_defs:
-            name = tool.get("name", "unknown")
-            description = tool.get("description", "")
+            name = str(tool.get("name", "unknown"))
+            description = str(tool.get("description", ""))
             input_schema = tool.get("inputSchema") or tool.get("input_schema", {})
+            if not isinstance(input_schema, dict):
+                input_schema = {}
 
             breakdown: list[TokenBreakdown] = []
 
@@ -573,12 +589,12 @@ class TokenAnalyzer:
     def _estimate_from_metadata(
         self,
         server_id: str,
-        server_data: dict,
+        server_data: dict[str, Any],
     ) -> AnalysisReport:
         """根据元数据估算 Token 消耗。"""
-        description = server_data.get("description", "")
-        install_command = server_data.get("install_command", "")
-        install_type = server_data.get("install_type", "")
+        description = str(server_data.get("description", "") or "")
+        install_command = str(server_data.get("install_command", "") or "")
+        install_type = str(server_data.get("install_type", "") or "")
 
         # 根据安装类型和描述估算工具数量
         estimated_tools = self._estimate_tool_count(description, install_command, install_type)
@@ -680,7 +696,7 @@ class TokenAnalyzer:
         total_tokens: int,
         context_pct: float,
         tools: list[ToolTokenDetail],
-        _server_data: dict,
+        _server_data: dict[str, Any],
     ) -> list[str]:
         """根据分析结果生成优化建议。"""
         suggestions: list[str] = []

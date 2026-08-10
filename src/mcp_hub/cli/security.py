@@ -20,7 +20,7 @@ console = Console()
 @click.option("--all", "scan_all", is_flag=True, help="扫描所有 Server")
 @click.option("--verbose", "-v", is_flag=True, help="显示详细发现项")
 @click.option("--json", "json_output", is_flag=True, help="以 JSON 格式输出")
-def security(server_name: str | None, scan_all: bool, verbose: bool, json_output: bool):
+def security(server_name: str | None, scan_all: bool, verbose: bool, json_output: bool) -> None:
     """扫描 MCP Server 的安全性并给出评分。
 
     四维评分体系:
@@ -32,7 +32,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
     等级: 🟢 verified(90+) 🟡 reviewed(70+) 🟠 unreviewed(40+) 🔴 blocked(<40)
     """
 
-    async def _run():
+    async def _run() -> None:
         scanner = SecurityScanner()
         registry = Registry()
         results = []
@@ -54,10 +54,12 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
             if json_output:
                 import json as j
 
-                out = []
+                output_rows: list[dict[str, object]] = []
                 for r in results:
-                    out.append({"server_id": r.server_id, "level": r.level, "score": r.score})
-                console.print(j.dumps(out, ensure_ascii=False, indent=2))
+                    output_rows.append(
+                        {"server_id": r.server_id, "level": r.level, "score": r.score}
+                    )
+                console.print(j.dumps(output_rows, ensure_ascii=False, indent=2))
                 return
 
             # 显示汇总表
@@ -117,7 +119,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
             if json_output:
                 import json as j
 
-                out = {
+                output_data = {
                     "server_id": report.server_id,
                     "score": report.score,
                     "level": report.level,
@@ -126,7 +128,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
                         for f in report.findings
                     ],
                 }
-                console.print(j.dumps(out, ensure_ascii=False, indent=2))
+                console.print(j.dumps(output_data, ensure_ascii=False, indent=2))
                 return
 
             # 显示报告
@@ -198,7 +200,7 @@ def security(server_name: str | None, scan_all: bool, verbose: bool, json_output
     asyncio.run(_run())
 
 
-def _print_findings(findings: list[ScanFinding], title: str, style: str):
+def _print_findings(findings: list[ScanFinding], title: str, style: str) -> None:
     """打印一组发现项。"""
     console.print(f"\n[bold {style}]{title} ({len(findings)} 项)[/bold {style}]")
     for f in findings:

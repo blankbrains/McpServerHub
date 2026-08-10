@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.registry import Registry
@@ -19,11 +21,14 @@ class PublishRequest(BaseModel):
     install_type: str = "npx"
     install_command: str = ""
     homepage: str = ""
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
 
 
 @router.post("/publish")
-async def publish_server(req: PublishRequest, user_id: str = Depends(get_current_user)):
+async def publish_server(
+    req: PublishRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """发布 MCP Server（含自动安全扫描）。"""
     server_id = f"@{req.name}" if not req.name.startswith("@") else req.name
 
@@ -75,7 +80,9 @@ async def publish_server(req: PublishRequest, user_id: str = Depends(get_current
 
 
 @router.get("/publish/mine")
-async def my_published_servers(user_id: str = Depends(get_current_user)):
+async def my_published_servers(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """获取当前用户发布的 Server。"""
     if user_id == "api-user":
         return {"success": True, "data": []}
@@ -85,7 +92,10 @@ async def my_published_servers(user_id: str = Depends(get_current_user)):
 
 
 @router.post("/publish/unpublish/{server_id:path}")
-async def unpublish_server(server_id: str, user_id: str = Depends(get_current_user)):
+async def unpublish_server(
+    server_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """下架自己发布的 Server。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)

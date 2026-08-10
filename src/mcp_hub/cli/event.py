@@ -13,17 +13,17 @@ _bus = EventBus()
 
 
 @click.group("event")
-def event():
+def event() -> None:
     """事件总线管理。"""
 
 
 @event.command("publish")
 @click.argument("topic", required=True)
 @click.argument("payload", required=False)
-def publish_event(topic: str, payload: str | None):
+def publish_event(topic: str, payload: str | None) -> None:
     """发布事件。"""
 
-    async def _run():
+    async def _run() -> None:
         data = json.loads(payload) if payload else {}
         count = await _bus.publish(topic, "cli", data)
         click.echo(f"📢 事件 '{topic}' 已发布，{count} 个接收者")
@@ -33,10 +33,10 @@ def publish_event(topic: str, payload: str | None):
 
 @event.command("subscribe")
 @click.argument("topic", required=True)
-def subscribe_event(topic: str):
+def subscribe_event(topic: str) -> None:
     """订阅事件。"""
 
-    async def _run():
+    async def _run() -> None:
         q = await _bus.subscribe(topic)
         click.echo(f"👂 正在监听 '{topic}' (按 Ctrl+C 停止)...")
         try:
@@ -50,7 +50,7 @@ def subscribe_event(topic: str):
 
 
 @event.command("list")
-def list_events():
+def list_events() -> None:
     """查看事件订阅。"""
     topics = _bus.get_topics()
     if not topics:
@@ -64,10 +64,10 @@ def list_events():
 @event.command("history")
 @click.argument("topic", required=False)
 @click.option("--limit", default=50, type=int, help="显示条数")
-def event_history(topic: str | None, limit: int):
+def event_history(topic: str | None, limit: int) -> None:
     """查看事件历史。"""
 
-    async def _run():
+    async def _run() -> None:
         try:
             from sqlalchemy import exc as sa_exc
             from sqlalchemy import select

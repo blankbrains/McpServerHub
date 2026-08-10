@@ -342,7 +342,7 @@ export default function ConfigPage() {
           </pre>
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          请在监控页为当前 Agent 创建设备后使用“复制一键接入命令”。命令会先备份原配置，再迁移可代理的 stdio Server。
+          请在监控页为当前 Agent 创建设备后使用“复制一键接入命令”。命令会先备份原配置，再迁移 stdio、Streamable HTTP 和 SSE Server。
         </p>
         <div className="flex gap-2">
           <button onClick={() => navigate('/monitor')}

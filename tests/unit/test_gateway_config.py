@@ -64,19 +64,113 @@ def test_inventory_never_contains_argument_or_environment_values() -> None:
     assert "environment-secret" not in serialized
 
 
-def test_invalid_server_does_not_hide_valid_servers() -> None:
+def test_remote_servers_are_parsed_without_hiding_valid_stdio_servers() -> None:
     specs, errors = parse_gateway_config(
         {
             "mcpServers": {
                 "valid": {"command": "uvx", "args": ["mcp-valid"]},
-                "remote": {"type": "http", "url": "https://example.test/mcp"},
+                "remote": {
+                    "type": "http",
+                    "url": "https://example.test/mcp",
+                    "headers": {
+                        "Authorization": "Bearer secret",
+                        "X-Tenant": "tenant-a",
+                    },
+                },
             }
         }
     )
 
-    assert [spec.server_id for spec in specs] == ["valid"]
-    assert errors[0]["server_id"] == "remote"
-    assert "unsupported transport" in errors[0]["error"]
+    assert errors == []
+    assert [spec.server_id for spec in specs] == ["valid", "remote"]
+    remote = specs[1]
+    assert remote.transport == "streamable-http"
+    assert remote.url == "https://example.test/mcp"
+    assert remote.headers["Authorization"] == "Bearer secret"
+    inventory = remote.inventory_entry()
+    assert inventory["command_name"] == ""
+    assert inventory["header_keys"] == ["Authorization", "X-Tenant"]
+    serialized = json.dumps(inventory)
+    assert "https://example.test/mcp" not in serialized
+    assert "Bearer secret" not in serialized
+
+
+def test_remote_transport_is_inferred_from_url_and_round_trips(tmp_path) -> None:
+    specs, errors = parse_gateway_config(
+        {
+            "mcpServers": {
+                "remote": {
+                    "url": "https://example.test/mcp",
+                    "headers": {"Authorization": "Bearer local-only"},
+                },
+                "legacy-sse": {
+                    "type": "sse",
+                    "url": "https://example.test/sse",
+                },
+            }
+        }
+    )
+
+    assert errors == []
+    assert [spec.transport for spec in specs] == ["streamable-http", "sse"]
+
+    path = tmp_path / "remote-gateway.json"
+    write_gateway_config(specs, path)
+    loaded, load_errors = load_gateway_config(path)
+
+    assert load_errors == []
+    assert loaded == specs
+
+
+def test_codex_remote_auth_fields_are_preserved_and_resolved() -> None:
+    specs, errors = parse_gateway_config(
+        {
+            "mcpServers": {
+                "remote": {
+                    "url": "https://example.test/mcp",
+                    "http_headers": {"X-Tenant": "tenant-a"},
+                    "env_http_headers": {"X-Workspace": "MCP_WORKSPACE"},
+                    "bearer_token_env_var": "MCP_ACCESS_TOKEN",
+                }
+            }
+        }
+    )
+
+    assert errors == []
+    spec = specs[0]
+    assert spec.resolved_headers(
+        {
+            "MCP_WORKSPACE": "workspace-a",
+            "MCP_ACCESS_TOKEN": "secret-token",
+        }
+    ) == {
+        "X-Tenant": "tenant-a",
+        "X-Workspace": "workspace-a",
+        "Authorization": "Bearer secret-token",
+    }
+    serialized = json.dumps(spec.inventory_entry())
+    assert "X-Tenant" in serialized
+    assert "X-Workspace" in serialized
+    assert "Authorization" in serialized
+    assert "workspace-a" not in serialized
+    assert "secret-token" not in serialized
+
+
+def test_codex_oauth_remote_is_retained_as_unsupported() -> None:
+    specs, errors = parse_gateway_config(
+        {
+            "mcpServers": {
+                "oauth-server": {
+                    "url": "https://example.test/mcp",
+                    "auth": "oauth",
+                }
+            }
+        }
+    )
+
+    assert specs == []
+    assert errors[0]["server_id"] == "oauth-server"
+    assert "cannot be migrated" in errors[0]["error"]
 
 
 def test_gateway_config_round_trip(tmp_path) -> None:

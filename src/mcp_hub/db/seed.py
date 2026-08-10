@@ -374,7 +374,7 @@ REAL_MCP_SERVERS = [
 ]
 
 
-async def seed_database():
+async def seed_database() -> int:
     async with async_session_factory() as session:
         total = 0
         skipped = 0
@@ -389,3 +389,4 @@ async def seed_database():
             total += 1
         await session.commit()
         # print(f"  Seed: {total} new, {skipped} skipped")  # noqa: T201
+        return total

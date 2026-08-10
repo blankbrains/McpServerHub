@@ -136,19 +136,20 @@ def agent_setup(
 
     if not migration.specs:
         detail = (
-            f"；{len(migration.errors)} 个条目因非 stdio 或配置无效而保留"
+            f"；{len(migration.errors)} 个条目因传输方式不支持或配置无效而保留"
             if migration.errors
             else ""
         )
-        raise click.ClickException(f"没有可迁移到 Gateway 的 stdio MCP Server{detail}")
+        raise click.ClickException(f"没有可迁移到 Gateway 的 MCP Server{detail}")
 
     agent_state_dir = state_dir or get_agent_state_dir(agent_type)
     gateway_config_path = get_gateway_config_path(agent_state_dir)
     click.echo(f"Agent: {migration.profile.name}")
     click.echo(f"配置: {migration.source_path}")
-    click.echo(f"将迁移 {len(migration.specs)} 个 stdio Server 到: {gateway_config_path}")
+    click.echo(f"将迁移 {len(migration.specs)} 个 MCP Server 到: {gateway_config_path}")
     for spec in migration.specs:
-        click.echo(f"  - {spec.server_id} ({spec.command})")
+        endpoint = spec.command if spec.transport == "stdio" else spec.transport
+        click.echo(f"  - {spec.server_id} ({endpoint})")
     if migration.retained_server_names:
         click.echo(
             "以下条目不会删除或代理，将保留在原 Agent 配置中: "

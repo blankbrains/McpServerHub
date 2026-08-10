@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import platform as runtime_platform
 import sqlite3
 import uuid
 from collections.abc import Mapping
@@ -12,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.core.token_analyzer import Tokenizer
 from mcp_hub.logging_config import get_logger
@@ -257,7 +259,7 @@ class TelemetryReporter:
             "queue_depth": (
                 max(0, int(queue_depth))
                 if queue_depth is not None
-                else self.spool.count() + 1
+                else self.spool.count()
             ),
             "server_version": server_version,
             "transport": transport,
@@ -281,6 +283,10 @@ class TelemetryReporter:
         event_id = uuid.uuid4().hex
         payload = {
             "event_id": event_id,
+            "gateway_version": __version__,
+            "runtime_version": runtime_platform.python_version(),
+            "platform": runtime_platform.system().lower(),
+            "architecture": runtime_platform.machine().lower(),
             "servers": servers,
             "configuration_errors": [
                 {

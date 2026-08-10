@@ -35,7 +35,7 @@ def analyze(
     verbose: bool,
     json_output: bool,
     _deep: bool,
-):
+) -> None:
     """分析 MCP Server 的 Token 消耗。
 
     分析 Server 的工具定义占用 Claude 上下文（100K tokens）的比例，
@@ -49,7 +49,7 @@ def analyze(
       mcp-hub analyze @anthropic/web-search --deep  尝试连接实时 Server
     """
 
-    async def _run():
+    async def _run() -> None:
         analyzer = TokenAnalyzer()
         registry = Registry()
         results = []
@@ -70,16 +70,16 @@ def analyze(
                     results.append(report)
 
             if json_output:
-                out = []
+                output_rows: list[dict[str, object]] = []
                 for r in results:
-                    out.append(
+                    output_rows.append(
                         {
                             "server_id": r.server_id,
                             "total_tokens": r.total_tokens,
                             "context_pct": r.context_usage_pct,
                         }
                     )  # noqa: E501
-                console.print(json.dumps(out, ensure_ascii=False, indent=2))
+                console.print(json.dumps(output_rows, ensure_ascii=False, indent=2))
                 return
 
             # 汇总表
@@ -126,7 +126,7 @@ def analyze(
             report = analyzer.analyze_server(server)
 
             if json_output:
-                out = {
+                output_data = {
                     "server_id": report.server_id,
                     "total_tokens": report.total_tokens,
                     "context_pct": report.context_usage_pct,
@@ -137,7 +137,7 @@ def analyze(
                     "suggestions": report.suggestions,
                     "estimated": report.estimated,
                 }
-                console.print(json.dumps(out, ensure_ascii=False, indent=2))
+                console.print(json.dumps(output_data, ensure_ascii=False, indent=2))
                 return
 
             console.print(format_report(report, verbose=verbose))
@@ -159,7 +159,7 @@ def analyze(
 @click.command("optimize")
 @click.argument("server_name", required=True)
 @click.option("--apply", "do_apply", is_flag=True, help="将优化后的配置写入文件")
-def optimize(server_name: str, do_apply: bool):
+def optimize(server_name: str, do_apply: bool) -> None:
     """优化 MCP Server 的工具定义，减少 Token 消耗。
 
     自动分析工具描述并应用优化策略:
@@ -175,7 +175,7 @@ def optimize(server_name: str, do_apply: bool):
       mcp-hub optimize --apply @anthropic/web-search  写入配置文件
     """
 
-    async def _run():
+    async def _run() -> None:
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         registry = Registry()
         server = await registry.get_by_id(sid)

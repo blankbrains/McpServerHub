@@ -1,7 +1,8 @@
 """FastAPI 认证/鉴权依赖"""
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
+from mcp_hub.config import get_settings
 from mcp_hub.core.auth import AuthService
 
 
@@ -19,7 +20,9 @@ async def get_current_user(
         token = authorization[7:]
         payload = await auth_service.verify_token(token)
         if payload:
-            return payload["sub"]
+            user_id = payload.get("sub")
+            if isinstance(user_id, str) and user_id:
+                return user_id
 
     raise HTTPException(status_code=401, detail="需要登录")
 
@@ -37,6 +40,31 @@ async def get_admin_user(
         if not user or user.get("role") != "admin":
             raise HTTPException(status_code=403, detail="需要管理员权限")
     return user_id
+
+
+async def get_process_admin(
+    user_id: str = Depends(get_admin_user),
+) -> str:
+    """Require an administrator and explicit self-hosted process-control opt-in."""
+    if not get_settings().ALLOW_SERVER_PROCESS_MANAGEMENT:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "中央进程管理未启用；SaaS 用户应通过本地 Gateway 管理和监控 MCP Server"
+            ),
+        )
+    return user_id
+
+
+async def get_process_admin_eventstream(request: Request) -> str:
+    """Authenticate an EventSource request before exposing host process data."""
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        token = request.query_params.get("token", "")
+        authorization = f"Bearer {token}" if token else None
+    user_id = await get_current_user(authorization=authorization, x_user_id=None)
+    admin_id = await get_admin_user(user_id)
+    return await get_process_admin(admin_id)
 
 
 async def get_optional_user(

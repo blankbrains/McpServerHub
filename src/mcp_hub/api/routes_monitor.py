@@ -3,146 +3,237 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from mcp_hub.api.dependencies import get_optional_user
-from mcp_hub.core.monitor import Monitor
-from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
-from mcp_hub.core.token_analyzer import TokenAnalyzer
 from mcp_hub.db.database import async_session_factory
-from mcp_hub.db.models import UsageStatsModel, UserServerModel
-from mcp_hub.logging_config import get_logger
-
-logger = get_logger(__name__)
+from mcp_hub.db.models import (
+    TelemetryEventModel,
+    TelemetryInventoryModel,
+    UserServerModel,
+)
 
 router = APIRouter(tags=["monitor"])
 
 
 @router.get("/monitor/dashboard")
-async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
-    """聚合所有 Server 的监控数据，供可视化大屏使用。"""
+async def monitor_dashboard(
+    user_id: str | None = Depends(get_optional_user),
+) -> dict[str, Any]:
+    """Return current-user MCP status and usage from device telemetry."""
+    if not user_id:
+        return {
+            "success": True,
+            "data": {
+                "summary": {
+                    "total_servers": 0,
+                    "running": 0,
+                    "stopped": 0,
+                    "offline": 0,
+                    "error": 0,
+                    "healthy": 0,
+                    "total_calls_7d": 0,
+                    "total_token_consumption": 0,
+                    "avg_reliability": 0,
+                },
+                "servers": [],
+            },
+        }
+
     registry = Registry()
-    pm = get_process_manager()
-    monitor = Monitor()
-    analyzer = TokenAnalyzer()
-
-    # 1. 获取所有 Server（包含已安装、未安装、用户自定义的）
     servers = await registry.get_all()
+    tracked_info: dict[str, bool] = {}
+    telemetry_stats: dict[str, dict[str, int]] = {}
+    inventory_by_server: dict[str, list[TelemetryInventoryModel]] = {}
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    online_since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
 
-    # 2. 已登录用户仅加载自己的追踪记录。匿名访问只能查看服务端已安装项，
-    #    避免将其他用户的配置关系或自定义 Server 暴露到公共接口。
-    tracked_info: dict[str, bool] = {}  # server_id → enabled
-    if user_id:
-        async with async_session_factory() as session:
-            result = await session.execute(
-                select(UserServerModel.server_id, UserServerModel.enabled).where(
-                    UserServerModel.user_id == user_id
-                )
+    async with async_session_factory() as session:
+        tracked_result = await session.execute(
+            select(UserServerModel.server_id, UserServerModel.enabled).where(
+                UserServerModel.user_id == user_id
             )
-            for row in result.fetchall():
-                tracked_info[row[0]] = row[1] if row[1] is not None else True
+        )
+        for row in tracked_result.fetchall():
+            tracked_info[row[0]] = row[1] if row[1] is not None else True
+
+        stats_result = await session.execute(
+            select(
+                TelemetryEventModel.server_id,
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (TelemetryEventModel.event_type == "tool_call", 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("call_count"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                TelemetryEventModel.event_type == "tool_call",
+                                TelemetryEventModel.input_tokens
+                                + TelemetryEventModel.output_tokens,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("token_count"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                (TelemetryEventModel.event_type == "tool_call")
+                                & (TelemetryEventModel.status == "ok"),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("ok_count"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                (TelemetryEventModel.event_type == "tool_call")
+                                & (TelemetryEventModel.status == "error"),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("error_count"),
+                func.coalesce(
+                    func.max(
+                        case(
+                            (
+                                TelemetryEventModel.event_type == "resource_sample",
+                                TelemetryEventModel.process_uptime_seconds,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("uptime_seconds"),
+            )
+            .where(
+                TelemetryEventModel.user_id == user_id,
+                TelemetryEventModel.occurred_at >= since,
+                TelemetryEventModel.server_id != "",
+            )
+            .group_by(TelemetryEventModel.server_id)
+        )
+        for row in stats_result.fetchall():
+            telemetry_stats[row.server_id] = {
+                "call_count": int(row.call_count or 0),
+                "token_count": int(row.token_count or 0),
+                "ok_count": int(row.ok_count or 0),
+                "error_count": int(row.error_count or 0),
+                "uptime_seconds": int(row.uptime_seconds or 0),
+            }
+
+        inventory_result = await session.execute(
+            select(TelemetryInventoryModel).where(
+                TelemetryInventoryModel.user_id == user_id,
+                TelemetryInventoryModel.active == True,  # noqa: E712
+            )
+        )
+        for inventory in inventory_result.scalars():
+            inventory_by_server.setdefault(inventory.server_name, []).append(inventory)
 
     server_by_id = {server["id"]: server for server in servers}
-    if user_id:
-        relevant = [
-            server_by_id[server_id] for server_id in tracked_info if server_id in server_by_id
-        ]
-    else:
-        relevant = [
-            server
-            for server in servers
-            if server.get("status") != "not_installed" and not server["id"].startswith("@custom/")
-        ]
-
-    # 3. 构建每个 Server 的详情
-    items = []
+    relevant = [
+        server_by_id[server_id] for server_id in tracked_info if server_id in server_by_id
+    ]
+    items: list[dict[str, Any]] = []
     total_calls_all = 0
     total_tokens_all = 0
 
-    for s in relevant:
-        sid = s["id"]
-        proc = pm.get(sid)
-        running = pm.is_running(sid)
+    for server in relevant:
+        sid = server["id"]
+        stats = telemetry_stats.get(
+            sid,
+            {
+                "call_count": 0,
+                "token_count": 0,
+                "ok_count": 0,
+                "error_count": 0,
+                "uptime_seconds": 0,
+            },
+        )
+        inventory_rows = inventory_by_server.get(sid, [])
+        online_rows = [
+            row for row in inventory_rows if row.last_seen_at >= online_since
+        ]
+        running = any(bool(row.running) for row in online_rows)
+        if running:
+            status = "running"
+        elif online_rows:
+            status = "stopped"
+        elif inventory_rows:
+            status = "offline"
+        else:
+            status = "not_connected"
 
-        # 进程信息
-        location = ""
-        pid = None
-        uptime_seconds = 0
-        if proc:
-            pid = proc.pid
-            if proc.log_file:
-                location = str(proc.log_file.parent)
-            if proc.started_at:
-                uptime_seconds = int(datetime.now(timezone.utc).timestamp() - proc.started_at)
-
-        # 可靠性评分
-        reliability = await monitor.calculate_reliability(sid)
-        score = reliability.reliability_score
-
-        # Token 消耗分析（analyze_server 是同步方法，需要 server dict）
-        tokens = 0
-        try:
-            report = analyzer.analyze_server(s)
-            tokens = report.total_tokens if report else 0
-        except Exception as e:
-            logger.warning("monitor.token_analysis_failed", server_id=sid, error=str(e))
-        total_tokens_all += tokens
-
-        # 调用次数（基于 usage_stats 真实调用计数）
-        calls = 0
-        try:
-            filters = [
-                UsageStatsModel.server_id == sid,
-                UsageStatsModel.created_at
-                >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7),
-            ]
-            if user_id:
-                filters.append(UsageStatsModel.user_id == user_id)
-            async with async_session_factory() as session:
-                result = await session.execute(
-                    select(func.count(UsageStatsModel.id)).where(*filters)
-                )
-                calls = result.scalar() or 0
-        except Exception:
-            logger.warning("获取调用次数统计失败", server_id=sid, exc_info=True)
+        calls = stats["call_count"]
+        tokens = stats["token_count"]
         total_calls_all += calls
+        total_tokens_all += tokens
+        score = round(stats["ok_count"] / calls * 100) if calls else 0
 
         items.append(
             {
                 "server_id": sid,
-                "name": s.get("name", sid.split("/")[-1]),
-                "description": s.get("description", ""),
-                "status": s.get("status", "unknown"),
+                "name": server.get("name", sid.split("/")[-1]),
+                "description": server.get("description", ""),
+                "status": status,
                 "running": running,
                 "enabled": tracked_info.get(sid, True),
-                "pid": pid,
-                "location": location or "N/A",
-                "uptime_seconds": uptime_seconds,
+                "pid": None,
+                "location": "本地 Agent",
+                "uptime_seconds": stats["uptime_seconds"],
                 "reliability_score": score,
-                "total_checks": reliability.total_checks_recorded,
-                "last_check_status": reliability.last_check_status,
+                "total_checks": calls,
+                "last_check_status": (
+                    "error"
+                    if stats["error_count"]
+                    else "ok"
+                    if calls
+                    else ""
+                ),
                 "token_consumption": tokens,
                 "call_count_7d": calls,
-                "rating": s.get("rating", 0),
-                "version": s.get("version", "?"),
-                "security_level": s.get("security_level", "unreviewed"),
-                "install_command": s.get("install_command", ""),
+                "rating": server.get("rating", 0),
+                "version": server.get("version", "?"),
+                "security_level": server.get("security_level", "unreviewed"),
+                "install_command": server.get("install_command", ""),
             }
         )
 
-    # 3. 聚合统计
     running_count = sum(1 for item in items if item["running"])
-    error_count = sum(1 for i in items if i["status"] == "error")
-    stopped_count = sum(1 for i in items if i["status"] == "stopped")
-    healthy_count = sum(1 for i in items if i["last_check_status"] == "ok")
+    stopped_count = sum(1 for item in items if item["status"] == "stopped")
+    offline_count = sum(
+        1 for item in items if item["status"] in {"offline", "not_connected"}
+    )
+    error_count = sum(
+        1 for stats in telemetry_stats.values() if stats["error_count"] > 0
+    )
+    healthy_count = sum(1 for item in items if item["last_check_status"] == "ok")
 
     summary = {
         "total_servers": len(relevant),
         "running": running_count,
         "stopped": stopped_count,
+        "offline": offline_count,
         "error": error_count,
         "healthy": healthy_count,
         "total_calls_7d": total_calls_all,
@@ -152,7 +243,6 @@ async def monitor_dashboard(user_id: str | None = Depends(get_optional_user)):
         else 0,
     }
 
-    # 按可靠性排序
     items.sort(key=lambda x: x["reliability_score"], reverse=True)
 
     return {

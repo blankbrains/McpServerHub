@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.repositories import ServerRepository
 
@@ -18,22 +20,22 @@ class Registry:
         page: int = 1,
         page_size: int = 20,
         security_level: str | None = None,
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.search(q, category, tag, sort, page, page_size, security_level)
 
-    async def get_by_id(self, server_id: str) -> dict | None:
+    async def get_by_id(self, server_id: str) -> dict[str, Any] | None:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_by_id(server_id)
 
-    async def get_all(self) -> list[dict]:
+    async def get_all(self) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_all()
 
-    async def get_installed(self) -> list[dict]:
+    async def get_installed(self) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_installed()
@@ -48,27 +50,27 @@ class Registry:
             repo = ServerRepository(session)
             await repo.increment_download(server_id)
 
-    async def get_trending(self, limit: int = 20) -> list[dict]:
+    async def get_trending(self, limit: int = 20) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_trending(limit)
 
-    async def get_top_rated(self, limit: int = 20) -> list[dict]:
+    async def get_top_rated(self, limit: int = 20) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_top_rated(limit)
 
-    async def get_new_releases(self, limit: int = 20) -> list[dict]:
+    async def get_new_releases(self, limit: int = 20) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_new_releases(limit)
 
-    async def register_server(self, server_data: dict) -> str:
+    async def register_server(self, server_data: dict[str, Any]) -> str:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.register_server(server_data)
 
-    async def get_by_author(self, author: str) -> list[dict]:
+    async def get_by_author(self, author: str) -> list[dict[str, Any]]:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
             return await repo.get_by_author(author)

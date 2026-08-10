@@ -13,13 +13,13 @@ from mcp_hub.db.repositories import ReviewRepository, UserRepository
 @click.command("rate")
 @click.argument("server_id", required=True)
 @click.argument("rating", required=True, type=int)
-def rate(server_id: str, rating: int):
+def rate(server_id: str, rating: int) -> None:
     """给 Server 评分 (1-5)。"""
     if rating < 1 or rating > 5:
         click.echo("❌ 评分范围: 1-5")
         return
 
-    async def _run():
+    async def _run() -> None:
         async with async_session_factory() as session:
             repo = ReviewRepository(session)
             await repo.rate(server_id, "local-user", rating)
@@ -31,11 +31,11 @@ def rate(server_id: str, rating: int):
 @click.command("review")
 @click.argument("server_id", required=True)
 @click.argument("content", required=False)
-def review(server_id: str, content: str | None):
+def review(server_id: str, content: str | None) -> None:
     """写/看评价。"""
     if content:
 
-        async def _run():
+        async def _run() -> None:
             async with async_session_factory() as session:
                 repo = ReviewRepository(session)
                 await repo.rate(server_id, "local-user", 5, content)
@@ -44,7 +44,7 @@ def review(server_id: str, content: str | None):
         asyncio.run(_run())
     else:
 
-        async def _run():
+        async def _run() -> None:
             async with async_session_factory() as session:
                 repo = ReviewRepository(session)
                 reviews = await repo.get_reviews(server_id)
@@ -61,10 +61,10 @@ def review(server_id: str, content: str | None):
 
 @click.command("favorite")
 @click.argument("server_id", required=True)
-def favorite(server_id: str):
+def favorite(server_id: str) -> None:
     """收藏 Server。"""
 
-    async def _run():
+    async def _run() -> None:
         async with async_session_factory() as session:
             repo = UserRepository(session)
             is_fav = await repo.favorite("local-user", server_id)
@@ -77,10 +77,10 @@ def favorite(server_id: str):
 
 
 @click.command("favorites")
-def favorites():
+def favorites() -> None:
     """查看收藏列表。"""
 
-    async def _run():
+    async def _run() -> None:
         async with async_session_factory() as session:
             repo = UserRepository(session)
             favs = await repo.get_favorites("local-user")

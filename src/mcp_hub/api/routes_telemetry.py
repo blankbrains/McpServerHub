@@ -9,7 +9,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -23,6 +23,7 @@ from mcp_hub.db.models import (
     TelemetryDeviceModel,
     TelemetryEventModel,
     TelemetryInventoryModel,
+    UsageStatsModel,
 )
 from mcp_hub.logging_config import get_logger
 
@@ -104,15 +105,21 @@ class InventoryServerInput(BaseModel):
     transport: Literal["stdio", "sse", "http", "streamable-http"] = "stdio"
     command_name: str = Field(default="", max_length=255)
     env_keys: list[str] = Field(default_factory=list, max_length=100)
+    header_keys: list[str] = Field(default_factory=list, max_length=100)
     config_hash: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    server_version: str = Field(default="", max_length=50)
+    protocol_version: str = Field(default="", max_length=32)
+    capabilities: list[str] = Field(default_factory=list, max_length=20)
+    tool_count: int = Field(default=0, ge=0, le=100_000)
+    running: bool = False
     enabled: bool = True
 
-    @field_validator("env_keys")
+    @field_validator("env_keys", "header_keys", "capabilities")
     @classmethod
-    def validate_env_keys(cls, value: list[str]) -> list[str]:
+    def validate_safe_names(cls, value: list[str]) -> list[str]:
         normalized = sorted({item.strip() for item in value if item.strip()})
         if any(len(item) > 100 for item in normalized):
-            raise ValueError("环境变量名称过长")
+            raise ValueError("清单字段名称过长")
         return normalized
 
 
@@ -131,6 +138,10 @@ class InventorySnapshotRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    gateway_version: str = Field(default="", max_length=50)
+    runtime_version: str = Field(default="", max_length=50)
+    platform: str = Field(default="", max_length=50, pattern=r"^[A-Za-z0-9_.-]*$")
+    architecture: str = Field(default="", max_length=50, pattern=r"^[A-Za-z0-9_.-]*$")
     servers: list[InventoryServerInput] = Field(default_factory=list, max_length=500)
     configuration_errors: list[InventoryErrorInput] = Field(default_factory=list, max_length=500)
     reported_at: datetime
@@ -153,6 +164,10 @@ def _serialize_device(device: TelemetryDeviceModel) -> dict[str, str | None]:
         "id": device.id,
         "name": device.name,
         "agent_type": device.agent_type or DEFAULT_AGENT_TYPE,
+        "gateway_version": device.gateway_version or "",
+        "runtime_version": device.runtime_version or "",
+        "platform": device.platform or "",
+        "architecture": device.architecture or "",
         "created_at": device.created_at.isoformat() if device.created_at else None,
         "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
         "revoked_at": device.revoked_at.isoformat() if device.revoked_at else None,
@@ -166,6 +181,16 @@ def _resolve_agent_filter(agent_type: str) -> str | None:
         return normalize_agent_type(agent_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _decode_string_list(raw: str | None) -> list[str]:
+    try:
+        value = json.loads(raw or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
 
 
 async def get_telemetry_identity(
@@ -196,7 +221,7 @@ async def get_telemetry_identity(
 async def create_telemetry_device(
     data: DeviceCreateRequest,
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """为当前用户创建一枚仅能上报遥测的本地 Agent 凭证。"""
     token = f"mcpht_{secrets.token_urlsafe(32)}"
     device = TelemetryDeviceModel(
@@ -223,7 +248,7 @@ async def create_telemetry_device(
 @router.get("/telemetry/devices")
 async def list_telemetry_devices(
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """列出当前用户的设备，不返回令牌或哈希。"""
     async with async_session_factory() as session:
         result = await session.execute(
@@ -240,7 +265,7 @@ async def list_telemetry_devices(
 async def revoke_telemetry_device(
     device_id: str,
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """撤销当前用户的设备令牌，后续事件将被拒绝。"""
     async with async_session_factory() as session:
         device = await session.scalar(
@@ -263,7 +288,7 @@ async def revoke_telemetry_device(
 async def ingest_telemetry_events(
     data: TelemetryBatchRequest,
     identity: TelemetryIdentity = Depends(get_telemetry_identity),
-):
+) -> dict[str, Any]:
     """接收设备批量遥测，按事件 ID 幂等写入。"""
     saved = 0
     duplicates = 0
@@ -272,6 +297,7 @@ async def ingest_telemetry_events(
             occurred_at = event.occurred_at
             if occurred_at.tzinfo is None:
                 occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+            stored_at = occurred_at.astimezone(timezone.utc).replace(tzinfo=None)
             try:
                 async with session.begin_nested():
                     session.add(
@@ -297,10 +323,24 @@ async def ingest_telemetry_events(
                             queue_depth=event.queue_depth,
                             server_version=event.server_version,
                             transport=event.transport,
-                            occurred_at=occurred_at.astimezone(timezone.utc).replace(tzinfo=None),
+                            occurred_at=stored_at,
                         )
                     )
                     await session.flush()
+                    if event.event_type == "tool_call":
+                        session.add(
+                            UsageStatsModel(
+                                server_id=event.server_id,
+                                user_id=identity.user_id,
+                                tool_name=event.tool_name,
+                                status=event.status,
+                                duration_ms=event.duration_ms,
+                                token_count=event.input_tokens + event.output_tokens,
+                                source_event_id=event.event_id,
+                                created_at=stored_at,
+                            )
+                        )
+                        await session.flush()
                 saved += 1
             except IntegrityError:
                 duplicates += 1
@@ -316,7 +356,7 @@ async def ingest_telemetry_events(
 async def ingest_telemetry_inventory(
     data: InventorySnapshotRequest,
     identity: TelemetryIdentity = Depends(get_telemetry_identity),
-):
+) -> dict[str, Any]:
     """Replace one device's active inventory without storing secrets or full commands."""
     reported_at = data.reported_at
     if reported_at.tzinfo is None:
@@ -325,6 +365,17 @@ async def ingest_telemetry_inventory(
     errors = {error.server_id: error.error_code for error in data.configuration_errors}
 
     async with async_session_factory() as session:
+        device = await session.scalar(
+            select(TelemetryDeviceModel).where(
+                TelemetryDeviceModel.id == identity.device_id,
+                TelemetryDeviceModel.user_id == identity.user_id,
+            )
+        )
+        if device is not None:
+            device.gateway_version = data.gateway_version
+            device.runtime_version = data.runtime_version
+            device.platform = data.platform
+            device.architecture = data.architecture
         await session.execute(
             update(TelemetryInventoryModel)
             .where(TelemetryInventoryModel.device_id == identity.device_id)
@@ -345,7 +396,16 @@ async def ingest_telemetry_inventory(
                 "transport": server.transport,
                 "command_name": server.command_name,
                 "env_keys": json.dumps(server.env_keys, ensure_ascii=False),
+                "header_keys": json.dumps(server.header_keys, ensure_ascii=False),
                 "config_hash": server.config_hash,
+                "server_version": server.server_version,
+                "protocol_version": server.protocol_version,
+                "capabilities": json.dumps(
+                    sorted(set(server.capabilities)),
+                    ensure_ascii=False,
+                ),
+                "tool_count": server.tool_count,
+                "running": server.running,
                 "enabled": server.enabled,
                 "active": True,
                 "configuration_error": errors.get(server.server_name, ""),
@@ -376,7 +436,9 @@ async def ingest_telemetry_inventory(
                 "transport": "stdio",
                 "command_name": "",
                 "env_keys": "[]",
+                "header_keys": "[]",
                 "config_hash": error_hash,
+                "protocol_version": "",
                 "enabled": False,
                 "active": True,
                 "configuration_error": error.error_code,
@@ -414,7 +476,7 @@ async def get_telemetry_summary(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """返回当前用户的真实 Agent 遥测聚合。"""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -463,11 +525,54 @@ async def get_telemetry_summary(
             TelemetryDeviceModel.user_id == user_id,
             TelemetryDeviceModel.revoked_at.is_(None),
         )
+        active_devices_query = select(func.count(TelemetryDeviceModel.id)).where(
+            TelemetryDeviceModel.user_id == user_id,
+            TelemetryDeviceModel.revoked_at.is_(None),
+            TelemetryDeviceModel.last_seen_at
+            >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3),
+        )
         if selected_agent:
             last_seen_query = last_seen_query.where(
                 TelemetryDeviceModel.agent_type == selected_agent
             )
+            active_devices_query = active_devices_query.where(
+                TelemetryDeviceModel.agent_type == selected_agent
+            )
         last_seen = await session.scalar(last_seen_query)
+        active_devices = int(await session.scalar(active_devices_query) or 0)
+
+        queue_filters = [
+            TelemetryEventModel.user_id == user_id,
+            TelemetryEventModel.occurred_at >= since,
+        ]
+        if selected_agent:
+            queue_filters.append(TelemetryDeviceModel.agent_type == selected_agent)
+        max_queue_depth = int(
+            await session.scalar(
+                select(func.max(TelemetryEventModel.queue_depth))
+                .select_from(TelemetryEventModel)
+                .join(
+                    TelemetryDeviceModel,
+                    TelemetryDeviceModel.id == TelemetryEventModel.device_id,
+                )
+                .where(*queue_filters)
+            )
+            or 0
+        )
+        current_queue_depth = int(
+            await session.scalar(
+                select(TelemetryEventModel.queue_depth)
+                .select_from(TelemetryEventModel)
+                .join(
+                    TelemetryDeviceModel,
+                    TelemetryDeviceModel.id == TelemetryEventModel.device_id,
+                )
+                .where(*queue_filters)
+                .order_by(TelemetryEventModel.occurred_at.desc())
+                .limit(1)
+            )
+            or 0
+        )
 
         total_calls = int(calls_row[0] or 0)
         p95_duration = 0
@@ -508,10 +613,12 @@ async def get_telemetry_summary(
             "input_bytes": int(calls_row[6] or 0),
             "output_bytes": int(calls_row[7] or 0),
             "total_bytes": int(calls_row[6] or 0) + int(calls_row[7] or 0),
-            "active_devices": int(calls_row[8] or 0),
+            "active_devices": active_devices,
             "active_servers": int(calls_row[9] or 0),
             "active_sessions": int(calls_row[10] or 0),
             "p95_duration_ms": p95_duration,
+            "current_queue_depth": current_queue_depth,
+            "max_queue_depth": max_queue_depth,
             "first_call_at": calls_row[11].isoformat() if calls_row[11] else None,
             "last_call_at": calls_row[12].isoformat() if calls_row[12] else None,
             "last_seen_at": last_seen.isoformat() if last_seen else None,
@@ -524,7 +631,7 @@ async def get_telemetry_servers(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """按 Server 聚合当前用户的工具调用遥测。"""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -600,7 +707,7 @@ async def get_telemetry_servers(
 async def get_telemetry_agents(
     days: int = Query(7, ge=1, le=365),
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """按已授权 Agent 类型汇总当前用户的真实遥测。"""
     since = _time_window(days)
     event_join = and_(
@@ -663,7 +770,7 @@ async def get_telemetry_tools(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Aggregate calls by Server and tool without exposing arguments."""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -741,7 +848,7 @@ async def get_telemetry_operations(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Aggregate tool, resource and prompt protocol operations."""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -803,7 +910,7 @@ async def get_telemetry_timeseries(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return daily call, error, latency and Token trends."""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -869,7 +976,7 @@ async def get_telemetry_resources(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Aggregate sampled local CPU, memory and process uptime by Server."""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -938,7 +1045,7 @@ async def get_telemetry_errors(
     days: int = Query(7, ge=1, le=365),
     agent_type: str = "",
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Aggregate non-sensitive error categories."""
     since = _time_window(days)
     selected_agent = _resolve_agent_filter(agent_type)
@@ -955,7 +1062,7 @@ async def get_telemetry_errors(
             select(
                 TelemetryEventModel.server_id,
                 TelemetryEventModel.error_code,
-                func.count(TelemetryEventModel.id).label("count"),
+                func.count(TelemetryEventModel.id).label("error_count"),
                 func.max(TelemetryEventModel.occurred_at).label("last_seen_at"),
             )
             .select_from(TelemetryEventModel)
@@ -978,7 +1085,7 @@ async def get_telemetry_errors(
                 {
                     "server_id": row.server_id,
                     "error_code": row.error_code or "unknown",
-                    "count": int(row.count or 0),
+                    "count": int(row.error_count or 0),
                     "last_seen_at": (
                         row.last_seen_at.isoformat() if row.last_seen_at else None
                     ),
@@ -989,10 +1096,69 @@ async def get_telemetry_errors(
     }
 
 
+@router.get("/telemetry/lifecycle")
+async def get_telemetry_lifecycle(
+    days: int = Query(7, ge=1, le=365),
+    agent_type: str = "",
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return recent MCP Server start, stop, failure and exit events."""
+    since = _time_window(days)
+    selected_agent = _resolve_agent_filter(agent_type)
+    filters = [
+        TelemetryEventModel.user_id == user_id,
+        TelemetryEventModel.event_type == "server_lifecycle",
+        TelemetryEventModel.occurred_at >= since,
+    ]
+    if selected_agent:
+        filters.append(TelemetryDeviceModel.agent_type == selected_agent)
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(
+                TelemetryEventModel.server_id,
+                TelemetryEventModel.operation,
+                TelemetryEventModel.status,
+                TelemetryEventModel.duration_ms,
+                TelemetryEventModel.error_code,
+                TelemetryEventModel.server_version,
+                TelemetryEventModel.occurred_at,
+            )
+            .select_from(TelemetryEventModel)
+            .join(
+                TelemetryDeviceModel,
+                TelemetryDeviceModel.id == TelemetryEventModel.device_id,
+            )
+            .where(*filters)
+            .order_by(TelemetryEventModel.occurred_at.desc())
+            .limit(100)
+        )
+        rows = result.fetchall()
+
+    return {
+        "success": True,
+        "data": {
+            "days": days,
+            "events": [
+                {
+                    "server_id": row.server_id,
+                    "operation": row.operation or "unknown",
+                    "status": row.status or "warning",
+                    "duration_ms": int(row.duration_ms or 0),
+                    "error_code": row.error_code or "",
+                    "server_version": row.server_version or "",
+                    "occurred_at": row.occurred_at.isoformat(),
+                }
+                for row in rows
+            ],
+        },
+    }
+
+
 @router.get("/telemetry/inventory")
 async def get_telemetry_inventory(
     user_id: str = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Return the current user's device-reported local MCP inventory."""
     online_since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
     async with async_session_factory() as session:
@@ -1017,7 +1183,7 @@ async def get_telemetry_inventory(
     for row in inventory_rows:
         inventory_by_device.setdefault(row.device_id, []).append(row)
 
-    serialized_devices = []
+    serialized_devices: list[dict[str, Any]] = []
     all_server_names: set[str] = set()
     for device in devices:
         rows = sorted(
@@ -1035,8 +1201,14 @@ async def get_telemetry_inventory(
                         "server_name": row.server_name,
                         "transport": row.transport,
                         "command_name": row.command_name,
-                        "env_keys": json.loads(row.env_keys or "[]"),
+                        "env_keys": _decode_string_list(row.env_keys),
+                        "header_keys": _decode_string_list(row.header_keys),
                         "config_hash": row.config_hash,
+                        "server_version": row.server_version or "",
+                        "protocol_version": row.protocol_version or "",
+                        "capabilities": _decode_string_list(row.capabilities),
+                        "tool_count": int(row.tool_count or 0),
+                        "running": bool(row.running),
                         "enabled": bool(row.enabled),
                         "configuration_error": row.configuration_error,
                         "last_seen_at": row.last_seen_at.isoformat(),
@@ -1080,7 +1252,7 @@ async def get_telemetry_inventory(
                         {
                             "device": device_labels.get(row.device_id, row.device_id),
                             "command_name": row.command_name,
-                            "env_keys": json.loads(row.env_keys or "[]"),
+                            "env_keys": _decode_string_list(row.env_keys),
                             "config_hash": row.config_hash,
                         }
                         for row in matching_rows

@@ -17,7 +17,7 @@ import psutil
 from mcp_hub.logging_config import get_logger
 
 if TYPE_CHECKING:
-    from mcp_hub.core.process_manager import ProcessManager
+    from mcp_hub.core.process_manager import ManagedProcess, ProcessManager
     from mcp_hub.core.registry import Registry
 
 logger = get_logger(__name__)
@@ -50,10 +50,10 @@ class HealthChecker:
 
     # ── L1: 进程级检查 ──────────────────────────────────────
 
-    async def check_l1(self, server_id: str, pid: int) -> HealthResult:
+    async def check_l1(self, server_id: str, pid: int | None) -> HealthResult:
         """进程级检查 — 只查进程是否存在（最轻量）。"""
         start = time.monotonic()
-        if psutil.pid_exists(pid):
+        if pid is not None and psutil.pid_exists(pid):
             passed = True
             msg = "进程存活"
         else:
@@ -64,7 +64,11 @@ class HealthChecker:
 
     # ── L2: 连接级检查 ──────────────────────────────────────
 
-    async def check_l2(self, server_id: str, stdin) -> HealthResult:
+    async def check_l2(
+        self,
+        server_id: str,
+        stdin: asyncio.StreamWriter,
+    ) -> HealthResult:
         """连接级检查 — 尝试写入 JSON-RPC ping 到 stdin。
 
         如果 stdin pipe 已经断开（BrokenPipeError），说明连接级异常。
@@ -72,13 +76,12 @@ class HealthChecker:
         """
         start = time.monotonic()
         try:
-            async with asyncio.timeout(5.0):
-                stdin.write(
-                    b'{"jsonrpc":"2.0","id":999,"method":"ping","params":{"_health":"l2"}}\n'
-                )
-                await stdin.drain()
-                passed = True
-                msg = "连接正常（stdin 通道畅通）"
+            stdin.write(
+                b'{"jsonrpc":"2.0","id":999,"method":"ping","params":{"_health":"l2"}}\n'
+            )
+            await asyncio.wait_for(stdin.drain(), timeout=5.0)
+            passed = True
+            msg = "连接正常（stdin 通道畅通）"
         except asyncio.TimeoutError:
             passed = False
             msg = "连接超时（stdin 写入阻塞超过 5s）"
@@ -93,7 +96,7 @@ class HealthChecker:
     async def check_l3(
         self,
         server_id: str,
-        managed_process,  # ManagedProcess
+        managed_process: ManagedProcess,
     ) -> HealthResult:
         """功能级检查 — 确认 keepalive ping 仍在正常工作。
 
@@ -203,28 +206,34 @@ class HealthChecker:
                         )
                 # 对每个失败的 Server 触发自动恢复
                 for sid in failed_ids:
-                    should_restart = await self._auto_restart(sid, process_manager, registry)
-                    if should_restart:
-                        # 重新 spawn 进程
-                        proc = process_manager.get(sid)
-                        if proc and proc.spawn_command:
-                            try:
-                                await process_manager.spawn(
-                                    sid,
-                                    proc.spawn_command,
-                                    proc.spawn_args,
-                                )
-                                await registry.update_status(sid, "running")
-                                logger.info(
-                                    "health_check.restarted",
-                                    server_id=sid,
-                                )
-                            except Exception as spawn_err:
-                                logger.error(
-                                    "health_check.restart_spawn_failed",
-                                    server_id=sid,
-                                    error=str(spawn_err),
-                                )
+                    restart_source = await self._prepare_auto_restart(
+                        sid,
+                        process_manager,
+                        registry,
+                    )
+                    if restart_source is None or not restart_source.spawn_command:
+                        continue
+                    try:
+                        restarted = await process_manager.spawn(
+                            sid,
+                            restart_source.spawn_command,
+                            restart_source.spawn_args,
+                            env=restart_source.spawn_env,
+                            cwd=restart_source.spawn_cwd,
+                        )
+                        restarted.restart_count = restart_source.restart_count
+                        await registry.update_status(sid, "running")
+                        logger.info(
+                            "health_check.restarted",
+                            server_id=sid,
+                            restart_count=restarted.restart_count,
+                        )
+                    except Exception as spawn_err:
+                        logger.error(
+                            "health_check.restart_spawn_failed",
+                            server_id=sid,
+                            error=str(spawn_err),
+                        )
             except Exception as e:
                 logger.error(
                     "health_check.monitor_error",
@@ -234,21 +243,23 @@ class HealthChecker:
 
     # ── 自动恢复 ─────────────────────────────────────────────
 
-    async def _auto_restart(
+    async def _prepare_auto_restart(
         self,
         server_id: str,
         process_manager: ProcessManager,
         _registry: Registry,
-    ) -> bool:
+    ) -> ManagedProcess | None:
         """自动重启失败的 Server（最多 3 次）。
 
         1. 递增 restart_count
-        2. 超过 3 次则放弃，返回 False
+        2. 超过 3 次则放弃，返回 None
         3. 杀死旧进程，等待 2 秒
-        4. 返回 True，通知调用方重新 spawn
+        4. 返回保留启动配置的旧进程快照，通知调用方重新 spawn
         """
         proc = process_manager.get(server_id)
-        current_count = proc.restart_count if proc else 0
+        if proc is None:
+            return None
+        current_count = proc.restart_count
 
         if current_count >= 3:
             logger.error(
@@ -256,12 +267,11 @@ class HealthChecker:
                 server_id=server_id,
                 restart_count=current_count,
             )
-            return False
+            return None
 
         # 递增重启计数
-        if proc:
-            proc.restart_count += 1
-            current_count = proc.restart_count
+        proc.restart_count += 1
+        current_count = proc.restart_count
 
         logger.info(
             "health_check.auto_restart",
@@ -270,7 +280,7 @@ class HealthChecker:
         )
         await process_manager.kill(server_id)
         await asyncio.sleep(2)
-        return True  # 通知调用方重新 spawn
+        return proc
 
     async def _record_to_monitor(
         self,

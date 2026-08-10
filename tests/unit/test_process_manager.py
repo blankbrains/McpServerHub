@@ -14,6 +14,7 @@ import pytest
 from mcp_hub.core.process_manager import (
     ManagedProcess,
     ProcessManager,
+    _filter_env,
     get_process_manager,
 )
 from mcp_hub.exceptions import ProcessStartupError, ServerAlreadyRunningError
@@ -70,6 +71,26 @@ def _make_mock_process(
     proc.terminate = MagicMock()
     proc.kill = MagicMock()
     return proc
+
+
+def test_process_environment_excludes_host_credentials(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "base-path")
+    monkeypatch.setenv("MCP_HUB_TELEMETRY_TOKEN", "synthetic-device-token")
+    monkeypatch.setenv("MCP_HUB_SECRET", "synthetic-hub-secret")
+    monkeypatch.setenv("MCP_HUB_GITHUB_CLIENT_SECRET", "synthetic-oauth-secret")
+    monkeypatch.setenv("NPM_TOKEN", "synthetic-npm-token")
+    monkeypatch.setenv("PIP_INDEX_URL", "https://user:password@example.test/simple")
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/synthetic-ssh-agent")
+
+    child_env = _filter_env()
+
+    assert child_env["PATH"] == "base-path"
+    assert "MCP_HUB_TELEMETRY_TOKEN" not in child_env
+    assert "MCP_HUB_SECRET" not in child_env
+    assert "MCP_HUB_GITHUB_CLIENT_SECRET" not in child_env
+    assert "NPM_TOKEN" not in child_env
+    assert "PIP_INDEX_URL" not in child_env
+    assert "SSH_AUTH_SOCK" not in child_env
 
 
 # ── ProcessManager 核心逻辑 ───────────────────────────────

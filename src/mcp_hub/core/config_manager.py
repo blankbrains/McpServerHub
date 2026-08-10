@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import shlex
 from pathlib import Path
+from typing import Any
 
 from mcp_hub.core.agent_config import get_agent_profiles
 from mcp_hub.core.gateway_config import split_legacy_command
 
 # 各 Agent 配置文件路径
-AGENT_CONFIGS = {
+AGENT_CONFIGS: dict[str, dict[str, Any]] = {
     agent_type: {
         "name": profile.name,
         "paths": list(profile.paths),
@@ -39,7 +40,11 @@ def command_config(command: str) -> dict[str, object]:
     return config
 
 
-def get_config_for_agent(server_name: str, command: str, agent: str = "generic") -> dict:
+def get_config_for_agent(
+    server_name: str,
+    command: str,
+    agent: str = "generic",
+) -> dict[str, Any]:
     """生成指定 Agent 的配置片段。"""
     cfg = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
     server_config = command_config(command)
@@ -99,12 +104,22 @@ class ConfigManager:
         if not self._env_config_path.exists():
             return None
         try:
-            env_config = json.loads(self._env_config_path.read_text(encoding="utf-8"))
-            return env_config.get(server_id, {}).get(key)
+            raw_config = json.loads(self._env_config_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_config, dict):
+                return None
+            server_config = raw_config.get(server_id)
+            if not isinstance(server_config, dict):
+                return None
+            value = server_config.get(key)
+            return value if isinstance(value, str) else None
         except (json.JSONDecodeError, OSError):
             return None
 
-    async def list_config(self, server_id: str, agent: str = "generic") -> dict:
+    async def list_config(
+        self,
+        server_id: str,
+        agent: str = "generic",
+    ) -> dict[str, Any]:
         """获取指定 Server 的配置片段（含真实命令和环境变量）。"""
         from mcp_hub.core.registry import Registry
 
@@ -113,13 +128,13 @@ class ConfigManager:
         # 优先从注册表获取命令，其次从已安装列表
         command = ""
         if server:
-            command = server.get("install_command", "")
+            command = str(server.get("install_command", "") or "")
         else:
             # 尝试从已安装列表中查找
             installed = await registry.get_installed()
             for s in installed:
                 if s["id"] == server_id:
-                    command = s.get("install_command", "")
+                    command = str(s.get("install_command", "") or "")
                     break
 
         # 获取用户设置的环境变量
@@ -129,10 +144,14 @@ class ConfigManager:
         base_config = get_config_for_agent(server_name, command, agent)
 
         # 将环境变量注入配置 content
-        if env_vars and "config_content" in base_config:
-            for _config_key, config_value in base_config["config_content"].items():
-                if server_name in config_value:
-                    config_value[server_name]["env"] = env_vars
+        config_content = base_config.get("config_content")
+        if env_vars and isinstance(config_content, dict):
+            for config_value in config_content.values():
+                if not isinstance(config_value, dict):
+                    continue
+                server_entry = config_value.get(server_name)
+                if isinstance(server_entry, dict):
+                    server_entry["env"] = env_vars
                     break
 
         return base_config
@@ -142,37 +161,48 @@ class ConfigManager:
         if not self._env_config_path.exists():
             return {}
         try:
-            env_config = json.loads(self._env_config_path.read_text(encoding="utf-8"))
-            return env_config.get(server_id, {})
+            raw_config = json.loads(self._env_config_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_config, dict):
+                return {}
+            server_config = raw_config.get(server_id)
+            if not isinstance(server_config, dict):
+                return {}
+            return {
+                str(key): value
+                for key, value in server_config.items()
+                if isinstance(value, str)
+            }
         except (json.JSONDecodeError, OSError):
             return {}
 
-    async def _load_config(self) -> dict:
+    async def _load_config(self) -> dict[str, Any]:
         """加载本地 mcp.json 配置文件。"""
         config_path = self.config_dir / "mcp.json"
         if config_path.exists():
             try:
-                return json.loads(config_path.read_text(encoding="utf-8"))
+                data = json.loads(config_path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {"mcpServers": {}}
             except (json.JSONDecodeError, OSError):
                 return {"mcpServers": {}}
         return {"mcpServers": {}}
 
-    async def apply_config(self, target_path: str | None = None) -> dict:
+    async def apply_config(self, target_path: str | None = None) -> dict[str, Any]:
         """将 Hub 上已安装的 Server 配置写入指定文件。"""
         from mcp_hub.core.registry import Registry
 
         registry = Registry()
         installed = await registry.get_installed()
-        config: dict = {"mcpServers": {}}
+        server_configs: dict[str, dict[str, object]] = {}
         for s in installed:
             name = s["id"].split("/")[-1]
-            cmd = s.get("install_command", "")
+            cmd = str(s.get("install_command", "") or "")
             if cmd:
                 server_config = command_config(cmd)
                 env = await self.list_all_config(s["id"])
                 if env:
                     server_config["env"] = env
-                config["mcpServers"][name] = server_config
+                server_configs[name] = server_config
+        config: dict[str, Any] = {"mcpServers": server_configs}
 
         path = Path(target_path) if target_path else self.config_dir / "mcp.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,20 +216,21 @@ class ConfigManager:
 
     # ── 配置差异检测 ─────────────────────────────────────
 
-    async def diff_local_vs_hub(self) -> dict:
+    async def diff_local_vs_hub(self) -> dict[str, Any]:
         """对比本地 mcp.json 与 Hub 上的配置，返回差异报告。"""
         from mcp_hub.core.registry import Registry
 
         # 本地配置
         local_config = await self._load_config()
-        local_servers = local_config.get("mcpServers", {})
+        raw_local_servers = local_config.get("mcpServers", {})
+        local_servers = raw_local_servers if isinstance(raw_local_servers, dict) else {}
 
         # Hub 配置
         registry = Registry()
         installed = await registry.get_installed()
         hub_servers: dict[str, str] = {}
         for s in installed:
-            cmd = s.get("install_command", "")
+            cmd = str(s.get("install_command", "") or "")
             if cmd:
                 hub_servers[s["id"].split("/")[-1]] = cmd
 
@@ -207,7 +238,7 @@ class ConfigManager:
         all_names = set(list(local_servers.keys()) + list(hub_servers.keys()))
         only_local = [n for n in all_names if n in local_servers and n not in hub_servers]
         only_hub = [n for n in all_names if n in hub_servers and n not in local_servers]
-        different = []
+        different: list[dict[str, str]] = []
         for n in all_names:
             if n in local_servers and n in hub_servers:
                 l_cmd = (
@@ -230,7 +261,7 @@ class ConfigManager:
 
     # ── 配置备份与快照 ─────────────────────────────────────
 
-    async def backup_config(self, label: str = "") -> dict:
+    async def backup_config(self, label: str = "") -> dict[str, Any]:
         """备份当前 mcp.json 到快照目录。"""
         from datetime import datetime
 
@@ -256,17 +287,18 @@ class ConfigManager:
             "filename": filename,
         }
 
-    async def list_backups(self) -> list[dict]:
+    async def list_backups(self) -> list[dict[str, Any]]:
         """列出所有配置备份。"""
         backup_dir = self.config_dir / "backups"
         if not backup_dir.exists():
             return []
-        backups = []
+        backups: list[dict[str, Any]] = []
         for f in sorted(backup_dir.glob("mcp_*.json"), reverse=True):
             stat = f.stat()
             try:
                 cfg = json.loads(f.read_text(encoding="utf-8"))
-                count = len(cfg.get("mcpServers", {}))
+                raw_servers = cfg.get("mcpServers", {}) if isinstance(cfg, dict) else {}
+                count = len(raw_servers) if isinstance(raw_servers, dict) else 0
             except Exception:
                 count = -1
             backups.append(
@@ -280,7 +312,7 @@ class ConfigManager:
             )
         return backups
 
-    async def restore_backup(self, filename: str) -> dict:
+    async def restore_backup(self, filename: str) -> dict[str, Any]:
         """从备份恢复配置。先自动备份当前配置，再恢复。"""
         backup_path = self.config_dir / "backups" / filename
         if not backup_path.exists():
@@ -291,6 +323,8 @@ class ConfigManager:
 
         # 写入当前配置
         config_data = json.loads(backup_path.read_text(encoding="utf-8"))
+        if not isinstance(config_data, dict):
+            return {"success": False, "message": f"备份文件格式无效: {filename}"}
         config_path = self.config_dir / "mcp.json"
         config_path.write_text(
             json.dumps(config_data, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -303,7 +337,7 @@ class ConfigManager:
 
     # ── 安装前预检 ────────────────────────────────────────
 
-    async def pre_install_check(self, command: str) -> dict:
+    async def pre_install_check(self, command: str) -> dict[str, Any]:
         """安装前环境预检。
 
         检查：
@@ -316,7 +350,7 @@ class ConfigManager:
         import subprocess
         import sys
 
-        checks: list[dict] = []
+        checks: list[dict[str, Any]] = []
 
         # 1. Python 版本检查
         py_version = f"{sys.version_info.major}.{sys.version_info.minor}"

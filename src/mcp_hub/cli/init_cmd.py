@@ -15,10 +15,10 @@ import click
 @click.option("--db-url", help="数据库连接字符串（默认从 .env 读取）")
 @click.option("--force", is_flag=True, help="强制重新初始化")
 @click.option("--no-seed", is_flag=True, help="不导入预置数据")
-def init_cmd(db_url: str | None, force: bool, no_seed: bool):
+def init_cmd(db_url: str | None, force: bool, no_seed: bool) -> None:
     """一键初始化 MCP Server Hub 环境。"""
 
-    async def _run():
+    async def _run() -> None:
         click.echo("\n🔵 MCP Server Hub 初始化\n")
 
         # Step 1: 检查环境

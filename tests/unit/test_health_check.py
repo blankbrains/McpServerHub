@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from mcp_hub.core.health_check import HealthChecker, HealthResult
+from mcp_hub.core.process_manager import ManagedProcess
 
 
 @pytest.fixture
@@ -59,3 +62,75 @@ class TestHealthResult:
         r = HealthResult("srv1", 1, False)
         assert r.response_time_ms == 0
         assert r.message == ""
+
+
+class TestHealthCheckCompatibility:
+    async def test_l1_missing_pid_is_unhealthy(self, checker: HealthChecker) -> None:
+        result = await checker.check_l1("missing-pid", None)
+
+        assert result.passed is False
+        assert result.message == "进程不存在"
+
+    async def test_l2_uses_python_310_compatible_timeout(
+        self,
+        checker: HealthChecker,
+    ) -> None:
+        stdin = MagicMock(spec=asyncio.StreamWriter)
+        stdin.drain = AsyncMock(return_value=None)
+
+        result = await checker.check_l2("stdio-server", stdin)
+
+        assert result.passed is True
+        stdin.write.assert_called_once()
+        stdin.drain.assert_awaited_once()
+
+
+class TestAutoRestart:
+    async def test_prepare_restart_preserves_spawn_configuration(
+        self,
+        checker: HealthChecker,
+    ) -> None:
+        process_manager = MagicMock()
+        process_manager.get.return_value = ManagedProcess(
+            server_id="weather",
+            restart_count=1,
+            spawn_command="npx",
+            spawn_args=["-y", "weather-mcp"],
+            spawn_env={"WEATHER_API_KEY": "test-secret"},
+            spawn_cwd="/srv/weather",
+        )
+        process_manager.kill = AsyncMock(return_value=True)
+
+        restart_source = await checker._prepare_auto_restart(
+            "weather",
+            process_manager,
+            MagicMock(),
+        )
+
+        assert restart_source is not None
+        assert restart_source.restart_count == 2
+        assert restart_source.spawn_args == ["-y", "weather-mcp"]
+        assert restart_source.spawn_env == {"WEATHER_API_KEY": "test-secret"}
+        assert restart_source.spawn_cwd == "/srv/weather"
+        process_manager.kill.assert_awaited_once_with("weather")
+
+    async def test_prepare_restart_stops_after_three_attempts(
+        self,
+        checker: HealthChecker,
+    ) -> None:
+        process_manager = MagicMock()
+        process_manager.get.return_value = ManagedProcess(
+            server_id="weather",
+            restart_count=3,
+            spawn_command="npx",
+        )
+        process_manager.kill = AsyncMock()
+
+        restart_source = await checker._prepare_auto_restart(
+            "weather",
+            process_manager,
+            MagicMock(),
+        )
+
+        assert restart_source is None
+        process_manager.kill.assert_not_awaited()

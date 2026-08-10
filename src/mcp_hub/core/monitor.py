@@ -262,7 +262,7 @@ class Monitor:
     @staticmethod
     async def _get_recent_status(
         server_id: str,
-    ) -> tuple[tuple[str, str] | None, int, list[str]]:
+    ) -> tuple[tuple[datetime, str] | None, int, list[str]]:
         """获取最近检查状态、总记录数和近期错误。"""
         async with async_session_factory() as session:
             # 总记录数
@@ -281,7 +281,8 @@ class Monitor:
                 .order_by(HealthLogModel.created_at.desc())
                 .limit(1)
             )
-            last = last_row.fetchone()
+            row = last_row.fetchone()
+            last = (row[0], row[1]) if row is not None else None
 
             # 最近 5 条错误
             error_rows = await session.execute(
@@ -293,9 +294,9 @@ class Monitor:
                 .order_by(HealthLogModel.created_at.desc())
                 .limit(5)
             )
-            errors = [row[0] for row in error_rows if row[0]]
+            errors = [str(row[0]) for row in error_rows if row[0]]
 
-            return last, total, errors
+            return last, int(total), errors
 
     # ── 健康摘要 ─────────────────────────────────────────
 

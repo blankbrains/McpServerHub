@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ErrorDetail(BaseModel):
@@ -47,13 +47,16 @@ class ApiErrorResponse(ApiResponse):
 class ApiListResponse(ApiResponse):
     """列表响应。"""
 
-    data: list[Any] = []
+    data: list[Any] = Field(default_factory=list)
     meta: dict[str, Any] | None = None
 
 
-def success_response(data: Any = None, meta: dict[str, Any] | None = None) -> dict:
+def success_response(
+    data: Any = None,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """快捷构建成功响应字典。"""
-    result: dict = {"success": True}
+    result: dict[str, Any] = {"success": True}
     if data is not None:
         result["data"] = data
     if meta is not None:
@@ -61,7 +64,11 @@ def success_response(data: Any = None, meta: dict[str, Any] | None = None) -> di
     return result
 
 
-def error_response(code: str, message: str, details: dict | None = None) -> dict:
+def error_response(
+    code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """快捷构建错误响应字典。"""
     return {
         "success": False,
@@ -73,7 +80,12 @@ def error_response(code: str, message: str, details: dict | None = None) -> dict
     }
 
 
-def list_response(data: list[Any], page: int = 1, page_size: int = 20, total: int = 0) -> dict:
+def list_response(
+    data: list[Any],
+    page: int = 1,
+    page_size: int = 20,
+    total: int = 0,
+) -> dict[str, Any]:
     """快捷构建分页列表响应字典。"""
     return {
         "success": True,

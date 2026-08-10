@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+import sys
+from typing import TextIO
+
 import click
 
 from mcp_hub import __version__
 
 
+def _configure_cli_stream(stream: TextIO) -> None:
+    """Keep legacy Windows consoles from crashing on unencodable UI symbols."""
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(errors="replace")
+
+
+_configure_cli_stream(sys.stdout)
+_configure_cli_stream(sys.stderr)
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="mcp-hub")
-def cli():
+def cli() -> None:
     """MCP Server Hub —— 发现 · 安装 · 管理 · 发布 MCP Server"""
 
 

@@ -7,7 +7,9 @@ import io
 import json
 import sys
 import textwrap
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from click.testing import CliRunner
@@ -15,7 +17,8 @@ from click.testing import CliRunner
 from mcp_hub.cli.daemon import serve
 from mcp_hub.core import mcp_gateway
 from mcp_hub.core.gateway_config import GatewayServerSpec
-from mcp_hub.core.mcp_gateway import ManagedMCP, McpGateway
+from mcp_hub.core.mcp_gateway import ManagedMCP, McpGateway, RemoteMCP
+from mcp_hub.exceptions import GatewayError
 
 
 def _process() -> MagicMock:
@@ -220,6 +223,257 @@ async def test_tool_call_records_extended_metrics_without_payloads(monkeypatch) 
     assert metrics["output_bytes"] > 0
     assert "arguments" not in metrics
     assert "result" not in metrics
+
+
+async def test_tool_result_is_error_is_recorded_as_failed_call(monkeypatch) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    gateway = McpGateway()
+    reporter = MagicMock()
+    reporter.record = AsyncMock()
+    gateway._telemetry = reporter
+    server = MagicMock()
+    server.version = "1.2.3"
+    server.transport = "stdio"
+    server.call_tool = AsyncMock(
+        return_value={
+            "content": [{"type": "text", "text": "tool rejected the request"}],
+            "isError": True,
+        }
+    )
+    gateway._servers["weather"] = server
+    record_call = AsyncMock()
+    monkeypatch.setattr("mcp_hub.core.mcp_gateway._record_call_safe", record_call)
+
+    response = await gateway._route_tool_call(
+        8,
+        {
+            "name": "weather__forecast",
+            "arguments": {"city": "Qingdao"},
+        },
+    )
+
+    assert response is not None
+    assert response["result"]["isError"] is True
+    assert record_call.await_args.args[3] == "error"
+    metrics = reporter.record.await_args.kwargs
+    assert metrics["status"] == "error"
+    assert metrics["error_code"] == "tool_result_error"
+
+
+async def test_resource_only_server_initializes_without_tools() -> None:
+    managed = ManagedMCP(
+        "resource-server",
+        _process(),
+        MagicMock(),
+        MagicMock(),
+    )
+    managed.start_reader = AsyncMock()
+    managed._send_notification = AsyncMock()
+    managed._send_request = AsyncMock(
+        side_effect=[
+            {
+                "capabilities": {"resources": {}},
+                "protocolVersion": "2025-06-18",
+                "serverInfo": {"name": "resource-server", "version": "3.2.1"},
+            },
+            GatewayError("tools/list unsupported", server_id="resource-server"),
+        ]
+    )
+
+    initialized = await managed.initialize()
+
+    assert initialized is True
+    assert managed.capabilities == {"resources"}
+    assert managed.protocol_version == "2025-06-18"
+    assert managed.version == "3.2.1"
+    assert managed.tools == []
+
+
+async def test_heartbeat_records_child_exit_and_refreshes_inventory(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    gateway = McpGateway()
+    reporter = MagicMock()
+    reporter.record = AsyncMock()
+    reporter.report_inventory = AsyncMock()
+    gateway._telemetry = reporter
+    gateway._server_specs = [
+        GatewayServerSpec(server_id="weather", command="npx")
+    ]
+    server = MagicMock()
+    server.version = "4.0.0"
+    server.transport = "stdio"
+    server.exit_code = 9
+    server.close = AsyncMock()
+    gateway._servers["weather"] = server
+    gateway._update_registry_status_safe = AsyncMock()
+
+    await gateway._collect_telemetry_heartbeat()
+
+    lifecycle = reporter.record.await_args_list[1].kwargs
+    assert lifecycle["operation"] == "exited"
+    assert lifecycle["error_code"] == "exit_code_9"
+    assert "weather" not in gateway._servers
+    server.close.assert_awaited_once()
+    reporter.report_inventory.assert_awaited_once()
+    inventory = reporter.report_inventory.await_args.args[0]
+    assert inventory[0]["running"] is False
+
+
+async def test_gateway_starts_remote_server_without_spawning_local_process(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    gateway = McpGateway()
+    spec = GatewayServerSpec(
+        server_id="remote",
+        transport="streamable-http",
+        url="https://example.test/mcp",
+        headers={"Authorization": "Bearer local-only"},
+    )
+    monkeypatch.setattr(gateway, "_load_server_specs", AsyncMock(return_value=[spec]))
+    monkeypatch.setattr(gateway, "_update_registry_status_safe", AsyncMock())
+    initialize = AsyncMock(return_value=True)
+    monkeypatch.setattr(RemoteMCP, "initialize", initialize)
+    create_process = AsyncMock()
+    monkeypatch.setattr("asyncio.create_subprocess_exec", create_process)
+
+    started = await gateway.start_all_managed()
+
+    assert started == ["remote"]
+    create_process.assert_not_awaited()
+    initialize.assert_awaited_once()
+    assert gateway._servers["remote"].transport == "streamable-http"
+    await gateway.shutdown()
+
+
+async def test_remote_mcp_routes_sdk_calls_and_serializes_aliases() -> None:
+    class Result:
+        def model_dump(self, **_kwargs: Any) -> dict[str, Any]:
+            return {
+                "content": [{"type": "text", "text": "remote-ok"}],
+                "isError": False,
+            }
+
+    remote = RemoteMCP(
+        GatewayServerSpec(
+            server_id="remote",
+            transport="streamable-http",
+            url="https://example.test/mcp",
+        )
+    )
+    session = MagicMock()
+    session.call_tool = AsyncMock(return_value=Result())
+    remote._session = session
+
+    result = await remote.call_tool("lookup", {"query": "MCP"})
+
+    assert result["isError"] is False
+    assert result["content"][0]["text"] == "remote-ok"
+    session.call_tool.assert_awaited_once_with(
+        "lookup",
+        arguments={"query": "MCP"},
+    )
+
+
+async def test_remote_mcp_initializes_streamable_http_with_local_headers(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeHttpClient:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["http_client_kwargs"] = kwargs
+
+        async def __aenter__(self) -> FakeHttpClient:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            captured["http_client_closed"] = True
+
+    @asynccontextmanager
+    async def fake_streamable_http_client(
+        url: str,
+        *,
+        http_client: Any,
+    ):
+        captured["url"] = url
+        captured["http_client"] = http_client
+        yield object(), object()
+        captured["transport_closed"] = True
+
+    class Capabilities:
+        def model_dump(self, **_kwargs: Any) -> dict[str, Any]:
+            return {"tools": {}, "resources": {}}
+
+    class ToolsResult:
+        def model_dump(self, **_kwargs: Any) -> dict[str, Any]:
+            return {
+                "tools": [
+                    {
+                        "name": "lookup",
+                        "description": "Lookup data",
+                        "inputSchema": {"type": "object"},
+                    }
+                ]
+            }
+
+    class FakeSession:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            captured["session_closed"] = True
+
+        async def initialize(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                capabilities=Capabilities(),
+                server_info=SimpleNamespace(version="2.4.0"),
+                protocol_version="2026-07-28",
+            )
+
+        async def list_tools(self) -> ToolsResult:
+            return ToolsResult()
+
+    monkeypatch.setattr(mcp_gateway.httpx2, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(
+        mcp_gateway,
+        "streamable_http_client",
+        fake_streamable_http_client,
+    )
+    monkeypatch.setattr(mcp_gateway, "ClientSession", FakeSession)
+
+    remote = RemoteMCP(
+        GatewayServerSpec(
+            server_id="remote",
+            transport="streamable-http",
+            url="https://example.test/mcp",
+            headers={"Authorization": "Bearer local-only"},
+        )
+    )
+
+    assert await remote.initialize() is True
+    assert remote.version == "2.4.0"
+    assert remote.protocol_version == "2026-07-28"
+    assert remote.capabilities == {"resources", "tools"}
+    assert remote.tools[0]["name"] == "lookup"
+    assert captured["url"] == "https://example.test/mcp"
+    assert captured["http_client_kwargs"]["headers"] == {
+        "Authorization": "Bearer local-only"
+    }
+
+    await remote.close()
+
+    assert captured["session_closed"] is True
+    assert captured["transport_closed"] is True
+    assert captured["http_client_closed"] is True
 
 
 async def test_gateway_routes_resource_and_prompt_requests_to_original_values(

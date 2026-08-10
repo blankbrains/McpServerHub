@@ -6,6 +6,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import (
@@ -24,8 +25,8 @@ if not DATABASE_URL:
 
 # Automatically select driver based on URL
 if DATABASE_URL.startswith("sqlite"):
-    _connect_args = {"check_same_thread": False}
-    _pool = {"poolclass": NullPool}  # SQLite doesn't need pool
+    _connect_args: dict[str, Any] = {"check_same_thread": False}
+    _pool: dict[str, Any] = {"poolclass": NullPool}  # SQLite doesn't need pool
 else:
     _connect_args = {}
     _pool = {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True, "pool_recycle": 3600}
@@ -60,13 +61,13 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def get_db():
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """获取异步数据库会话（async generator for FastAPI dependencies）。"""
     async with get_session() as session:
         yield session
 
 
-async def _run_migrations():
+async def _run_migrations() -> None:
     """运行数据库迁移：添加缺失的列到已有表。"""
     from sqlalchemy import text
 
@@ -95,7 +96,7 @@ async def _run_migrations():
             # SQLite fallback
             try:
                 result = await conn.execute(text("PRAGMA table_info(reviews)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "parent_id" not in cols:
                     await conn.execute(text("ALTER TABLE reviews ADD COLUMN parent_id INTEGER"))
                     await conn.commit()
@@ -120,7 +121,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "enabled" not in cols:
                     await conn.execute(
                         text("ALTER TABLE user_servers ADD COLUMN enabled BOOLEAN DEFAULT TRUE")
@@ -147,7 +148,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "agent" not in cols:
                     await conn.execute(
                         text("ALTER TABLE user_servers ADD COLUMN agent VARCHAR(50) DEFAULT ''")
@@ -177,7 +178,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(usage_stats)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "user_id" not in cols:
                     await conn.execute(
                         text("ALTER TABLE usage_stats ADD COLUMN user_id VARCHAR(255) DEFAULT ''")
@@ -207,7 +208,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(usage_stats)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "token_count" not in cols:
                     await conn.execute(
                         text("ALTER TABLE usage_stats ADD COLUMN token_count INTEGER DEFAULT 0")
@@ -234,7 +235,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(install_history)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "user_id" not in cols:
                     await conn.execute(
                         text(
@@ -273,7 +274,7 @@ async def _run_migrations():
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("PRAGMA table_info(user_servers)"))
-                cols = [row[1] for row in await result.fetchall()]
+                cols = [row[1] for row in result.fetchall()]
                 if "group_name" not in cols:
                     await conn.execute(
                         text(
@@ -477,10 +478,138 @@ async def _run_migrations():
     except Exception:
         logger.debug("迁移步骤 telemetry_events 扩展字段失败", exc_info=True)
 
+    telemetry_device_columns = {
+        "gateway_version": "VARCHAR(50) NOT NULL DEFAULT ''",
+        "runtime_version": "VARCHAR(50) NOT NULL DEFAULT ''",
+        "platform": "VARCHAR(50) NOT NULL DEFAULT ''",
+        "architecture": "VARCHAR(50) NOT NULL DEFAULT ''",
+    }
+    telemetry_inventory_columns = {
+        "server_version": "VARCHAR(50) DEFAULT ''",
+        "protocol_version": "VARCHAR(32) DEFAULT ''",
+        "capabilities": "TEXT DEFAULT '[]'",
+        "tool_count": "INTEGER DEFAULT 0",
+        "running": "BOOLEAN DEFAULT FALSE",
+        "header_keys": "TEXT DEFAULT '[]'",
+    }
+    try:
+        async with engine.begin() as conn:
+            device_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_devices")
+                }
+            )
+            for column_name, column_sql in telemetry_device_columns.items():
+                if column_name not in device_columns:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE telemetry_devices "
+                            f"ADD COLUMN {column_name} {column_sql}"
+                        )
+                    )
 
-async def init_db():
+            inventory_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_inventory")
+                }
+            )
+            for column_name, column_sql in telemetry_inventory_columns.items():
+                if column_name not in inventory_columns:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE telemetry_inventory "
+                            f"ADD COLUMN {column_name} {column_sql}"
+                        )
+                    )
+    except Exception:
+        logger.debug("迁移步骤遥测设备与清单扩展字段失败", exc_info=True)
+
+    # 将真实 tool_call 遥测幂等投影到兼容的 usage_stats 分析表。
+    # 旧版个人中心和管理员统计仍读取该表，因此需要保留历史兼容性。
+    try:
+        async with engine.begin() as conn:
+            usage_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("usage_stats")
+                }
+            )
+            if "source_event_id" not in usage_columns:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE usage_stats "
+                        "ADD COLUMN source_event_id VARCHAR(64)"
+                    )
+                )
+                usage_columns.add("source_event_id")
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_usage_stats_source_event_id "
+                    "ON usage_stats(source_event_id)"
+                )
+            )
+
+            telemetry_event_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_events")
+                }
+            )
+            required_usage_columns = {
+                "server_id",
+                "user_id",
+                "tool_name",
+                "status",
+                "duration_ms",
+                "token_count",
+                "created_at",
+                "source_event_id",
+            }
+            required_event_columns = {
+                "id",
+                "event_type",
+                "server_id",
+                "user_id",
+                "tool_name",
+                "status",
+                "duration_ms",
+                "input_tokens",
+                "output_tokens",
+                "occurred_at",
+            }
+            if required_usage_columns <= usage_columns and (
+                required_event_columns <= telemetry_event_columns
+            ):
+                await conn.execute(
+                    text(
+                        "INSERT INTO usage_stats "
+                        "(server_id, user_id, tool_name, status, duration_ms, "
+                        "token_count, created_at, source_event_id) "
+                        "SELECT COALESCE(event.server_id, ''), event.user_id, "
+                        "COALESCE(event.tool_name, ''), "
+                        "COALESCE(event.status, 'ok'), "
+                        "COALESCE(event.duration_ms, 0), "
+                        "COALESCE(event.input_tokens, 0) + "
+                        "COALESCE(event.output_tokens, 0), "
+                        "event.occurred_at, event.id "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.event_type = 'tool_call' "
+                        "AND NOT EXISTS ("
+                        "SELECT 1 FROM usage_stats AS usage "
+                        "WHERE usage.source_event_id = event.id"
+                        ")"
+                    )
+                )
+    except Exception:
+        logger.debug("迁移步骤 telemetry_events -> usage_stats 投影失败", exc_info=True)
+
+
+async def init_db() -> None:
     """初始化数据库：创建所有表 + 种子数据。"""
-    from mcp_hub.db.models import Base  # noqa: F401
+    import mcp_hub.db.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from mcp_hub.api.dependencies import get_current_user
+from mcp_hub.api.dependencies import get_current_user, get_process_admin
 from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
 from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.core.process_manager import get_process_manager
@@ -29,7 +32,10 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/servers/install")
-async def install_server(req: InstallRequest, user_id: str = Depends(get_current_user)):
+async def install_server(
+    req: InstallRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """将 Server 添加到用户的配置中（非实际安装）。
 
     在 Web 界面点击「一键安装」时，不尝试在服务器上运行 pip/npm 安装，
@@ -74,12 +80,11 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
             )
         await session.commit()
 
-    # 2. 更新状态和下载计数
-    await registry.update_status(req.server_id, "stopped")
+    # 2. 下载计数是市场级指标；运行状态由每个用户的本地 Gateway 上报。
     await registry.increment_download(req.server_id)
 
     # 3. 生成各 Agent 配置片段
-    configs = []
+    configs: list[dict[str, Any]] = []
     for agent_key in AGENT_CONFIGS:
         cfg = get_config_for_agent(display_name, command, agent_key)
         configs.append(cfg)
@@ -91,10 +96,15 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
 
             await session.execute(
                 text(
-                    "INSERT INTO install_history (server_id, version, action, status) "
-                    "VALUES (:sid, :ver, 'install', 'success')"
+                    "INSERT INTO install_history "
+                    "(server_id, user_id, version, action, status) "
+                    "VALUES (:sid, :uid, :ver, 'install', 'success')"
                 ),
-                {"sid": req.server_id, "ver": server_data.get("version", "?")},
+                {
+                    "sid": req.server_id,
+                    "uid": user_id,
+                    "ver": server_data.get("version", "?"),
+                },
             )
             await session.commit()
     except Exception:
@@ -113,16 +123,21 @@ async def install_server(req: InstallRequest, user_id: str = Depends(get_current
 
 
 @router.get("/servers/")
-async def list_servers():
-    """列出已安装的 Server。"""
+async def list_servers(
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
+    """列出 Hub 主机上由管理员集中管理的 Server。"""
     registry = Registry()
     servers = await registry.get_installed()
     return {"success": True, "data": servers}
 
 
 @router.get("/servers/{server_id:path}/status")
-async def get_status(server_id: str):
-    """获取 Server 运行状态。"""
+async def get_status(
+    server_id: str,
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
+    """获取 Hub 主机上的 Server 运行状态。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
     if not server:
@@ -143,8 +158,11 @@ async def get_status(server_id: str):
 
 
 @router.post("/servers/{server_id:path}/start")
-async def start_server(server_id: str, user_id: str = Depends(get_current_user)):
-    """启动 Server。"""
+async def start_server(
+    server_id: str,
+    user_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
+    """在显式启用的自托管 Hub 上启动 Server。"""
     # 检查是否已被当前用户禁用
     try:
         from sqlalchemy import select
@@ -202,9 +220,9 @@ async def start_server(server_id: str, user_id: str = Depends(get_current_user))
 @router.post("/servers/{server_id:path}/stop")
 async def stop_server(
     server_id: str,
-    _user_id: str = Depends(get_current_user),
-):
-    """停止 Server。"""
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
+    """在显式启用的自托管 Hub 上停止 Server。"""
     registry = Registry()
     pm = get_process_manager()
     await pm.kill(server_id)
@@ -213,68 +231,48 @@ async def stop_server(
 
 
 @router.post("/servers/{server_id:path}/uninstall")
-async def uninstall_server(server_id: str, user_id: str = Depends(get_current_user)):
-    """卸载 Server。"""
+async def uninstall_server(
+    server_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """从当前用户配置中移除 Server，不操作 Hub 主机或用户电脑的软件。"""
     registry = Registry()
-    pm = get_process_manager()
 
     server = await registry.get_by_id(server_id)
     if not server:
         raise ServerNotFoundError(server_id)
 
-    # 停止进程
-    await pm.kill(server_id)
-    # 重置状态
-    await registry.update_status(server_id, "not_installed")
+    from sqlalchemy import delete
 
-    # 从 user_servers 中移除（避免卸载后仍显示"已追踪"）
-    try:
-        from sqlalchemy import delete
+    from mcp_hub.db.database import async_session_factory
+    from mcp_hub.db.models import InstallHistoryModel, UserServerModel
 
-        from mcp_hub.db.database import async_session_factory
-        from mcp_hub.db.models import UserServerModel
-
-        async with async_session_factory() as session:
-            await session.execute(
-                delete(UserServerModel).where(
-                    UserServerModel.server_id == server_id,
-                    UserServerModel.user_id == user_id,
-                )
+    async with async_session_factory() as session:
+        await session.execute(
+            delete(UserServerModel).where(
+                UserServerModel.server_id == server_id,
+                UserServerModel.user_id == user_id,
             )
-            await session.commit()
-    except Exception as e:
-        logger.warning(
-            "manage.uninstall.user_servers_cleanup_failed", server_id=server_id, error=str(e)
         )
+        session.add(
+            InstallHistoryModel(
+                server_id=server_id,
+                user_id=user_id,
+                version=str(server.get("version", "")),
+                action="uninstall",
+                status="success",
+            )
+        )
+        await session.commit()
 
-    # 清理残留
-    try:
-        cmd = server.get("install_command", "")
-        if cmd and "pip" in cmd:
-            pkg = server.get("install_package", "")
-            if pkg:
-                import asyncio
-
-                proc = await asyncio.create_subprocess_exec(
-                    "pip",
-                    "uninstall",
-                    "-y",
-                    pkg,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                await proc.wait()
-    except Exception as e:
-        logger.warning("manage.uninstall.pip_cleanup_failed", server_id=server_id, error=str(e))
-
-    return {"success": True, "message": f"{server_id} 已卸载"}
+    return {"success": True, "message": f"{server_id} 已从你的配置中移除"}
 
 
 @router.get("/servers/{server_id:path}/config")
 async def get_server_config(
     server_id: str,
     agent: str = "generic",
-):
+) -> dict[str, Any]:
     """获取 Server 配置（用于复制到本地 Agent）。"""
     registry = Registry()
     server = await registry.get_by_id(server_id)
@@ -295,12 +293,11 @@ async def get_server_config(
 
 
 @router.get("/servers/config/download")
-async def download_all_config(_agent: str = "generic"):
+async def download_all_config(
+    _agent: str = "generic",
+    _admin_id: str = Depends(get_process_admin),
+) -> Response:
     """下载所有已安装 Server 的配置（mcp.json 格式），用于导入本地 Agent。"""
-    import tempfile
-
-    from fastapi.responses import FileResponse
-
     registry = Registry()
     installed = await registry.get_installed()
     if not installed:
@@ -308,24 +305,18 @@ async def download_all_config(_agent: str = "generic"):
 
     from mcp_hub.core.config_manager import command_config
 
-    config = {"mcpServers": {}}
+    server_configs: dict[str, dict[str, object]] = {}
     for s in installed:
         cmd = s.get("install_command", "")
         name = s["id"].split("/")[-1]
-        config["mcpServers"][name] = command_config(cmd)
+        server_configs[name] = command_config(cmd)
+    config: dict[str, Any] = {"mcpServers": server_configs}
 
-    # 写入临时文件并返回
     import json
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(config, tmp, indent=2, ensure_ascii=False)
-
-    return FileResponse(
-        tmp.name,
+    return Response(
+        content=json.dumps(config, indent=2, ensure_ascii=False),
         media_type="application/json",
-        filename="mcp-hub-config.json",
         headers={"Content-Disposition": "attachment; filename=mcp-hub-config.json"},
     )
 
@@ -334,7 +325,8 @@ async def download_all_config(_agent: str = "generic"):
 async def get_logs(
     server_id: str,
     lines: int = 50,
-):
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
     """获取 Server 日志。"""
     from pathlib import Path
 
@@ -353,7 +345,8 @@ async def search_logs(
     q: str = "",
     server_id: str | None = None,
     lines: int = 100,
-):
+    _admin_id: str = Depends(get_process_admin),
+) -> dict[str, Any]:
     """跨 Server 日志关键词搜索。
 
     支持:
@@ -378,7 +371,7 @@ async def search_logs(
     else:
         log_files = sorted(log_dir.glob("*.log"), reverse=True)
 
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
     servers_scanned = 0
 
     for log_file in log_files:
@@ -437,13 +430,15 @@ async def search_logs(
 
 
 @router.get("/servers/check-updates")
-async def check_updates(user_id: str = Depends(get_current_user)):
+async def check_updates(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
     """检查用户已安装的 Server 是否有新版本可用。"""
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import UserServerModel
 
     registry = Registry()
-    updates: list[dict] = []
+    updates: list[dict[str, Any]] = []
 
     async with async_session_factory() as session:
         result = await session.execute(

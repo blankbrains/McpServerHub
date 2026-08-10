@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import (
     Boolean,
-    Column,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from mcp_hub.db.database import Base
 
@@ -21,51 +24,67 @@ from mcp_hub.db.database import Base
 class ServerModel(Base):
     __tablename__ = "servers"
 
-    id = Column(String(255), primary_key=True)  # @org/server-name
-    name = Column(String(255), nullable=False)
-    display_name = Column(String(255), default="")
-    icon_url = Column(Text, nullable=True)  # SVG data URL
-    description = Column(Text, default="")
-    author = Column(String(255), default="")
-    publisher_type = Column(String(50), default="individual")
-    publisher_verified = Column(Boolean, default=False)
-    current_version = Column(String(50), default="")
-    latest_version = Column(String(50), default="")
-    categories = Column(Text, default="[]")  # JSON array
-    tags = Column(Text, default="[]")  # JSON array
-    install_type = Column(String(50), default="")
-    install_package = Column(String(255), default="")
-    install_command = Column(String(500), default="")
-    config_template = Column(Text, default="{}")
-    homepage = Column(String(500), default="")
-    license = Column(String(50), default="MIT")
-    security_level = Column(String(50), default="unreviewed")
-    security_audit_at = Column(DateTime, nullable=True)
-    network_access = Column(Boolean, default=False)
-    file_access = Column(Boolean, default=False)
-    rating = Column(Float, default=0.0)
-    review_count = Column(Integer, default=0)
-    download_count = Column(Integer, default=0)
-    favorite_count = Column(Integer, default=0)
-    status = Column(String(50), default="not_installed")
-    auto_restart = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)  # @org/server-name
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    icon_url: Mapped[str | None] = mapped_column(Text, nullable=True)  # SVG data URL
+    description: Mapped[str] = mapped_column(Text, default="", nullable=True)
+    author: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    publisher_type: Mapped[str] = mapped_column(
+        String(50), default="individual", nullable=True
+    )
+    publisher_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    current_version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    latest_version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    categories: Mapped[str] = mapped_column(Text, default="[]", nullable=True)  # JSON array
+    tags: Mapped[str] = mapped_column(Text, default="[]", nullable=True)  # JSON array
+    install_type: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    install_package: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    install_command: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    config_template: Mapped[str] = mapped_column(Text, default="{}", nullable=True)
+    homepage: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    license: Mapped[str] = mapped_column(String(50), default="MIT", nullable=True)
+    security_level: Mapped[str] = mapped_column(
+        String(50), default="unreviewed", nullable=True
+    )
+    security_audit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    network_access: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    file_access: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=True)
+    review_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    favorite_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50), default="not_installed", nullable=True
+    )
+    auto_restart: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
 
 
 class ReviewModel(Base):
     __tablename__ = "reviews"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    parent_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("servers.id"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    parent_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("reviews.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    rating = Column(Integer, nullable=False)
-    content = Column(Text, default="")
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, default="", nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
 
     __table_args__ = (UniqueConstraint("server_id", "user_id", name="uq_review_server_user"),)
 
@@ -73,23 +92,31 @@ class ReviewModel(Base):
 class UserModel(Base):
     __tablename__ = "users"
 
-    id = Column(String(255), primary_key=True)  # GitHub username
-    display_name = Column(String(255), default="")
-    avatar_url = Column(String(500), default="")
-    github_id = Column(String(255), default="")
-    email = Column(String(255), default="")
-    role = Column(String(50), default="user")
-    created_at = Column(DateTime, server_default=func.now())
-    last_login = Column(DateTime, server_default=func.now())
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)  # GitHub username
+    display_name: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    avatar_url: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    github_id: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    email: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    role: Mapped[str] = mapped_column(String(50), default="user", nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+    last_login: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
 
 class FavoriteModel(Base):
     __tablename__ = "favorites"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    server_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("servers.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "server_id", name="uq_favorite_user_server"),)
 
@@ -97,46 +124,62 @@ class FavoriteModel(Base):
 class HealthLogModel(Base):
     __tablename__ = "health_logs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
-    check_type = Column(String(50), nullable=False)  # L1_process / L2_connection / L3_functional
-    status = Column(String(50), nullable=False)  # ok / warning / error
-    message = Column(Text, default="")
-    response_time_ms = Column(Integer, default=0)
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("servers.id"), nullable=False, index=True
+    )
+    check_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # L1_process / L2_connection / L3_functional
+    status: Mapped[str] = mapped_column(String(50), nullable=False)  # ok / warning / error
+    message: Mapped[str] = mapped_column(Text, default="", nullable=True)
+    response_time_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
 
 class EventModel(Base):
     __tablename__ = "events"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    topic = Column(String(255), nullable=False, index=True)
-    publisher = Column(String(255), nullable=False)
-    payload = Column(Text, default="{}")
-    created_at = Column(DateTime, server_default=func.now(), index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    topic: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    publisher: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, default="{}", nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True, nullable=True
+    )
 
 
 class InstallHistoryModel(Base):
     __tablename__ = "install_history"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), ForeignKey("servers.id"), nullable=False, index=True)
-    user_id = Column(String(255), default="")
-    version = Column(String(50), default="")
-    action = Column(String(50), nullable=False)  # install / update / rollback / uninstall
-    status = Column(String(50), default="success")
-    created_at = Column(DateTime, server_default=func.now(), index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("servers.id"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    action: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # install / update / rollback / uninstall
+    status: Mapped[str] = mapped_column(String(50), default="success", nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True, nullable=True
+    )
 
 
 class SubscriptionModel(Base):
     __tablename__ = "subscriptions"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(
         String(255), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    topic = Column(String(255), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
 
 class UsageStatsModel(Base):
@@ -144,14 +187,21 @@ class UsageStatsModel(Base):
 
     __tablename__ = "usage_stats"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(255), nullable=False, index=True)
-    user_id = Column(String(255), default="", index=True)
-    tool_name = Column(String(255), default="")
-    status = Column(String(50), default="ok")  # ok / error
-    duration_ms = Column(Integer, default=0)
-    token_count = Column(Integer, default=0)
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    server_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), default="", index=True, nullable=True)
+    tool_name: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="ok", nullable=True)  # ok / error
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    source_event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("uq_usage_stats_source_event_id", "source_event_id", unique=True),
+    )
 
 
 class UserServerModel(Base):
@@ -159,14 +209,16 @@ class UserServerModel(Base):
 
     __tablename__ = "user_servers"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    server_id = Column(String(255), nullable=False, index=True)
-    matched = Column(Boolean, default=True)
-    enabled = Column(Boolean, default=True)
-    agent = Column(String(50), default="")
-    group_name = Column(String(100), default="")
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    server_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    matched: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
+    agent: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    group_name: Mapped[str] = mapped_column(String(100), default="", nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
     __table_args__ = (UniqueConstraint("user_id", "server_id", name="uq_user_server"),)
 
@@ -176,15 +228,19 @@ class NotificationModel(Base):
 
     __tablename__ = "notifications"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    type = Column(String(50), nullable=False)  # alert / update / reply / system
-    title = Column(String(255), nullable=False)
-    message = Column(Text, default="")
-    server_id = Column(String(255), default="")
-    link = Column(String(500), default="")
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # alert / update / reply / system
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=True)
+    server_id: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    link: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
 
 
 class PresetModel(Base):
@@ -192,16 +248,22 @@ class PresetModel(Base):
 
     __tablename__ = "presets"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
-    description = Column(Text, default="")
-    tags = Column(String(500), default="")  # 逗号分隔
-    servers = Column(Text, nullable=False)  # JSON: [{server_id, command, ...}]
-    download_count = Column(Integer, default=0)
-    rating = Column(Float, default=0.0)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=True)
+    tags: Mapped[str] = mapped_column(String(500), default="", nullable=True)  # 逗号分隔
+    servers: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # JSON: [{server_id, command, ...}]
+    download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
 
 
 class TelemetryDeviceModel(Base):
@@ -209,14 +271,34 @@ class TelemetryDeviceModel(Base):
 
     __tablename__ = "telemetry_devices"
 
-    id = Column(String(64), primary_key=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    name = Column(String(100), nullable=False)
-    agent_type = Column(String(32), nullable=False, default="generic", index=True)
-    token_hash = Column(String(64), nullable=False, unique=True, index=True)
-    created_at = Column(DateTime, server_default=func.now())
-    last_seen_at = Column(DateTime, nullable=True, index=True)
-    revoked_at = Column(DateTime, nullable=True, index=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    agent_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="generic", index=True
+    )
+    gateway_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=""
+    )
+    runtime_version: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=""
+    )
+    platform: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    architecture: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=""
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
 
 
 class TelemetryEventModel(Base):
@@ -224,34 +306,44 @@ class TelemetryEventModel(Base):
 
     __tablename__ = "telemetry_events"
 
-    id = Column(String(64), primary_key=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    device_id = Column(
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    device_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("telemetry_devices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    event_type = Column(String(32), nullable=False, index=True)
-    session_id = Column(String(64), default="", index=True)
-    server_id = Column(String(255), default="", index=True)
-    tool_name = Column(String(255), default="")
-    operation = Column(String(64), default="")
-    status = Column(String(32), default="ok", index=True)
-    error_code = Column(String(64), default="", index=True)
-    duration_ms = Column(Integer, default=0)
-    input_tokens = Column(Integer, default=0)
-    output_tokens = Column(Integer, default=0)
-    input_bytes = Column(Integer, default=0)
-    output_bytes = Column(Integer, default=0)
-    cpu_percent = Column(Float, nullable=True)
-    memory_bytes = Column(Integer, nullable=True)
-    process_uptime_seconds = Column(Integer, nullable=True)
-    queue_depth = Column(Integer, nullable=True)
-    server_version = Column(String(50), default="")
-    transport = Column(String(32), default="stdio")
-    occurred_at = Column(DateTime, nullable=False, index=True)
-    received_at = Column(DateTime, server_default=func.now(), index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(
+        String(64), default="", index=True, nullable=True
+    )
+    server_id: Mapped[str] = mapped_column(
+        String(255), default="", index=True, nullable=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    operation: Mapped[str] = mapped_column(String(64), default="", nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), default="ok", index=True, nullable=True
+    )
+    error_code: Mapped[str] = mapped_column(
+        String(64), default="", index=True, nullable=True
+    )
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    input_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    output_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    cpu_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    memory_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    process_uptime_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queue_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    server_version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    transport: Mapped[str] = mapped_column(String(32), default="stdio", nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True, nullable=True
+    )
 
 
 class TelemetryInventoryModel(Base):
@@ -259,24 +351,38 @@ class TelemetryInventoryModel(Base):
 
     __tablename__ = "telemetry_inventory"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    device_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    device_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("telemetry_devices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    server_name = Column(String(255), nullable=False)
-    transport = Column(String(32), default="stdio")
-    command_name = Column(String(255), default="")
-    env_keys = Column(Text, default="[]")
-    config_hash = Column(String(64), nullable=False)
-    enabled = Column(Boolean, default=True)
-    active = Column(Boolean, default=True, index=True)
-    configuration_error = Column(String(64), default="")
-    discovered_at = Column(DateTime, nullable=False, index=True)
-    last_seen_at = Column(DateTime, nullable=False, index=True)
+    server_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    transport: Mapped[str] = mapped_column(String(32), default="stdio", nullable=True)
+    command_name: Mapped[str] = mapped_column(String(255), default="", nullable=True)
+    env_keys: Mapped[str] = mapped_column(Text, default="[]", nullable=True)
+    header_keys: Mapped[str] = mapped_column(Text, default="[]", nullable=True)
+    config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    server_version: Mapped[str] = mapped_column(
+        String(50), default="", nullable=True
+    )
+    protocol_version: Mapped[str] = mapped_column(
+        String(32), default="", nullable=True
+    )
+    capabilities: Mapped[str] = mapped_column(Text, default="[]", nullable=True)
+    tool_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    running: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, index=True, nullable=True
+    )
+    configuration_error: Mapped[str] = mapped_column(
+        String(64), default="", nullable=True
+    )
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
     __table_args__ = (
         UniqueConstraint(

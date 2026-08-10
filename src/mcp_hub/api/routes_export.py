@@ -3,38 +3,36 @@
 from __future__ import annotations
 
 import json
-import tempfile
 
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 
-from mcp_hub.core.registry import Registry
+from mcp_hub.api.dependencies import get_current_user
+from mcp_hub.api.routes_config import download_config
 
 router = APIRouter(tags=["export"])
 
 
 @router.get("/export/config")
-async def export_config(share: bool = False):
-    """导出配置。share=true 时包含分享信息。"""
-    registry = Registry()
-    installed = await registry.get_installed()
-    config = {"mcpServers": {}}
-    for s in installed:
-        name = s["id"].split("/")[-1]
-        config["mcpServers"][name] = {"command": s.get("install_command", "")}
+async def export_config(
+    share: bool = False,
+    user_id: str = Depends(get_current_user),
+) -> Response:
+    """导出当前用户启用的配置；share=true 时附带非敏感分享元数据。"""
+    source = await download_config(agent="generic", user_id=user_id)
+    config = json.loads(bytes(source.body))
+    server_configs = config.get("mcpServers", {})
 
     if share:
-        # Generate a shareable link/description
         config["_meta"] = {
             "exported_by": "mcp-hub",
-            "version": "0.1.0",
-            "server_count": len(installed),
+            "version": "0.2.0",
+            "server_count": len(server_configs) if isinstance(server_configs, dict) else 0,
         }
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(config, tmp, indent=2, ensure_ascii=False)
-
     fn = "mcp-hub-share.json" if share else "mcp-hub-config.json"
-    return FileResponse(tmp.name, media_type="application/json", filename=fn)
+    return Response(
+        content=json.dumps(config, indent=2, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )

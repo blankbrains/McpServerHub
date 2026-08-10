@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from mcp_hub.core.agent_config import get_agent_profiles
 from mcp_hub.logging_config import get_logger
@@ -22,7 +23,7 @@ from mcp_hub.logging_config import get_logger
 logger = get_logger(__name__)
 
 # 已知 AI Agent 的 MCP 配置文件路径与格式，和配置生成共用同一事实来源。
-KNOWN_AGENT_PATHS: dict[str, dict] = {
+KNOWN_AGENT_PATHS: dict[str, dict[str, Any]] = {
     agent_type: {
         "name": profile.name,
         "paths": list(profile.paths),
@@ -41,7 +42,7 @@ class AgentMCPConfig:
     agent_name: str
     paths_found: list[str] = field(default_factory=list)
     server_names: list[str] = field(default_factory=list)
-    server_details: dict[str, dict] = field(default_factory=dict)
+    server_details: dict[str, dict[str, Any]] = field(default_factory=dict)
     error: str | None = None
 
 
@@ -80,7 +81,10 @@ class Conflict:
 class LocalAgentDiscovery:
     """本地 AI Agent MCP 配置发现器。"""
 
-    def __init__(self, agent_paths: dict | None = None) -> None:
+    def __init__(
+        self,
+        agent_paths: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         self._agent_paths = agent_paths or KNOWN_AGENT_PATHS
 
     async def discover_all(self) -> DiscoverResult:
@@ -178,7 +182,7 @@ class LocalAgentDiscovery:
 
         return conflicts
 
-    async def get_agent_summary(self) -> dict:
+    async def get_agent_summary(self) -> dict[str, Any]:
         """获取 Agent 摘要 —— 供 Dashboard 使用。"""
         discover = await self.discover_all()
         return {
@@ -199,7 +203,11 @@ class LocalAgentDiscovery:
 
     # ── 内部方法 ────────────────────────────────────────────
 
-    async def _discover_agent(self, agent_id: str, agent_info: dict) -> AgentMCPConfig:
+    async def _discover_agent(
+        self,
+        agent_id: str,
+        agent_info: dict[str, Any],
+    ) -> AgentMCPConfig:
         """发现单个 Agent 的配置。"""
         result = AgentMCPConfig(
             agent_id=agent_id,
@@ -221,12 +229,19 @@ class LocalAgentDiscovery:
                         content = tomllib.load(file)
                 else:
                     content = json.loads(p.read_text(encoding="utf-8"))
-                mcp_servers = content.get(agent_info.get("server_key", "mcpServers"), {})
+                if not isinstance(content, dict):
+                    raise ValueError("配置文件根节点必须是对象")
+                server_key = str(agent_info.get("server_key", "mcpServers"))
+                mcp_servers = content.get(server_key, {})
+                if not isinstance(mcp_servers, dict):
+                    raise ValueError(f"{server_key} 必须是对象")
                 if mcp_servers:
                     result.paths_found.append(str(p))
                     for srv_name, srv_config in mcp_servers.items():
-                        result.server_names.append(srv_name)
-                        result.server_details[srv_name] = (
+                        normalized_name = str(srv_name)
+                        if normalized_name not in result.server_details:
+                            result.server_names.append(normalized_name)
+                        result.server_details[normalized_name] = (
                             srv_config if isinstance(srv_config, dict) else {}
                         )
             except (json.JSONDecodeError, ValueError) as e:

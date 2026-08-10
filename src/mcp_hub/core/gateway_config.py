@@ -22,24 +22,50 @@ _ENV_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 @dataclass(frozen=True)
 class GatewayServerSpec:
-    """Validated stdio process definition for one local MCP Server."""
+    """Validated local or remote MCP Server connection definition."""
 
     server_id: str
-    command: str
+    command: str = ""
     args: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
     enabled: bool = True
     transport: str = "stdio"
     version: str = ""
+    url: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
+    header_env: dict[str, str] = field(default_factory=dict)
+    bearer_token_env_var: str | None = None
 
     @property
     def executable(self) -> str:
+        if self.transport != "stdio" or not self.command:
+            raise ValueError(f"MCP Server {self.server_id} does not define a stdio executable")
         return self.command
 
     def process_env(self, base_env: dict[str, str]) -> dict[str, str]:
         """Merge only this Server's explicitly authorized environment variables."""
         return {**base_env, **self.env}
+
+    def resolved_headers(self, base_env: dict[str, str]) -> dict[str, str]:
+        """Resolve explicitly configured remote header environment references."""
+        headers = dict(self.headers)
+        for header_name, env_name in self.header_env.items():
+            value = base_env.get(env_name)
+            if value is None:
+                raise ValueError(
+                    f"MCP Server {self.server_id} requires environment variable {env_name}"
+                )
+            headers[header_name] = value
+        if self.bearer_token_env_var:
+            token = base_env.get(self.bearer_token_env_var)
+            if token is None:
+                raise ValueError(
+                    f"MCP Server {self.server_id} requires environment variable "
+                    f"{self.bearer_token_env_var}"
+                )
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
 
     def inventory_entry(self) -> dict[str, Any]:
         """Return a privacy-preserving inventory record without values or arguments."""
@@ -49,6 +75,16 @@ class GatewayServerSpec:
             "env_keys": sorted(self.env),
             "cwd": self.cwd or "",
             "transport": self.transport,
+            "url": self.url,
+            "header_keys": sorted(
+                {
+                    *self.headers,
+                    *self.header_env,
+                    *(["Authorization"] if self.bearer_token_env_var else []),
+                }
+            ),
+            "header_env": dict(sorted(self.header_env.items())),
+            "bearer_token_env_var": self.bearer_token_env_var or "",
         }
         fingerprint = hashlib.sha256(
             json.dumps(
@@ -61,8 +97,15 @@ class GatewayServerSpec:
         return {
             "server_name": self.server_id,
             "transport": self.transport,
-            "command_name": Path(self.command).name,
+            "command_name": Path(self.command).name if self.command else "",
             "env_keys": sorted(self.env),
+            "header_keys": sorted(
+                {
+                    *self.headers,
+                    *self.header_env,
+                    *(["Authorization"] if self.bearer_token_env_var else []),
+                }
+            ),
             "config_hash": fingerprint,
             "enabled": self.enabled,
         }
@@ -115,14 +158,100 @@ def _normalize_env(raw_env: Any) -> dict[str, str]:
     return env
 
 
+def _normalize_headers(raw_headers: Any) -> dict[str, str]:
+    if raw_headers is None:
+        return {}
+    if not isinstance(raw_headers, dict):
+        raise ValueError("MCP Server headers must be an object")
+
+    headers: dict[str, str] = {}
+    for raw_key, raw_value in raw_headers.items():
+        key = str(raw_key).strip()
+        if not key or any(char in key for char in "\r\n:"):
+            raise ValueError(f"Invalid HTTP header name: {key}")
+        if not isinstance(raw_value, (str, int, float, bool)):
+            raise ValueError(f"HTTP header {key} must be a scalar value")
+        value = str(raw_value)
+        if "\r" in value or "\n" in value:
+            raise ValueError(f"HTTP header {key} contains an invalid line break")
+        headers[key] = value
+    return headers
+
+
+def _normalize_header_env(raw_headers: Any) -> dict[str, str]:
+    headers = _normalize_headers(raw_headers)
+    for header_name, env_name in headers.items():
+        if not _ENV_NAME_PATTERN.fullmatch(env_name):
+            raise ValueError(
+                f"HTTP header {header_name} references invalid environment variable {env_name}"
+            )
+    return headers
+
+
+def _normalize_transport(raw: dict[str, Any]) -> str:
+    configured = str(raw.get("type") or raw.get("transport") or "").strip().lower()
+    if not configured:
+        configured = "streamable-http" if raw.get("url") else "stdio"
+    aliases = {
+        "stdio": "stdio",
+        "http": "streamable-http",
+        "streamable-http": "streamable-http",
+        "streamable_http": "streamable-http",
+        "sse": "sse",
+    }
+    try:
+        return aliases[configured]
+    except KeyError as exc:
+        raise ValueError(f"unsupported transport: {configured}") from exc
+
+
 def parse_gateway_server(server_id: str, raw: Any) -> GatewayServerSpec:
     """Validate an MCP client JSON entry and preserve its structured process data."""
     if not isinstance(raw, dict):
         raise ValueError(f"MCP Server {server_id} configuration must be an object")
 
-    transport = str(raw.get("type") or raw.get("transport") or "stdio").strip().lower()
+    transport = _normalize_transport(raw)
     if transport != "stdio":
-        raise ValueError(f"MCP Server {server_id} uses unsupported transport: {transport}")
+        raw_url = raw.get("url", "")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            raise ValueError(f"MCP Server {server_id} URL cannot be empty")
+        url = raw_url.strip()
+        if not url.lower().startswith(("http://", "https://")):
+            raise ValueError(f"MCP Server {server_id} URL must use http or https")
+        configured_auth = str(raw.get("auth") or "").strip().lower()
+        static_headers = {
+            **_normalize_headers(raw.get("http_headers")),
+            **_normalize_headers(raw.get("headers")),
+        }
+        header_env = _normalize_header_env(raw.get("env_http_headers"))
+        bearer_token_env_var = raw.get("bearer_token_env_var")
+        if bearer_token_env_var is not None and (
+            not isinstance(bearer_token_env_var, str)
+            or not _ENV_NAME_PATTERN.fullmatch(bearer_token_env_var)
+        ):
+            raise ValueError(
+                f"MCP Server {server_id} bearer_token_env_var is invalid"
+            )
+        if (
+            configured_auth in {"oauth", "chatgpt"}
+            and not static_headers
+            and not header_env
+            and not bearer_token_env_var
+        ):
+            raise ValueError(
+                f"MCP Server {server_id} uses {configured_auth} authentication "
+                "that cannot be migrated to the local Gateway"
+            )
+        return GatewayServerSpec(
+            server_id=server_id,
+            enabled=bool(raw.get("enabled", True)),
+            transport=transport,
+            version=str(raw.get("version", "")),
+            url=url,
+            headers=static_headers,
+            header_env=header_env,
+            bearer_token_env_var=bearer_token_env_var,
+        )
 
     raw_command = raw.get("command", "")
     if not isinstance(raw_command, str) or not raw_command.strip():
@@ -210,15 +339,35 @@ def write_gateway_config(
     payload = {
         "version": 1,
         GATEWAY_SERVER_KEY: {
-            spec.server_id: {
-                "command": spec.command,
-                "args": list(spec.args),
-                "env": spec.env,
-                **({"cwd": spec.cwd} if spec.cwd else {}),
-                "enabled": spec.enabled,
-                "transport": spec.transport,
-                **({"version": spec.version} if spec.version else {}),
-            }
+            spec.server_id: (
+                {
+                    "command": spec.command,
+                    "args": list(spec.args),
+                    "env": spec.env,
+                    **({"cwd": spec.cwd} if spec.cwd else {}),
+                    "enabled": spec.enabled,
+                    "transport": spec.transport,
+                    **({"version": spec.version} if spec.version else {}),
+                }
+                if spec.transport == "stdio"
+                else {
+                    "url": spec.url,
+                    "headers": spec.headers,
+                    **(
+                        {"env_http_headers": spec.header_env}
+                        if spec.header_env
+                        else {}
+                    ),
+                    **(
+                        {"bearer_token_env_var": spec.bearer_token_env_var}
+                        if spec.bearer_token_env_var
+                        else {}
+                    ),
+                    "enabled": spec.enabled,
+                    "transport": spec.transport,
+                    **({"version": spec.version} if spec.version else {}),
+                }
+            )
             for spec in specs
         },
     }

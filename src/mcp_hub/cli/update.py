@@ -17,10 +17,10 @@ console = Console()
 @click.command("update")
 @click.argument("server_name", required=False)
 @click.option("--check", is_flag=True, help="只检查不更新")
-def update(server_name: str | None, check: bool):
+def update(server_name: str | None, check: bool) -> None:
     """检查/执行 MCP Server 版本更新。"""
 
-    async def _run():
+    async def _run() -> None:
         vm = VersionManager()
         console.print("[bold]🔍 正在检查版本更新...[/bold]")
 
@@ -52,10 +52,10 @@ def update(server_name: str | None, check: bool):
 
 @click.command("upgrade")
 @click.argument("server_name", required=True)
-def upgrade(server_name: str):
+def upgrade(server_name: str) -> None:
     """升级指定 Server 到最新版本。"""
 
-    async def _run():
+    async def _run() -> None:
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         vm = VersionManager()
 
@@ -80,10 +80,10 @@ def upgrade(server_name: str):
 @click.command("rollback")
 @click.argument("server_name", required=True)
 @click.option("--to", "version", help="回滚到指定版本")
-def rollback(server_name: str, version: str | None):
+def rollback(server_name: str, version: str | None) -> None:
     """回滚 Server 到上一版本或指定版本。"""
 
-    async def _run():
+    async def _run() -> None:
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         vm = VersionManager()
 
@@ -104,7 +104,7 @@ def rollback(server_name: str, version: str | None):
 
 @click.command("version-history")
 @click.argument("server_name", required=True)
-def version_history(server_name: str):
+def version_history(server_name: str) -> None:
     """查看 Server 的版本历史。"""
     import asyncio
 
@@ -112,7 +112,7 @@ def version_history(server_name: str):
 
     from mcp_hub.db.database import async_session_factory
 
-    async def _run():
+    async def _run() -> None:
         sid = f"@community/{server_name}" if "/" not in server_name else server_name
         async with async_session_factory() as session:
             rows = await session.execute(

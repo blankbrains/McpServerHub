@@ -427,10 +427,10 @@ export default function MyConfig() {
           <div className="mt-4 space-y-3">
             <button onClick={handleDownload} disabled={downloading}
               className="w-full py-3 bg-gray-800 text-white rounded-xl hover:bg-gray-900 font-medium transition-colors disabled:opacity-50">
-              {downloading ? '生成中...' : '📥 下载配置文件（用于替换本地 Agent 配置）'}
+              {downloading ? '生成中...' : '📥 导出原生 Agent 配置'}
             </button>
             <p className="text-xs text-gray-400 text-center">
-              下载结果只包含你当前追踪且可生成配置的 Server；替换本地 Agent 配置文件并重启后生效
+              原生配置适合不使用监控的直接连接。已经接入 Gateway 时请使用下方 CLI 同步，不要用此文件覆盖 Agent 配置。
             </p>
             <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
               <p className="font-medium mb-1">当前追踪列表：</p>
@@ -448,7 +448,7 @@ export default function MyConfig() {
         {servers.length > 0 && (
           <div className="bg-gray-50 rounded-lg p-4 mt-4">
             <p className="text-sm font-medium text-gray-700 mb-2">🔄 一键同步到本地（CLI）</p>
-            <p className="text-xs text-gray-500 mb-2">在你的本地机器上运行以下命令，自动下载配置并写入本地文件：</p>
+            <p className="text-xs text-gray-500 mb-2">先完成 agent setup，再在本地运行以下命令更新 Gateway 管理清单：</p>
             <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
               <pre className="text-green-400 text-xs font-mono">
                 {`mcp-hub config sync --server ${window.location.origin}`}
@@ -462,7 +462,7 @@ export default function MyConfig() {
               📋 复制命令
             </button>
             <p className="text-xs text-gray-400 mt-2">
-              需要在本机安装 mcp-hub-cli 并先使用 mcp-hub login 登录。同步会在覆盖前确认并创建带时间戳备份；随后可在监控页复制 mcp-hub agent setup 命令启用本地监控。
+              需要先安装 mcp-hub-cli、使用 mcp-hub login 登录，并在监控页完成 agent setup。同步只更新 gateway.json，写入前会确认和备份，并保留本地环境变量、请求头与工作目录。
             </p>
           </div>
         )}

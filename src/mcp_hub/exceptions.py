@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class McpHubError(Exception):
     """所有 McpHub 异常的基类。
@@ -20,7 +22,7 @@ class McpHubError(Exception):
         self,
         message: str,
         code: str = "INTERNAL_ERROR",
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
         http_status: int = 400,
     ) -> None:
         self.code = code
@@ -48,7 +50,7 @@ class ServerAlreadyRunningError(McpHubError):
     """Server 已在运行，不允许重复操作。"""
 
     def __init__(self, server_id: str, pid: int | None = None) -> None:
-        details = {"server_id": server_id}
+        details: dict[str, Any] = {"server_id": server_id}
         if pid is not None:
             details["pid"] = pid
         super().__init__(
@@ -107,7 +109,7 @@ class UnsupportedInstallTypeError(McpHubError):
 class ConfigError(McpHubError):
     """配置相关错误。"""
 
-    def __init__(self, message: str, details: dict | None = None) -> None:
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message,
             code="CONFIG_ERROR",
@@ -122,7 +124,7 @@ class ConfigError(McpHubError):
 class AuthError(McpHubError):
     """认证/授权失败。"""
 
-    def __init__(self, message: str, details: dict | None = None) -> None:
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message,
             code="AUTH_ERROR",
@@ -161,7 +163,7 @@ class ProcessError(McpHubError):
         self,
         message: str,
         server_id: str | None = None,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         d = details or {}
         if server_id:
@@ -195,7 +197,7 @@ class GatewayError(McpHubError):
         self,
         message: str,
         server_id: str | None = None,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         d = details or {}
         if server_id:
@@ -214,7 +216,7 @@ class GatewayError(McpHubError):
 class ValidationError(McpHubError):
     """输入验证失败。"""
 
-    def __init__(self, message: str, details: dict | None = None) -> None:
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message=message,
             code="VALIDATION_ERROR",
@@ -233,7 +235,7 @@ class VersionError(McpHubError):
         self,
         message: str,
         server_id: str | None = None,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         d = details or {}
         if server_id:

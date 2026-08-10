@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 import httpx
@@ -15,7 +16,7 @@ from mcp_hub.db.repositories import UserRepository
 settings = get_settings()
 
 
-def simple_jwt_encode(payload: dict) -> str:
+def simple_jwt_encode(payload: dict[str, Any]) -> str:
     """生产级 JWT 编码（纯 HMAC-SHA256，无外部依赖）。"""
     import base64
     import hashlib
@@ -36,7 +37,7 @@ def simple_jwt_encode(payload: dict) -> str:
     return f"{message}.{sig_b64}"
 
 
-def simple_jwt_decode(token: str) -> dict | None:
+def simple_jwt_decode(token: str) -> dict[str, Any] | None:
     """验证并解码 JWT。"""
     import base64
     import hashlib
@@ -53,9 +54,12 @@ def simple_jwt_decode(token: str) -> dict | None:
     if not hmac.compare_digest(expected_sig, actual_sig):
         return None
     try:
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "=="))
+        decoded = json.loads(base64.urlsafe_b64decode(payload_b64 + "=="))
     except (json.JSONDecodeError, Exception):
         return None
+    if not isinstance(decoded, dict):
+        return None
+    payload: dict[str, Any] = decoded
     if payload.get("exp", 0) < time.time():
         return None
     return payload
@@ -100,10 +104,11 @@ class AuthService:
             if resp.status_code != 200:
                 return None
             data = resp.json()
-            return data.get("access_token")
+            token = data.get("access_token") if isinstance(data, dict) else None
+            return token if isinstance(token, str) else None
 
     @staticmethod
-    async def get_github_user(access_token: str) -> dict | None:
+    async def get_github_user(access_token: str) -> dict[str, Any] | None:
         """通过 access_token 获取 GitHub 用户信息。"""
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -116,9 +121,14 @@ class AuthService:
             )
             if resp.status_code != 200:
                 return None
-            return resp.json()
+            data = resp.json()
+            return data if isinstance(data, dict) else None
 
-    async def authenticate_with_github(self, code: str, state: str = "") -> dict:
+    async def authenticate_with_github(
+        self,
+        code: str,
+        state: str = "",
+    ) -> dict[str, Any]:
         """完整的 GitHub OAuth 认证流程。"""
         # Step 0: 验证 CSRF state
         if state and state not in self._oauth_states:
@@ -163,7 +173,7 @@ class AuthService:
             "avatar_url": user.get("avatar_url", ""),
         }
 
-    async def authenticate(self, user_data: dict) -> dict:
+    async def authenticate(self, user_data: dict[str, Any]) -> dict[str, Any]:
         """直接创建/认证用户（用于 CLI 等场景）。"""
         async with async_session_factory() as session:
             repo = UserRepository(session)
@@ -180,7 +190,7 @@ class AuthService:
             "user_id": user["id"],
         }
 
-    async def verify_token(self, token: str) -> dict | None:
+    async def verify_token(self, token: str) -> dict[str, Any] | None:
         """验证 token 并返回 payload（不再创建用户，创建逻辑移至 OAuth 回调）。"""
         payload = simple_jwt_decode(token)
         if not payload:

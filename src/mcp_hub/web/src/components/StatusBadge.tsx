@@ -6,6 +6,8 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
   const config: Record<string, { color: string; icon: string; label: string }> = {
     running: { color: 'bg-green-100 text-green-800', icon: '🟢', label: '运行中' },
     stopped: { color: 'bg-gray-100 text-gray-600', icon: '⏹', label: '已停止' },
+    offline: { color: 'bg-amber-100 text-amber-800', icon: '○', label: '设备离线' },
+    not_connected: { color: 'bg-gray-100 text-gray-600', icon: '—', label: '未接入 Gateway' },
     error: { color: 'bg-red-100 text-red-800', icon: '🔴', label: '异常' },
     not_installed: { color: 'bg-gray-50 text-gray-400', icon: '📥', label: '未安装' },
   }

@@ -1,589 +1,322 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  healthCheck, getTrending, getTopRated, apiGet, connectStatusSSE,
-  ServerInfo, downloadConfig, getAuthHeaders, getAuthState, getFavoriteServers, uploadConfig, getMonitorSummary, getTopReliable,
+  ApiRequestError,
+  ServerInfo,
+  apiGet,
+  getAuthState,
+  getTopRated,
+  getTrending,
+  healthCheck,
 } from '../api/client'
-import ServerCard from '../components/ServerCard'
-import LogViewer from '../components/LogViewer'
 import InfoTooltip from '../components/InfoTooltip'
+import ServerCard from '../components/ServerCard'
+import StatusBadge from '../components/StatusBadge'
+
+interface MonitorServer {
+  server_id: string
+  name: string
+  status: string
+  running: boolean
+  enabled: boolean
+  call_count_7d: number
+  token_consumption: number
+  reliability_score: number
+}
+
+interface MonitorData {
+  summary: {
+    total_servers: number
+    running: number
+    stopped: number
+    offline: number
+    total_calls_7d: number
+    total_token_consumption: number
+    avg_reliability: number
+  }
+  servers: MonitorServer[]
+}
+
+interface TelemetrySummary {
+  active_devices: number
+  active_servers: number
+  total_calls: number
+  total_tokens: number
+  success_rate: number
+  p95_duration_ms: number
+  current_queue_depth: number
+  last_seen_at: string | null
+}
+
+function fmtNum(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+  return String(value)
+}
+
+function formatLastSeen(value: string | null | undefined): string {
+  if (!value) return '尚未收到数据'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '时间未知' : date.toLocaleString()
+}
 
 export default function Dashboard() {
-  const auth = getAuthState()
-  const isAuthenticated = Boolean(auth.token)
-  const userId = auth.userId
-  const [health, setHealth] = useState<any>(null)
+  const authenticated = Boolean(getAuthState().token)
+  const [monitor, setMonitor] = useState<MonitorData | null>(null)
+  const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null)
   const [trending, setTrending] = useState<ServerInfo[]>([])
   const [topRated, setTopRated] = useState<ServerInfo[]>([])
-  const [installed, setInstalled] = useState<ServerInfo[]>([])
-  const [trackedServers, setTrackedServers] = useState<any[]>([])  // 来自 monitor API 的所有追踪 Server
-  const [userServers, setUserServers] = useState<any[]>([])  // 来自 /config/user-servers 的用户追踪 Server（SaaS 概览）
-  const [runningCount, setRunningCount] = useState<number>(0)
-  const [totalAvailable, setTotalAvailable] = useState(0)
+  const [version, setVersion] = useState('')
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedLog, setSelectedLog] = useState<string>('')
-  const [logSearchQuery, setLogSearchQuery] = useState('')
-  const [logSearching, setLogSearching] = useState(false)
-  const [logResults, setLogResults] = useState<any[]>([])
-  const [favorites, setFavorites] = useState<string[]>([])
-  const [recent, setRecent] = useState<ServerInfo[]>(() => {
-    try { return JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]') } catch { return [] }
-  })
-  const [uploadResult, setUploadResult] = useState<any>(() => {
-    try { return JSON.parse(localStorage.getItem('mcp_hub_upload_result') || 'null') } catch { return null }
-  })
-  // Monitor states
-  const [monitorSummary, setMonitorSummary] = useState<any>(null)
-  const [topReliable, setTopReliable] = useState<any[]>([])
-  const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
-  const [updateServerIds, setUpdateServerIds] = useState<Set<string>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [h, t, r, inst, monitor] = await Promise.all([
-          healthCheck(),
-          getTrending(),
-          getTopRated(),
-          apiGet<ServerInfo[]>('/servers/'),
-          apiGet<any>('/monitor/dashboard').catch(() => null),
+  const load = async (refresh = false) => {
+    if (refresh) setRefreshing(true)
+    setError('')
+    try {
+      const [healthResult, trendingResult, topRatedResult] = await Promise.all([
+        healthCheck(),
+        getTrending(),
+        getTopRated(),
+      ])
+      setVersion(healthResult.version || healthResult.data?.version || '')
+      setTrending(trendingResult.slice(0, 3))
+      setTopRated(topRatedResult.slice(0, 3))
+
+      if (authenticated) {
+        const [monitorResult, telemetryResult] = await Promise.all([
+          apiGet<MonitorData>('/monitor/dashboard'),
+          apiGet<TelemetrySummary>('/telemetry/summary?days=7'),
         ])
-        setHealth(h.data || h)
-        setTrending(t.slice(0, 6))
-        setTopRated(r.slice(0, 6))
-        if (inst.data) setInstalled(inst.data)
-        // 从 monitor API 加载所有追踪 Server（含已安装和未安装但追踪的）
-        if (monitor?.data?.servers) {
-          setTrackedServers(monitor.data.servers)
-        }
-        // 总追踪数用 monitor API
-        if (monitor?.data?.summary?.total_servers) {
-          setTotalAvailable(monitor.data.summary.total_servers)
-        } else {
-          const healthR = await apiGet<any>('/health/servers')
-          if (healthR.data?.total_available) setTotalAvailable(healthR.data.total_available)
-        }
-      } catch (e) {
-        console.error('Failed to load dashboard:', e)
-        setError('加载仪表盘数据失败，请检查网络连接或刷新页面重试')
-      } finally {
-        setLoading(false)
+        setMonitor(monitorResult.data)
+        setTelemetry(telemetryResult.data)
+      } else {
+        setMonitor(null)
+        setTelemetry(null)
       }
+    } catch (loadError) {
+      setError(
+        loadError instanceof ApiRequestError && loadError.status === 401
+          ? '登录状态已失效，请重新登录。'
+          : '仪表盘数据加载失败，请稍后重试。'
+      )
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    load()
-
-    // Load monitoring data
-    getMonitorSummary().then(r => setMonitorSummary(r.data)).catch(() => {})
-    getTopReliable(5).then(r => setTopReliable(r.data || [])).catch(() => {})
-    // 加载个性化推荐
-    if (userId) {
-      apiGet<ServerInfo[]>(`/market/recommendations?user_id=${encodeURIComponent(userId)}&limit=6`)
-        .then(r => setRecommendations(r.data || [])).catch(() => setRecommendations([]))
-    }
-
-    const es = connectStatusSSE((data) => {
-      setRunningCount(Object.keys(data.running || {}).length)
-    })
-    return () => es.close()
-  }, [])
-
-  // Recent items are local UI history. Favorites are account data and load from the API below.
-  useEffect(() => {
-    const handler = () => {
-      try {
-        const rec = JSON.parse(localStorage.getItem('mcp_hub_recent') || '[]')
-        setRecent(rec)
-      } catch {}
-    }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [])
-
-  // 加载用户追踪的 Server（SaaS 概览数据源）
-  useEffect(() => {
-    if (isAuthenticated) {
-      apiGet<any[]>('/config/user-servers')
-        .then(r => setUserServers(r.data || []))
-        .catch(() => {})
-      getFavoriteServers()
-        .then(r => setFavorites((r.data || []).map(server => server.id)))
-        .catch(() => setFavorites([]))
-      apiGet<{ updates: Array<{ server_id: string }> }>('/servers/check-updates')
-        .then(r => setUpdateServerIds(new Set((r.data?.updates || []).map(update => update.server_id))))
-        .catch(() => setUpdateServerIds(new Set()))
-    } else {
-      setFavorites([])
-    }
-  }, [isAuthenticated, userId])
-
-  const handleDownloadConfig = async () => {
-    if (!isAuthenticated) {
-      setError('请先登录后下载自己的配置')
-      return
-    }
-    try {
-      const blob = await downloadConfig()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = 'mcp-hub-config.json'; a.click()
-      URL.revokeObjectURL(url)
-    } catch { setError('下载配置失败，请检查服务是否正常运行') }
   }
 
-  const handleUploadConfig = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!isAuthenticated) {
-      setUploadResult({ success: false, message: '请先登录后上传配置' })
-      return
-    }
-    try {
-      const r = await uploadConfig(file)
-      setUploadResult(r)
-      localStorage.setItem('mcp_hub_upload_result', JSON.stringify(r))
-    } catch { setUploadResult({ success: false, message: '上传失败' }) }
-  }
+  useEffect(() => {
+    void load()
+  }, [authenticated])
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载中...</div></div>
+    return <div className="py-16 text-center text-sm text-gray-500">正在加载仪表盘...</div>
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center space-y-3">
-          <div className="text-red-500 text-lg">😵 {error}</div>
-          <button onClick={() => { setError(null); setLoading(true); window.location.reload() }}
-            className="px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50">
-            重试
+  const summary = monitor?.summary
+  const recentServers = (monitor?.servers || []).slice(0, 6)
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-7">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">仪表盘</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {authenticated
+              ? `最近一次设备上报：${formatLastSeen(telemetry?.last_seen_at)}`
+              : '登录后查看你的本地 MCP Server 运行和调用数据。'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {version && <span className="text-xs text-gray-400">Hub {version}</span>}
+          <button
+            type="button"
+            onClick={() => void load(true)}
+            disabled={refreshing}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {refreshing ? '刷新中...' : '刷新'}
           </button>
         </div>
-      </div>
-    )
-  }
+      </header>
 
-  // === SaaS 概览数据 ===
-  const monitorById = new Map(
-    trackedServers.map((server: any) => [server.server_id, server])
-  )
-  const saasServers = isAuthenticated
-    ? userServers.map((config: any) => {
-      const serverId = config.hub_id || config.name
-      const monitor: any = monitorById.get(serverId) || {}
-      return {
-        ...monitor,
-        id: serverId,
-        server_id: serverId,
-        name: monitor.name || config.name || serverId,
-        security_level: monitor.security_level || 'unreviewed',
-        has_update: updateServerIds.has(serverId),
-      }
-    })
-    : []
-  const trackedCount = saasServers.length
-  const updateCount = saasServers.filter((s: any) => s.has_update).length
-  const riskCount = saasServers.filter((s: any) => {
-    const level = s.security_level
-    return !level || (level !== 'verified' && level !== 'reviewed')
-  }).length
+      {error && <div role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-  return (
-    <div className="space-y-8">
-      {/* === SaaS 概览（新增）=== */}
-      {userId && (
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">👋 欢迎, {userId}</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="text-3xl font-bold text-blue-600">{trackedCount}</div>
-              <div className="text-sm text-gray-500">
-                <InfoTooltip description="已保存到当前账户追踪列表的 Server；追踪本身不会自动采集本地调用数据。">已追踪</InfoTooltip>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="text-3xl font-bold text-yellow-500">{favorites.length}</div>
-              <div className="text-sm text-gray-500">
-                <InfoTooltip description="当前账户收藏的市场条目，用于快速访问。">已收藏</InfoTooltip>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="text-3xl font-bold text-orange-500">{updateCount}</div>
-              <div className="text-sm text-gray-500">
-                <InfoTooltip description="Hub 检测到存在比当前记录更新的版本信息。">有更新</InfoTooltip>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="text-3xl font-bold text-red-500">{riskCount}</div>
-              <div className="text-sm text-gray-500">
-                <InfoTooltip description="当前已追踪 Server 中未通过认证或审查状态的数量，用于提示优先检查，并非绝对风险判定。">安全风险</InfoTooltip>
-              </div>
-            </div>
-          </div>
+      {authenticated ? (
+        <>
+          <section aria-label="MCP 运行概览" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="追踪 Server"
+              value={fmtNum(summary?.total_servers || 0)}
+              description="当前账号保存的 Server 数量。"
+              to="/my-servers"
+            />
+            <Stat
+              label="当前运行"
+              value={fmtNum(summary?.running || 0)}
+              description="最近 3 分钟在线设备报告为运行中的 Server。"
+              to="/my-servers"
+              tone="green"
+            />
+            <Stat
+              label="7 天调用"
+              value={fmtNum(telemetry?.total_calls || 0)}
+              description="本地 Gateway 在过去 7 天真实上报的工具调用次数。"
+              to="/monitor"
+              tone="blue"
+            />
+            <Stat
+              label="7 天 Token"
+              value={fmtNum(telemetry?.total_tokens || 0)}
+              description="根据 MCP 请求和响应载荷估算，不等同于模型供应商账单。"
+              to="/monitor"
+              tone="amber"
+            />
+          </section>
 
-          {/* 最近追踪的 Server */}
-          {saasServers.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">📋 我的追踪 Server</h3>
-              <div className="space-y-2">
-                {saasServers.slice(0, 5).map((s: any) => (
-                  <div key={s.server_id || s.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${s.security_level === 'verified' ? 'bg-green-500' : s.security_level === 'reviewed' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                      <span className="font-mono text-sm">{s.server_id || s.id}</span>
-                      {s.has_update && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">🆕</span>}
-                    </div>
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(s.install_command || '')}
-                      className="text-xs text-gray-400 hover:text-blue-600"
-                      title="复制安装命令"
-                    >
-                      📋 复制
-                    </button>
-                  </div>
-                ))}
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">本地 Server 状态</h2>
+                <Link to="/my-servers" className="text-sm text-blue-700 hover:underline">查看全部</Link>
               </div>
-              {saasServers.length > 5 && (
-                <Link to="/my-servers" className="text-sm text-blue-600 mt-2 inline-block">
-                  查看全部 {saasServers.length} 个 →
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard icon="🟢" label="运行中" value={String(runningCount)} color="green" to="/my-servers" />
-        <StatCard icon="📦" label="已安装" value={String(installed.length)} color="purple" to="/my-servers" />
-        <StatCard icon="📋" label="配置中" value={String(totalAvailable || installed.length)} color="blue" to="/my-servers" />
-        <StatCard icon="⚡" label="Hub 状态" value={health?.status || 'unknown'} color="green" to="/" />
-      </div>
-
-      {/* Monitoring Section */}
-      {(monitorSummary || topReliable.length > 0) && (
-        <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">📈 系统监控</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {monitorSummary && (
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-sm text-gray-500 mb-2">
-                  <InfoTooltip description="Hub 对已托管或可访问的 Server 执行的连通性与运行状态检查汇总。">健康检查总览</InfoTooltip>
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xl font-bold text-gray-900">{monitorSummary.total_health_checks}</p>
-                    <p className="text-xs text-gray-400">总检查次数</p>
-                  </div>
-                  <div>
-                    <p className={`text-xl font-bold ${monitorSummary.errors_last_24h > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {monitorSummary.errors_last_24h}
-                    </p>
-                    <p className="text-xs text-gray-400"><InfoTooltip description="过去 24 小时内健康检查或监控记录到的错误次数。">24h 错误</InfoTooltip></p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-gray-900">{monitorSummary.running}</p>
-                    <p className="text-xs text-gray-400">运行中</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-gray-900">{monitorSummary.total_servers}</p>
-                    <p className="text-xs text-gray-400">Server 总数</p>
-                  </div>
-                </div>
-              </div>
-            )}
-            {topReliable.length > 0 && (
-              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-sm text-gray-500 mb-2">🏆 <InfoTooltip description="按已记录的健康检查计算出的可靠性评分排序；没有检查记录的 Server 不应被解读为不稳定。">最稳定 Server</InfoTooltip></p>
-                <div className="space-y-1.5">
-                  {topReliable.slice(0, 5).map((s, i) => (
-                    <Link key={s.server_id} to={`/servers/${encodeURIComponent(s.server_id)}`}
-                      className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <span className="text-sm text-gray-800 truncate">
-                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} {s.server_id.split('/').pop()}
-                      </span>
-                      <span className={`text-xs font-medium ${
-                        s.reliability_score >= 90 ? 'text-green-600' :
-                        s.reliability_score >= 60 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {s.reliability_score}/100
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Config Section */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">⚙️ 配置管理</h2>
-          <Link to="/config" className="text-sm text-blue-600 hover:text-blue-800">管理配置 →</Link>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center gap-4 flex-wrap">
-            <button onClick={handleDownloadConfig} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
-              📥 下载配置
-            </button>
-            <label className="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium cursor-pointer">
-              📤 上传配置
-              <input type="file" accept=".json" onChange={handleUploadConfig} className="hidden" />
-            </label>
-          </div>
-          {uploadResult && (
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
-              <div className="flex justify-between items-start">
-                <p>{uploadResult.message || '配置上传成功'}</p>
-                <button onClick={() => {
-                  if (!window.confirm('确定清除本次上传结果吗？这不会删除已经保存的 Server。')) return
-                  setUploadResult(null)
-                  localStorage.removeItem('mcp_hub_upload_result')
-                }}
-                  className="text-blue-400 hover:text-blue-600 text-xs ml-2">✕ 清除</button>
-              </div>
-              {uploadResult.data?.matched?.length > 0 && (
-                <div>
-                  <p className="font-medium mt-2">✅ 可在 Hub 中安装的 Server：</p>
-                  {uploadResult.data.matched.map((m: any) => (
-                    <p key={m.local_name} className="ml-2">• {m.local_name} → 安装命令: {m.hub_install_command || m.local_command}</p>
-                  ))}
-                </div>
-              )}
-              {uploadResult.data?.unmatched?.length > 0 && (
-                <div>
-                  <p className="font-medium mt-2 text-yellow-700">⚠️ 未匹配到市场的 Server：</p>
-                  {uploadResult.data.unmatched.slice(0, 5).map((m: any) => (
-                    <p key={m.local_name} className="ml-2">• {m.local_name} ({m.local_command})</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Recent */}
-      {recent.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">🕐 最近查看</h2>
-            <button onClick={() => {
-              if (!window.confirm('确定清除本浏览器中的最近查看记录吗？')) return
-              localStorage.removeItem('mcp_hub_recent')
-              setRecent([])
-            }} className="text-sm text-gray-400 hover:text-gray-600">
-              清除记录
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recent.map((s) => (
-              <ServerCard key={s.id} server={s} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Favorites */}
-      {favorites.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">⭐ 收藏的 Server</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {installed.filter((s) => favorites.includes(s.id)).map((s) => (
-              <ServerCard key={s.id} server={s} />
-            ))}
-            {installed.filter((s) => favorites.includes(s.id)).length === 0 && (
-              <div className="col-span-3 text-center py-8 text-gray-400">
-                还没有收藏任何 Server，在市场页面点击 ⭐ 收藏
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Installed + Tracked Servers */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">📦 已安装 Server（{installed.length}）/ 追踪中（{trackedServers.length}）</h2>
-          <Link to="/my-servers" className="text-sm text-blue-600 hover:text-blue-800">全部 {totalAvailable} 个 →</Link>
-        </div>
-        {installed.length === 0 && trackedServers.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-            还没有安装任何 Server
-            <br />
-            <Link to="/market" className="text-blue-600 mt-2 inline-block">去市场安装 →</Link>
-            <br />
-            <span className="text-xs text-gray-400 mt-1">或 <Link to="/config" className="text-blue-600">上传 mcp.json 配置</Link></span>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {installed.map((s) => (
-                <ServerCard key={s.id} server={s} />
-              ))}
-              {/* 追踪但未安装的 Server — 简化卡片 */}
-              {trackedServers
-                .filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id))
-                .slice(0, 3)
-                .map((ts) => (
-                  <Link
-                    key={ts.server_id}
-                    to={`/servers/${encodeURIComponent(ts.server_id)}`}
-                    className="block bg-white rounded-xl border border-dashed border-gray-200 p-5 hover:border-blue-200 hover:shadow-sm transition-all opacity-70 hover:opacity-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-300 text-xl">📥</span>
-                      <div>
-                        <p className="font-medium text-gray-500 text-sm truncate">{ts.name || ts.server_id}</p>
-                        <p className="text-xs text-gray-400">追踪中 · 未安装</p>
+              {recentServers.length > 0 ? (
+                <div className="divide-y divide-gray-100 border border-gray-200 bg-white">
+                  {recentServers.map(server => (
+                    <div key={server.server_id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <StatusBadge status={server.status} />
+                      <div className="min-w-0 flex-1">
+                        <Link to={`/servers/${encodeURIComponent(server.server_id)}`} className="truncate text-sm font-medium text-gray-900 hover:text-blue-700">
+                          {server.name}
+                        </Link>
+                        <p className="truncate text-xs text-gray-500">{server.server_id}</p>
+                      </div>
+                      <div className="flex gap-4 text-xs text-gray-500">
+                        <InfoTooltip description="过去 7 天当前用户设备上报的工具调用。">
+                          <span>{fmtNum(server.call_count_7d)} 次</span>
+                        </InfoTooltip>
+                        <InfoTooltip description="根据 MCP 调用载荷估算的 Token。">
+                          <span>{fmtNum(server.token_consumption)} Token</span>
+                        </InfoTooltip>
                       </div>
                     </div>
-                  </Link>
-                ))}
-            </div>
-            {trackedServers.filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id)).length > 3 && (
-              <p className="text-xs text-gray-400 text-center mt-2">
-                还有 {trackedServers.filter(ts => ts.status === 'not_installed' && !installed.some(i => i.id === ts.server_id)).length - 3} 个追踪中的 Server
-                <Link to="/my-servers" className="text-blue-600 ml-1">查看全部 →</Link>
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
-      {/* Log Viewer + Search */}
-      <section>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 flex-shrink-0">📋 日志</h2>
-          <div className="flex min-w-0 w-full flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center sm:justify-end">
-            <select
-              value={selectedLog}
-              onChange={(e) => setSelectedLog(e.target.value)}
-              className="w-full min-w-0 border border-gray-300 bg-white px-3 py-1.5 text-sm sm:max-w-xs sm:flex-1"
-            >
-              <option value="">选择 Server...</option>
-              {installed.map((s) => (
-                <option key={s.id} value={s.id}>{s.id}</option>
-              ))}
-            </select>
-            <form className="flex w-full min-w-0 gap-1.5 sm:w-auto" onSubmit={async (e) => {
-              e.preventDefault()
-              if (!logSearchQuery.trim()) return
-              setLogSearching(true); setLogResults([])
-              try {
-                const r = await fetch(`/api/v1/logs/search?q=${encodeURIComponent(logSearchQuery)}&lines=20`, {
-                  headers: getAuthHeaders(),
-                })
-                const d = await r.json()
-                setLogResults(d.data || [])
-              } catch { setLogResults([]) }
-              finally { setLogSearching(false) }
-            }}>
-              <input
-                type="text" value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)}
-                placeholder="搜索 error、timeout..."
-                className="min-w-0 flex-1 border border-gray-300 px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-400 sm:w-36 sm:flex-none"
-              />
-              <button type="submit" disabled={logSearching}
-                className="shrink-0 bg-gray-100 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-50">
-                {logSearching ? '搜索中...' : '搜索'}
-              </button>
-            </form>
-          </div>
-        </div>
-        {logResults.length > 0 && (
-          <div className="mb-3 bg-yellow-50 rounded-lg border border-yellow-200 p-3 max-h-48 overflow-y-auto space-y-1.5">
-            <p className="text-xs text-yellow-700 font-medium mb-1">搜索结果: {logResults.length} 条匹配</p>
-            {logResults.map((r: any, i: number) => (
-              <div key={i} className="text-xs font-mono">
-                <span className="text-gray-500">[{r.server}]</span>{' '}
-                {r.context_before?.map((l: string, j: number) => <div key={`b${j}`} className="text-gray-300 pl-4">{l}</div>)}
-                <span className="text-red-600 font-semibold">L{r.line_number}: {r.match}</span>
-                {r.context_after?.map((l: string, j: number) => <div key={`a${j}`} className="text-gray-300 pl-4">{l}</div>)}
-              </div>
-            ))}
-            <button onClick={() => {
-              if (!window.confirm('确定清除当前日志搜索结果吗？')) return
-              setLogResults([])
-            }} className="text-xs text-gray-400 hover:text-gray-600">清除结果</button>
-          </div>
-        )}
-        {selectedLog ? <LogViewer serverId={selectedLog} /> : (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-sm">
-            选择一个 Server 查看实时日志，或输入关键词跨 Server 搜索
-          </div>
-        )}
-      </section>
-
-      {/* 个性化推荐 */}
-      {recommendations.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">💡 猜你喜欢</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recommendations.slice(0, 6).map(s => (
-              <Link key={s.id} to={`/servers/${encodeURIComponent(s.id)}`}
-                className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition-all">
-                <p className="font-medium text-gray-900 text-sm truncate">{s.id.split('/').pop()}</p>
-                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{s.description?.slice(0, 80) || ''}</p>
-                <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                  <span>⭐ {(s.rating || 0).toFixed(1)}</span>
-                  <span>📥 {s.download_count >= 1000 ? `${(s.download_count/1000).toFixed(1)}K` : s.download_count}</span>
+                  ))}
                 </div>
+              ) : (
+                <EmptyState
+                  title="尚无本地状态"
+                  description="先从市场添加 Server，再在监控页创建设备并运行一键接入命令。"
+                  to="/market"
+                  action="浏览市场"
+                />
+              )}
+            </div>
+
+            <aside className="space-y-3">
+              <h2 className="text-lg font-semibold text-gray-900">连接状态</h2>
+              <div className="border border-gray-200 bg-white p-4 text-sm">
+                <MetricRow label="在线设备" value={telemetry?.active_devices || 0} />
+                <MetricRow label="活跃 Server" value={telemetry?.active_servers || 0} />
+                <MetricRow label="成功率" value={`${telemetry?.success_rate || 0}%`} />
+                <MetricRow label="P95 延迟" value={`${telemetry?.p95_duration_ms || 0} ms`} />
+                <MetricRow label="待传队列" value={telemetry?.current_queue_depth || 0} />
+              </div>
+              <Link to="/monitor" className="block rounded-md bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white hover:bg-gray-800">
+                打开监控详情
               </Link>
-            ))}
-          </div>
-        </section>
+            </aside>
+          </section>
+        </>
+      ) : (
+        <EmptyState
+          title="登录后启用个人监控"
+          description="每个用户的数据按账号和设备令牌隔离，浏览器不会扫描你的电脑。"
+          to="/guide"
+          action="查看接入指南"
+        />
       )}
 
-      {/* Trending */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">🔥 热门趋势</h2>
-          <Link to="/market?sort=hot" className="text-sm text-blue-600 hover:text-blue-800">查看全部 →</Link>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">热门 Server</h2>
+          <Link to="/market" className="text-sm text-blue-700 hover:underline">进入市场</Link>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {trending.map((s) => (
-            <ServerCard key={s.id} server={s} />
-          ))}
+        <div className="grid gap-3 md:grid-cols-3">
+          {trending.map(server => <ServerCard key={server.id} server={server} />)}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">高评分 Server</h2>
+          <Link to="/market?sort=rating" className="text-sm text-blue-700 hover:underline">查看更多</Link>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {topRated.map(server => <ServerCard key={server.id} server={server} />)}
         </div>
       </section>
     </div>
   )
 }
 
-function StatCard({ icon, label, value, color, to }: { icon: string; label: string; value: string; color: string; to?: string }) {
-  const colors: Record<string, string> = {
-    green: 'bg-green-50 border-green-200 hover:bg-green-100',
-    blue: 'bg-blue-50 border-blue-200 hover:bg-blue-100',
-    purple: 'bg-purple-50 border-purple-200 hover:bg-purple-100',
-  }
-  const content = (
-    <div className="flex items-center gap-3">
-      <span className="text-2xl">{icon}</span>
-      <div>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
-        <p className="text-sm text-gray-500">{label}</p>
-      </div>
-    </div>
-  )
-  if (to) {
-    return (
-      <Link to={to} className={`rounded-xl border p-4 block transition-colors cursor-pointer ${colors[color] || colors.blue}`}>
-        {content}
-      </Link>
-    )
+function Stat({
+  label,
+  value,
+  description,
+  to,
+  tone = 'gray',
+}: {
+  label: string
+  value: string
+  description: string
+  to: string
+  tone?: 'gray' | 'green' | 'blue' | 'amber'
+}) {
+  const tones = {
+    gray: 'border-gray-200',
+    green: 'border-green-300',
+    blue: 'border-blue-300',
+    amber: 'border-amber-300',
   }
   return (
-    <div className={`rounded-xl border p-4 ${colors[color] || colors.blue}`}>
-      {content}
+    <Link to={to} className={`border bg-white p-4 hover:bg-gray-50 ${tones[tone]}`}>
+      <InfoTooltip description={description}>
+        <span className="text-sm text-gray-500">{label}</span>
+      </InfoTooltip>
+      <p className="mt-2 text-2xl font-semibold text-gray-900">{value}</p>
+    </Link>
+  )
+}
+
+function MetricRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0">
+      <span className="text-gray-500">{label}</span>
+      <span className="font-medium text-gray-900">{value}</span>
     </div>
   )
 }
 
-// LogViewer 已移至 components/LogViewer.tsx，共享使用
+function EmptyState({
+  title,
+  description,
+  to,
+  action,
+}: {
+  title: string
+  description: string
+  to: string
+  action: string
+}) {
+  return (
+    <div className="border border-gray-200 bg-white px-5 py-10 text-center">
+      <h2 className="font-semibold text-gray-900">{title}</h2>
+      <p className="mx-auto mt-2 max-w-xl text-sm text-gray-500">{description}</p>
+      <Link to={to} className="mt-4 inline-block text-sm font-medium text-blue-700 hover:underline">
+        {action}
+      </Link>
+    </div>
+  )
+}

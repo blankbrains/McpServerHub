@@ -15,7 +15,7 @@ from mcp_hub.core.process_manager import ProcessManager
 
 
 @click.group("daemon")
-def daemon():
+def daemon() -> None:
     """管理 Hub 守护进程。"""
 
 
@@ -23,7 +23,7 @@ def daemon():
 @click.option("--host", default="127.0.0.1", help="监听地址")
 @click.option("--port", default=3987, type=int, help="监听端口")
 @click.option("--dev", is_flag=True, help="开发模式")
-def start_daemon(host: str, port: int, dev: bool):
+def start_daemon(host: str, port: int, dev: bool) -> None:
     """启动 MCP Hub 守护进程。"""
     import uvicorn
 
@@ -48,7 +48,7 @@ def start_daemon(host: str, port: int, dev: bool):
 
 
 @daemon.command("stop")
-def stop_daemon():
+def stop_daemon() -> None:
     """停止 Hub 守护进程。"""
     pid_file = Path.home() / ".config" / "mcp-hub" / "daemon.pid"
 
@@ -82,10 +82,10 @@ def stop_daemon():
 
 
 @daemon.command("status")
-def daemon_status():
+def daemon_status() -> None:
     """查看 Hub 状态。"""
 
-    async def _run():
+    async def _run() -> None:
         pm = ProcessManager()
         running = pm.list_running()
         click.echo(f"📊 运行中: {len(running)} 个 Server")
@@ -96,7 +96,7 @@ def daemon_status():
 
 
 @daemon.command("enable")
-def daemon_enable():
+def daemon_enable() -> None:
     """配置开机自启。"""
     username = os.environ.get("USER", os.environ.get("USERNAME", "root"))
     exec_start = (
@@ -137,7 +137,7 @@ WantedBy=multi-user.target
 
 
 @daemon.command("disable")
-def daemon_disable():
+def daemon_disable() -> None:
     """取消开机自启。"""
     result = sp.run(
         ["systemctl", "--user", "disable", "mcp-hub.service"],
@@ -155,7 +155,7 @@ def daemon_disable():
 
 
 @click.command("serve")
-def serve():
+def serve() -> None:
     """启动 MCP 协议网关（stdio 模式），供 Claude Code / Codex / Cursor 等 Agent 连接。
 
     工作方式:
@@ -179,7 +179,7 @@ def serve():
 
     click.echo("🔌 MCP Hub Gateway 启动中...", err=True)
 
-    async def _run():
+    async def _run() -> None:
         gateway = McpGateway()
         started = await gateway.start_all_managed()
         if started:

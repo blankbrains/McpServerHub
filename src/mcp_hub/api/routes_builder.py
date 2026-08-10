@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import io
 import zipfile
+from typing import Any, cast
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
-from mcp_hub.core.server_builder import ServerBuilder
+from mcp_hub.core.server_builder import Language, ServerBuilder
 
 router = APIRouter(tags=["builder"])
 
 
 @router.get("/builder/tools")
-async def list_tools():
+async def list_tools() -> dict[str, Any]:
     """获取可用工具模板列表。"""
     builder = ServerBuilder()
     tools = []
@@ -41,14 +42,17 @@ async def generate_project(
     description: str = Query("", description="项目描述"),
     author: str = Query("", description="作者"),
     tools: str = Query("hello,echo", description="工具列表（逗号分隔）"),
-):
+) -> Response:
     """生成 MCP Server 项目并返回 ZIP 下载。"""
+    if language not in {"python", "typescript"}:
+        raise HTTPException(status_code=422, detail="language 必须是 python 或 typescript")
+    normalized_language = cast(Language, language)
     builder = ServerBuilder()
     tool_list = [t.strip() for t in tools.split(",") if t.strip()]
 
     project = builder.create_project(
         name=name,
-        language=language,  # type: ignore
+        language=normalized_language,
         description=description or f"MCP Server: {name}",
         author=author or "developer",
         tools=tool_list,

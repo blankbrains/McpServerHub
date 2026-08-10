@@ -23,6 +23,11 @@ import time as _time
 from dataclasses import dataclass
 from typing import Any
 
+import httpx2
+from mcp import ClientSession, types
+from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamable_http_client
+
 from mcp_hub import __version__
 from mcp_hub.core.gateway_config import (
     GatewayServerSpec,
@@ -30,6 +35,7 @@ from mcp_hub.core.gateway_config import (
     load_gateway_config,
     split_legacy_command,
 )
+from mcp_hub.core.process_env import filter_process_environment
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.telemetry import (
     TelemetryReporter,
@@ -43,72 +49,12 @@ from mcp_hub.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-# 子进程只继承启动命令所需的基础环境；Server 凭证必须在自身配置中显式授权。
-_GATEWAY_SAFE_ENV_NAMES = {
-    "PATH",
-    "HOME",
-    "USER",
-    "USERNAME",
-    "LOGNAME",
-    "LANG",
-    "LANGUAGE",
-    "TZ",
-    "SHELL",
-    "TERM",
-    "COLORTERM",
-    "TMP",
-    "TEMP",
-    "TMPDIR",
-    "SYSTEMROOT",
-    "SYSTEMDRIVE",
-    "WINDIR",
-    "COMSPEC",
-    "PATHEXT",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "PROGRAMFILES",
-    "PROGRAMFILES(X86)",
-    "PROGRAMW6432",
-    "PROGRAMDATA",
-    "COMPUTERNAME",
-    "HOSTNAME",
-    "PWD",
-    "OLDPWD",
-    "DISPLAY",
-    "WAYLAND_DISPLAY",
-    "VIRTUAL_ENV",
-    "CONDA_PREFIX",
-    "CONDA_DEFAULT_ENV",
-    "NODE_PATH",
-    "PYTHONHOME",
-    "PYTHONPATH",
-    "PYTHONIOENCODING",
-    "PYTHONUTF8",
-    "PYTHONUNBUFFERED",
-    "EDITOR",
-    "VISUAL",
-    "PAGER",
-}
-_GATEWAY_SAFE_ENV_PREFIXES = (
-    "LC_",
-    "XDG_",
-)
-
-
 def _filter_gateway_env() -> dict[str, str]:
     """保留基础运行环境，不把 Hub 或包管理器凭证隐式传给子进程。"""
-    result: dict[str, str] = {}
-    for k, v in os.environ.items():
-        upper_k = k.upper()
-        if upper_k in _GATEWAY_SAFE_ENV_NAMES or upper_k.startswith(
-            _GATEWAY_SAFE_ENV_PREFIXES
-        ):
-            result[k] = v
-    return result
+    return filter_process_environment()
 
 
-async def _drain_stderr(server_id: str, stderr_stream) -> None:
+async def _drain_stderr(server_id: str, stderr_stream: asyncio.StreamReader) -> None:
     """后台任务：持续读取子进程 stderr 防止管道阻塞。"""
     try:
         while True:
@@ -168,7 +114,7 @@ async def _record_call_safe(
 
 @dataclass
 class _PendingReq:
-    future: asyncio.Future
+    future: asyncio.Future[Any]
     sent_at: float
 
 
@@ -181,20 +127,22 @@ class ManagedMCP:
     def __init__(
         self,
         server_id: str,
-        process,
-        stdin,
-        stdout,
+        process: asyncio.subprocess.Process,
+        stdin: asyncio.StreamWriter,
+        stdout: asyncio.StreamReader,
         *,
         version: str = "",
         transport: str = "stdio",
-    ):
+    ) -> None:
         self.server_id = server_id
         self.process = process
         self.stdin = stdin
         self.stdout = stdout
         self.version = version
         self.transport = transport
-        self.tools: list[dict] = []
+        self.protocol_version = ""
+        self.tools: list[dict[str, Any]] = []
+        self.capabilities: set[str] = set()
         self._request_id = 0
         self._pending: dict[int, _PendingReq] = {}
         self._reader_task: asyncio.Task[None] | None = None
@@ -262,20 +210,48 @@ class ManagedMCP:
     async def initialize(self) -> bool:
         """初始化子 Server，获取工具列表。"""
         await self.start_reader()
-        # initialize
-        try:
-            result = await self._send_request(
-                "initialize",
-                {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {"name": "mcp-hub", "version": __version__},
-                },
-            )
-            if result is None:
-                return False
-        except Exception:
+        result: Any | None = None
+        for protocol_version in (
+            types.LATEST_PROTOCOL_VERSION,
+            "2025-06-18",
+            "2024-11-05",
+        ):
+            try:
+                result = await self._send_request(
+                    "initialize",
+                    {
+                        "protocolVersion": protocol_version,
+                        "capabilities": {},
+                        "clientInfo": {"name": "mcp-hub", "version": __version__},
+                    },
+                )
+                if result is not None:
+                    break
+            except Exception as exc:
+                logger.debug(
+                    "gateway.initialize_protocol_rejected",
+                    server_id=self.server_id,
+                    protocol_version=protocol_version,
+                    error=str(exc),
+                )
+        if result is None:
             return False
+        if isinstance(result, dict):
+            reported_protocol = result.get("protocolVersion")
+            if isinstance(reported_protocol, str):
+                self.protocol_version = reported_protocol[:32]
+            raw_capabilities = result.get("capabilities", {})
+            if isinstance(raw_capabilities, dict):
+                self.capabilities = {
+                    str(name)
+                    for name, value in raw_capabilities.items()
+                    if value is not None
+                }
+            server_info = result.get("serverInfo", {})
+            if isinstance(server_info, dict) and not self.version:
+                reported_version = server_info.get("version")
+                if isinstance(reported_version, str):
+                    self.version = reported_version[:50]
 
         # Send initialized notification
         await self._send_notification("notifications/initialized", {})
@@ -285,16 +261,40 @@ class ManagedMCP:
             result = await self._send_request("tools/list", {})
             if result and "tools" in result:
                 self.tools = result["tools"]
-                return True
-        except Exception:
-            pass
-        return False
+        except Exception as exc:
+            logger.debug(
+                "gateway.tools_list_unavailable",
+                server_id=self.server_id,
+                error=str(exc),
+            )
+        return True
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """调用工具，返回结果或抛出异常。"""
         return await self._send_request("tools/call", {"name": tool_name, "arguments": arguments})
 
-    async def _send_request(self, method: str, params: dict, timeout: float = 60.0) -> Any | None:
+    @property
+    def exit_code(self) -> int | None:
+        """Return a completed local process exit code, otherwise None."""
+        return self.process.returncode
+
+    @property
+    def pid(self) -> int | None:
+        return self.process.pid
+
+    def is_running(self) -> bool:
+        return self.process.returncode is None and not self._shutdown
+
+    async def health_ping(self) -> None:
+        """Local process health is determined by its process state and resource sample."""
+        return None
+
+    async def _send_request(
+        self,
+        method: str,
+        params: dict[str, Any],
+        timeout: float = 60.0,
+    ) -> Any | None:
         """发送 JSON-RPC 请求，等待 reader 回调。"""
         self._request_id += 1
         req_id = self._request_id
@@ -304,7 +304,7 @@ class ManagedMCP:
             "method": method,
             "params": params,
         }
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
         self._pending[req_id] = _PendingReq(future=future, sent_at=_time.time())
 
         try:
@@ -321,7 +321,7 @@ class ManagedMCP:
             logger.warning("gateway.timeout", server_id=self.server_id, method=method)
             return None
 
-    async def _send_notification(self, method: str, params: dict) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """发送 JSON-RPC 通知（无 id，无响应）。"""
         try:
             msg = {"jsonrpc": "2.0", "method": method, "params": params}
@@ -350,17 +350,231 @@ class ManagedMCP:
                 pass
 
 
+class RemoteMCP:
+    """Official MCP SDK client connection for Streamable HTTP and legacy SSE."""
+
+    def __init__(self, spec: GatewayServerSpec) -> None:
+        self.server_id = spec.server_id
+        self.version = spec.version
+        self.transport = spec.transport
+        self.protocol_version = ""
+        self.url = spec.url
+        self.headers = spec.resolved_headers(dict(os.environ))
+        self.tools: list[dict[str, Any]] = []
+        self.capabilities: set[str] = set()
+        self._session: ClientSession | None = None
+        self._stack: contextlib.AsyncExitStack | None = None
+        self._shutdown = False
+
+    @staticmethod
+    def _dump_result(result: Any) -> dict[str, Any]:
+        if hasattr(result, "model_dump"):
+            dumped = result.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+            if isinstance(dumped, dict):
+                return dumped
+        if isinstance(result, dict):
+            return result
+        raise GatewayError("MCP SDK returned an unsupported result type")
+
+    @staticmethod
+    def _pagination(params: dict[str, Any]) -> types.PaginatedRequestParams | None:
+        cursor = params.get("cursor")
+        return types.PaginatedRequestParams(cursor=cursor) if isinstance(cursor, str) else None
+
+    async def initialize(self) -> bool:
+        stack = contextlib.AsyncExitStack()
+        try:
+            if self.transport == "streamable-http":
+                http_client = await stack.enter_async_context(
+                    httpx2.AsyncClient(
+                        headers=self.headers,
+                        follow_redirects=True,
+                        timeout=httpx2.Timeout(30.0, read=300.0),
+                    )
+                )
+                read_stream, write_stream = await stack.enter_async_context(
+                    streamable_http_client(
+                        self.url,
+                        http_client=http_client,
+                    )
+                )
+            elif self.transport == "sse":
+                read_stream, write_stream = await stack.enter_async_context(
+                    sse_client(
+                        self.url,
+                        headers=self.headers,
+                    )
+                )
+            else:
+                raise GatewayError(
+                    f"Unsupported remote MCP transport: {self.transport}",
+                    server_id=self.server_id,
+                )
+
+            session = await stack.enter_async_context(
+                ClientSession(
+                    read_stream,
+                    write_stream,
+                    client_info=types.Implementation(
+                        name="mcp-hub",
+                        version=__version__,
+                    ),
+                )
+            )
+            result = await asyncio.wait_for(session.initialize(), timeout=60)
+            capability_data = result.capabilities.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+            self.capabilities = {
+                str(name)
+                for name, value in capability_data.items()
+                if value is not None
+            }
+            if not self.version:
+                self.version = result.server_info.version[:50]
+            self.protocol_version = result.protocol_version[:32]
+
+            try:
+                tools_result = await asyncio.wait_for(session.list_tools(), timeout=30)
+                self.tools = self._dump_result(tools_result).get("tools", [])
+            except Exception as exc:
+                logger.debug(
+                    "gateway.remote_tools_list_unavailable",
+                    server_id=self.server_id,
+                    error=str(exc),
+                )
+            self._session = session
+            self._stack = stack
+            return True
+        except Exception as exc:
+            logger.warning(
+                "gateway.remote_initialize_failed",
+                server_id=self.server_id,
+                transport=self.transport,
+                error=classify_error(exc),
+            )
+            await stack.aclose()
+            return False
+
+    def _require_session(self) -> ClientSession:
+        if self._session is None or self._shutdown:
+            raise GatewayError("Remote MCP Server is not connected", server_id=self.server_id)
+        return self._session
+
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        return await self._send_request(
+            "tools/call",
+            {"name": tool_name, "arguments": arguments},
+        )
+
+    async def _send_request(
+        self,
+        method: str,
+        params: dict[str, Any],
+        timeout: float = 60.0,
+    ) -> dict[str, Any]:
+        session = self._require_session()
+
+        async def _request() -> Any:
+            if method == "tools/list":
+                return await session.list_tools(params=self._pagination(params))
+            if method == "tools/call":
+                arguments = params.get("arguments")
+                if arguments is not None and not isinstance(arguments, dict):
+                    raise GatewayError(
+                        "tools/call arguments must be an object",
+                        server_id=self.server_id,
+                    )
+                return await session.call_tool(
+                    str(params.get("name", "")),
+                    arguments=arguments,
+                )
+            if method == "resources/list":
+                return await session.list_resources(params=self._pagination(params))
+            if method == "resources/templates/list":
+                return await session.list_resource_templates(
+                    params=self._pagination(params)
+                )
+            if method == "resources/read":
+                return await session.read_resource(str(params.get("uri", "")))
+            if method == "prompts/list":
+                return await session.list_prompts(params=self._pagination(params))
+            if method == "prompts/get":
+                raw_arguments = params.get("arguments")
+                if raw_arguments is not None and not isinstance(raw_arguments, dict):
+                    raise GatewayError(
+                        "prompts/get arguments must be an object",
+                        server_id=self.server_id,
+                    )
+                arguments = (
+                    {str(key): str(value) for key, value in raw_arguments.items()}
+                    if isinstance(raw_arguments, dict)
+                    else None
+                )
+                return await session.get_prompt(
+                    str(params.get("name", "")),
+                    arguments=arguments,
+                )
+            if method == "ping":
+                return await session.send_ping()
+            raise GatewayError(
+                f"Unsupported MCP request: {method}",
+                server_id=self.server_id,
+            )
+
+        try:
+            return self._dump_result(
+                await asyncio.wait_for(_request(), timeout=timeout)
+            )
+        except asyncio.TimeoutError as exc:
+            raise GatewayError(
+                f"Remote MCP request timed out: {method}",
+                server_id=self.server_id,
+            ) from exc
+
+    @property
+    def exit_code(self) -> int | None:
+        return None
+
+    @property
+    def pid(self) -> int | None:
+        return None
+
+    def is_running(self) -> bool:
+        return self._session is not None and not self._shutdown
+
+    async def health_ping(self) -> None:
+        await self._send_request("ping", {}, timeout=10)
+
+    async def close(self) -> None:
+        if self._shutdown:
+            return
+        self._shutdown = True
+        self._session = None
+        stack = self._stack
+        self._stack = None
+        if stack is not None:
+            await stack.aclose()
+
+
 # ── McpGateway: 聚合网关 ──────────────────────────────────────
 
 
 class McpGateway:
     """MCP 协议网关 — 聚合所有已安装且已启用的 Server。"""
 
-    def __init__(self):
-        self._servers: dict[str, ManagedMCP] = {}
+    def __init__(self) -> None:
+        self._servers: dict[str, ManagedMCP | RemoteMCP] = {}
         self._telemetry = TelemetryReporter.from_environment()
-        self._heartbeat_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
         self._configuration_errors: list[dict[str, str]] = []
+        self._server_specs: list[GatewayServerSpec] = []
 
     @property
     def configuration_errors(self) -> list[dict[str, str]]:
@@ -421,36 +635,78 @@ class McpGateway:
             while True:
                 try:
                     await asyncio.sleep(60)
-                    await self._record_telemetry("heartbeat")
-                    import psutil
-
-                    for server_id, server in list(self._servers.items()):
-                        pid = server.process.pid if server.process else None
-                        if pid is None:
-                            continue
-                        try:
-                            process = psutil.Process(pid)
-                            await self._record_telemetry(
-                                "resource_sample",
-                                server_id=server_id,
-                                cpu_percent=process.cpu_percent(interval=None),
-                                memory_bytes=process.memory_info().rss,
-                                process_uptime_seconds=max(
-                                    0,
-                                    int(_time.time() - process.create_time()),
-                                ),
-                                operation="process_sample",
-                                server_version=server.version,
-                                transport=server.transport,
-                            )
-                        except (psutil.Error, OSError):
-                            continue
+                    await self._collect_telemetry_heartbeat()
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     logger.debug("gateway.telemetry_heartbeat_failed", error=str(exc))
 
         self._heartbeat_task = asyncio.create_task(_heartbeat())
+
+    async def _collect_telemetry_heartbeat(self) -> None:
+        """Record one Gateway heartbeat and sample every live child process."""
+        await self._record_telemetry("heartbeat")
+        import psutil
+
+        inventory_changed = False
+        for server_id, server in list(self._servers.items()):
+            exit_code = server.exit_code
+            if exit_code is not None:
+                await self._record_telemetry(
+                    "server_lifecycle",
+                    server_id=server_id,
+                    status="error",
+                    operation="exited",
+                    error_code=f"exit_code_{exit_code}",
+                    server_version=server.version,
+                    transport=server.transport,
+                )
+                await self._update_registry_status_safe(server_id, "error")
+                self._servers.pop(server_id, None)
+                await server.close()
+                inventory_changed = True
+                continue
+            if server.transport != "stdio":
+                try:
+                    await server.health_ping()
+                except Exception as exc:
+                    await self._record_telemetry(
+                        "server_lifecycle",
+                        server_id=server_id,
+                        status="error",
+                        operation="connection_lost",
+                        error_code=classify_error(exc),
+                        server_version=server.version,
+                        transport=server.transport,
+                    )
+                    await self._update_registry_status_safe(server_id, "error")
+                    self._servers.pop(server_id, None)
+                    await server.close()
+                    inventory_changed = True
+                continue
+
+            pid = server.pid
+            if pid is None:
+                continue
+            try:
+                process = psutil.Process(pid)
+                await self._record_telemetry(
+                    "resource_sample",
+                    server_id=server_id,
+                    cpu_percent=process.cpu_percent(interval=None),
+                    memory_bytes=process.memory_info().rss,
+                    process_uptime_seconds=max(
+                        0,
+                        int(_time.time() - process.create_time()),
+                    ),
+                    operation="process_sample",
+                    server_version=server.version,
+                    transport=server.transport,
+                )
+            except (psutil.Error, OSError):
+                continue
+        if inventory_changed:
+            await self._report_inventory_snapshot()
 
     async def start_all_managed(self) -> list[str]:
         """启动所有已安装且已启用的 MCP Server 并初始化。
@@ -459,6 +715,7 @@ class McpGateway:
         跳过已禁用的 Server。
         """
         specs = await self._load_server_specs()
+        self._server_specs = list(specs)
         started = []
 
         for spec in specs:
@@ -469,31 +726,46 @@ class McpGateway:
             sid = spec.server_id
             started_at = _time.perf_counter()
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    spec.executable,
-                    *spec.args,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=spec.process_env(_filter_gateway_env()),
-                    cwd=spec.cwd,
-                )
-                asyncio.ensure_future(_drain_stderr(sid, proc.stderr))
-                mcp = ManagedMCP(
-                    sid,
-                    proc,
-                    proc.stdin,
-                    proc.stdout,
-                    version=spec.version,
-                    transport=spec.transport,
-                )
-                ok = await mcp.initialize()
+                managed: ManagedMCP | RemoteMCP
+                if spec.transport == "stdio":
+                    proc = await asyncio.create_subprocess_exec(
+                        spec.executable,
+                        *spec.args,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env=spec.process_env(_filter_gateway_env()),
+                        cwd=spec.cwd,
+                    )
+                    if proc.stdin is None or proc.stdout is None:
+                        raise GatewayError(
+                            "MCP Server stdio 管道创建失败",
+                            server_id=sid,
+                        )
+                    if proc.stderr is not None:
+                        asyncio.ensure_future(_drain_stderr(sid, proc.stderr))
+                    managed = ManagedMCP(
+                        sid,
+                        proc,
+                        proc.stdin,
+                        proc.stdout,
+                        version=spec.version,
+                        transport=spec.transport,
+                    )
+                else:
+                    managed = RemoteMCP(spec)
+                ok = await managed.initialize()
                 startup_duration_ms = int((_time.perf_counter() - started_at) * 1000)
                 if ok:
-                    self._servers[sid] = mcp
+                    self._servers[sid] = managed
                     started.append(sid)
                     await self._update_registry_status_safe(sid, "running")
-                    logger.info("gateway.server_started", server_id=sid, tools=len(mcp.tools))
+                    logger.info(
+                        "gateway.server_started",
+                        server_id=sid,
+                        transport=spec.transport,
+                        tools=len(managed.tools),
+                    )
                     await self._record_telemetry(
                         "server_lifecycle",
                         server_id=sid,
@@ -504,6 +776,13 @@ class McpGateway:
                     )
                 else:
                     logger.warning("gateway.server_init_failed", server_id=sid)
+                    self._configuration_errors.append(
+                        {
+                            "server_id": sid,
+                            "error": "MCP Server initialization failed",
+                            "error_code": "initialization_failed",
+                        }
+                    )
                     await self._record_telemetry(
                         "server_lifecycle",
                         server_id=sid,
@@ -514,7 +793,7 @@ class McpGateway:
                         server_version=spec.version,
                         transport=spec.transport,
                     )
-                    await mcp.close()
+                    await managed.close()
             except Exception as exc:
                 logger.warning("gateway.spawn_failed", server_id=sid, error=str(exc))
                 self._configuration_errors.append(
@@ -535,14 +814,30 @@ class McpGateway:
                     transport=spec.transport,
                 )
 
-        if self._telemetry is not None:
-            await self._telemetry.report_inventory(
-                [spec.inventory_entry() for spec in specs],
-                self._configuration_errors,
-            )
+        await self._report_inventory_snapshot()
 
         self._start_telemetry_heartbeat()
         return started
+
+    async def _report_inventory_snapshot(self) -> None:
+        """Report redacted configuration plus observed runtime capabilities."""
+        if self._telemetry is None:
+            return
+        entries: list[dict[str, Any]] = []
+        for spec in self._server_specs:
+            entry = spec.inventory_entry()
+            managed = self._servers.get(spec.server_id)
+            entry.update(
+                {
+                    "server_version": managed.version if managed else spec.version,
+                    "protocol_version": managed.protocol_version if managed else "",
+                    "capabilities": sorted(managed.capabilities) if managed else [],
+                    "tool_count": len(managed.tools) if managed else 0,
+                    "running": managed.is_running() if managed else False,
+                }
+            )
+            entries.append(entry)
+        await self._telemetry.report_inventory(entries, self._configuration_errors)
 
     async def _load_server_specs(self) -> list[GatewayServerSpec]:
         """Load canonical local configuration, with Registry as a legacy fallback."""
@@ -632,7 +927,7 @@ class McpGateway:
                 error=str(exc),
             )
 
-    async def handle_stdio(self):
+    async def handle_stdio(self) -> None:
         """处理来自 Agent 的 stdio JSON-RPC 请求（阻塞循环）。"""
         loop = asyncio.get_event_loop()
         stdout_w = sys.stdout.buffer
@@ -657,25 +952,34 @@ class McpGateway:
                 stdout_w.write((json.dumps(response, ensure_ascii=False) + "\n").encode())
                 stdout_w.flush()
 
-    def _handle_notification(self, request: dict) -> None:
+    def _handle_notification(self, request: dict[str, Any]) -> None:
         """处理 JSON-RPC 通知（无需响应）。"""
         method = request.get("method", "")
         if method == "notifications/initialized":
             pass  # Agent 初始化完成通知
 
-    async def _process_request(self, request: dict) -> dict | None:
+    async def _process_request(
+        self,
+        request: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """处理 JSON-RPC 请求。"""
         method = request.get("method", "")
         req_id = request.get("id")
         params = request.get("params", {})
 
         if method == "initialize":
+            requested_protocol = params.get("protocolVersion")
+            protocol_version = (
+                requested_protocol
+                if isinstance(requested_protocol, str) and requested_protocol
+                else types.LATEST_PROTOCOL_VERSION
+            )
             return self._respond(
                 req_id,
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": protocol_version,
                     "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "serverInfo": {"name": "mcp-hub-gateway", "version": "0.2.0"},
+                    "serverInfo": {"name": "mcp-hub-gateway", "version": __version__},
                 },
             )
 
@@ -686,7 +990,7 @@ class McpGateway:
             return self._respond(req_id, {})
 
         if method == "tools/list":
-            all_tools: list[dict] = []
+            all_tools: list[dict[str, Any]] = []
             for sid, server in self._servers.items():
                 prefix = sid.replace("@", "").replace("/", "_")
                 for tool in server.tools:
@@ -785,7 +1089,10 @@ class McpGateway:
     def _server_prefix(server_id: str) -> str:
         return server_id.replace("@", "").replace("/", "_")
 
-    def _find_server_by_prefix(self, prefix: str) -> tuple[str, ManagedMCP] | None:
+    def _find_server_by_prefix(
+        self,
+        prefix: str,
+    ) -> tuple[str, ManagedMCP | RemoteMCP] | None:
         for server_id, server in self._servers.items():
             if self._server_prefix(server_id) == prefix:
                 return server_id, server
@@ -795,11 +1102,11 @@ class McpGateway:
         self,
         req_id: Any,
         method: str,
-        params: dict,
+        params: dict[str, Any],
         *,
         field: str,
         separator: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Route a prefixed resource or prompt request and record minimal metrics."""
         external_value = params.get(field, "")
         if not isinstance(external_value, str) or separator not in external_value:
@@ -859,7 +1166,11 @@ class McpGateway:
             )
             return self._error(req_id, -32603, f"{server_id}: {exc}")
 
-    async def _route_tool_call(self, req_id, params: dict) -> dict | None:
+    async def _route_tool_call(
+        self,
+        req_id: Any,
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """路由 tools/call 到目标 Server 并记录。"""
         name = params.get("name", "")
         arguments = params.get("arguments", {})
@@ -921,23 +1232,27 @@ class McpGateway:
                 return self._error(req_id, -32603, f"{server_id}: 无响应")
             output_tokens = estimate_payload_tokens(result)
             output_bytes = estimate_payload_bytes(result)
+            result_is_error = isinstance(result, dict) and result.get("isError") is True
+            status = "error" if result_is_error else "ok"
             await _record_call_safe(
                 server_id,
                 tool_name,
                 dur_ms,
-                "ok",
+                status,
                 token_count=input_tokens + output_tokens,
             )
             await self._record_telemetry(
                 "tool_call",
                 server_id=server_id,
                 tool_name=tool_name,
+                status=status,
                 duration_ms=dur_ms,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 input_bytes=input_bytes,
                 output_bytes=output_bytes,
                 operation="tools/call",
+                error_code="tool_result_error" if result_is_error else "",
                 server_version=server.version,
                 transport=server.transport,
             )
@@ -966,7 +1281,7 @@ class McpGateway:
             )
             return self._error(req_id, -32603, f"{server_id}: {e}")
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """关闭所有子 Server。"""
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
@@ -985,12 +1300,13 @@ class McpGateway:
             await server.close()
         self._servers.clear()
         if self._telemetry:
+            await self._report_inventory_snapshot()
             await self._telemetry.close()
 
     @staticmethod
-    def _respond(req_id, result: dict) -> dict:
+    def _respond(req_id: Any, result: dict[str, Any]) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
     @staticmethod
-    def _error(req_id, code: int, message: str) -> dict:
+    def _error(req_id: Any, code: int, message: str) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}

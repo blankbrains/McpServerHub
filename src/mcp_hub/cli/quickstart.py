@@ -15,10 +15,10 @@ console = Console()
 
 @click.command("quickstart")
 @click.option("--port", default=3987, type=int, help="监听端口")
-def quickstart(port: int):
+def quickstart(port: int) -> None:
     """🚀 零配置启动 MCP Server Hub（30 秒上线）。"""
 
-    async def _run():
+    async def _run() -> None:
         console.print(
             Panel.fit(
                 "[bold blue]🔵 MCP Server Hub Quickstart[/bold blue]\n"
