@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, case, func, select, update
 from sqlalchemy.exc import IntegrityError
 
+from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.db.database import async_session_factory
@@ -94,7 +95,7 @@ class TelemetryBatchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy"
+    source: Literal["legacy", "setup", "gateway", "discovery", "verify"] = "legacy"
     session_id: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
     events: list[TelemetryEventInput] = Field(min_length=1, max_length=_MAX_EVENT_BATCH)
 
@@ -298,6 +299,39 @@ def _connection_state(
     }
 
 
+def _serialize_connection_device(
+    device: TelemetryDeviceModel,
+    inventory_rows: list[TelemetryInventoryModel],
+    *,
+    now: datetime,
+) -> dict[str, Any]:
+    configuration_errors = [
+        row
+        for row in inventory_rows
+        if bool((row.configuration_error or "").strip())
+    ]
+    server_count = len(inventory_rows) - len(configuration_errors)
+    state = _connection_state(
+        device,
+        server_count=server_count,
+        configuration_error_count=len(configuration_errors),
+        now=now,
+    )
+    online = bool(
+        device.revoked_at is None
+        and device.gateway_last_seen_at is not None
+        and device.gateway_last_seen_at >= now - _GATEWAY_ONLINE_WINDOW
+    )
+    return {
+        **_serialize_device(device),
+        **state,
+        "online": online,
+        "queue_depth": int(device.last_queue_depth or 0),
+        "server_count": server_count,
+        "configuration_error_count": len(configuration_errors),
+    }
+
+
 def _resolve_agent_filter(agent_type: str) -> str | None:
     if not agent_type.strip():
         return None
@@ -413,24 +447,12 @@ async def get_telemetry_connection_status(
     serialized_devices: list[dict[str, Any]] = []
     for device in devices:
         rows = inventory_by_device.get(device.id, [])
-        configuration_errors = [
-            row for row in rows if bool((row.configuration_error or "").strip())
-        ]
-        server_count = len(rows) - len(configuration_errors)
-        state = _connection_state(
-            device,
-            server_count=server_count,
-            configuration_error_count=len(configuration_errors),
-            now=now,
-        )
         serialized_devices.append(
-            {
-                **_serialize_device(device),
-                **state,
-                "queue_depth": int(device.last_queue_depth or 0),
-                "server_count": server_count,
-                "configuration_error_count": len(configuration_errors),
-            }
+            _serialize_connection_device(
+                device,
+                rows,
+                now=now,
+            )
         )
 
     connected_states = {"connected", "gateway_online", "data_backlog"}
@@ -447,11 +469,7 @@ async def get_telemetry_connection_status(
         "data": {
             "total_devices": len(serialized_devices),
             "online_devices": sum(
-                1
-                for device in devices
-                if device.revoked_at is None
-                and device.gateway_last_seen_at is not None
-                and device.gateway_last_seen_at >= now - _GATEWAY_ONLINE_WINDOW
+                1 for device in serialized_devices if bool(device["online"])
             ),
             "connected_devices": sum(
                 1
@@ -464,6 +482,51 @@ async def get_telemetry_connection_status(
                 if device["state"] in attention_states
             ),
             "devices": serialized_devices,
+        },
+    }
+
+
+@router.post("/telemetry/token/validate")
+async def validate_telemetry_token(
+    authorization: str | None = Header(None),
+) -> dict[str, Any]:
+    """Validate one device token without exposing other devices or token hashes."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="需要设备遥测令牌")
+    token = authorization[7:].strip()
+    if not token.startswith("mcpht_"):
+        raise HTTPException(status_code=401, detail="设备遥测令牌无效")
+
+    now = _utc_now_naive()
+    async with async_session_factory() as session:
+        device = await session.scalar(
+            select(TelemetryDeviceModel).where(
+                TelemetryDeviceModel.token_hash == _hash_token(token)
+            )
+        )
+        if device is None:
+            raise HTTPException(status_code=401, detail="设备遥测令牌无效")
+        inventory_result = await session.execute(
+            select(TelemetryInventoryModel).where(
+                TelemetryInventoryModel.device_id == device.id,
+                TelemetryInventoryModel.user_id == device.user_id,
+                TelemetryInventoryModel.active == True,  # noqa: E712
+            )
+        )
+        inventory_rows = list(inventory_result.scalars())
+
+    payload = _serialize_connection_device(
+        device,
+        inventory_rows,
+        now=now,
+    )
+    return {
+        "success": True,
+        "data": {
+            **payload,
+            "valid": device.revoked_at is None,
+            "revoked": device.revoked_at is not None,
+            "hub_version": __version__,
         },
     }
 

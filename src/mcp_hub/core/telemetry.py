@@ -206,7 +206,13 @@ class TelemetryReporter:
         token: str,
         state_dir: Path | None = None,
         *,
-        source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy",
+        source: Literal[
+            "legacy",
+            "setup",
+            "gateway",
+            "discovery",
+            "verify",
+        ] = "legacy",
     ) -> None:
         self.report_url = report_url.rstrip("/")
         self.token = token

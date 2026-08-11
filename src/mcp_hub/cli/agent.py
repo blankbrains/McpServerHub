@@ -17,6 +17,11 @@ from mcp_hub.core.agent_config import (
     get_agent_profile,
     prepare_agent_migration,
 )
+from mcp_hub.core.agent_verify import (
+    VerificationReport,
+    apply_agent_fixes,
+    verify_agent,
+)
 from mcp_hub.core.gateway_config import (
     GATEWAY_CONFIG_ENV,
     get_gateway_config_path,
@@ -430,3 +435,122 @@ def agent_doctor(agent_type: str, state_dir: Path | None) -> None:
     click.echo(json.dumps(result, ensure_ascii=False, indent=2))
     if not result["healthy"]:
         raise click.ClickException("Gateway 自检发现需要处理的问题")
+
+
+def _render_verification_report(report: VerificationReport) -> None:
+    status_labels = {
+        "ok": "正常",
+        "warning": "等待",
+        "error": "异常",
+        "skipped": "跳过",
+    }
+    for check in report.checks:
+        suffix = f" [{check.code}]" if check.code != "ok" else ""
+        click.echo(
+            f"{check.label:<14} {status_labels[check.status]}{suffix}：{check.message}"
+        )
+    if report.applied_fixes:
+        click.echo("")
+        click.echo("已应用修复：")
+        for fix in report.applied_fixes:
+            status = "完成" if fix.get("success") else "失败"
+            click.echo(f"  - {status} {fix.get('message', '')}")
+            if fix.get("backup_path"):
+                click.echo(f"    备份: {fix['backup_path']}")
+    click.echo("")
+    click.echo("接入验证完成。" if report.ready else "接入尚未完成，请按异常项处理。")
+
+
+@agent.command("verify")
+@click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+)
+@click.option(
+    "--source-config",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Agent 配置路径；未指定时查找该 Agent 的标准路径。",
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="本地状态目录；优先于 Agent Gateway 入口中的路径。",
+)
+@click.option(
+    "--hub-url",
+    default=lambda: os.environ.get(REPORT_URL_ENV, ""),
+    help="Hub 地址；未指定时读取 Agent Gateway 入口。",
+)
+@click.option(
+    "--telemetry-token",
+    envvar=TELEMETRY_TOKEN_ENV,
+    default="",
+    help="设备遥测令牌；未指定时读取 Agent Gateway 入口。",
+)
+@click.option("--json", "json_output", is_flag=True, help="输出稳定 JSON 结果。")
+@click.option("--fix", is_flag=True, help="预览并应用可证明安全的修复。")
+@click.option("--yes", is_flag=True, help="确认应用 --fix 预览中的全部安全修复。")
+@click.pass_context
+def agent_verify_command(
+    context: click.Context,
+    agent_type: str,
+    source_config: Path | None,
+    state_dir: Path | None,
+    hub_url: str,
+    telemetry_token: str,
+    json_output: bool,
+    fix: bool,
+    yes: bool,
+) -> None:
+    """验证 Agent 配置、Gateway、Hub、设备令牌和首次真实调用。"""
+
+    async def _verify() -> VerificationReport:
+        return await verify_agent(
+            agent_type,
+            source_config=source_config,
+            state_dir=state_dir,
+            hub_url=hub_url,
+            telemetry_token=telemetry_token,
+        )
+
+    report = asyncio.run(_verify())
+    if fix and report.planned_fixes:
+        if json_output and not yes:
+            report.confirmation_required = True
+            click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+            context.exit(1)
+
+        if not json_output:
+            click.echo("计划应用以下安全修复：")
+            for planned in report.planned_fixes:
+                backup = "（写入前备份）" if planned.requires_backup else ""
+                click.echo(f"  - {planned.description}{backup}")
+            if not yes and not click.confirm("确认应用以上修复？", default=False):
+                click.echo("已取消，未修改任何配置。")
+                _render_verification_report(report)
+                context.exit(1)
+
+        applied = asyncio.run(
+            apply_agent_fixes(
+                agent_type,
+                source_config=source_config,
+                state_dir=state_dir,
+                hub_url=hub_url,
+                telemetry_token=telemetry_token,
+            )
+        )
+        rerun = asyncio.run(_verify())
+        rerun.applied_fixes = applied
+        report = rerun
+
+    if json_output:
+        click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        _render_verification_report(report)
+    if not report.ready:
+        context.exit(1)

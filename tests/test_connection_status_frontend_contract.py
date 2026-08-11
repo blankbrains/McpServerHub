@@ -23,3 +23,4 @@ def test_monitoring_page_includes_connection_status_panel() -> None:
     assert "配置错误" in connection_panel
     assert "首次调用" in connection_panel
     assert "待上传队列" in connection_panel
+    assert "mcp-hub agent verify --agent" in connection_panel

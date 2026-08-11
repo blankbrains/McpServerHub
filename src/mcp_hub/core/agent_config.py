@@ -154,6 +154,44 @@ def _read_document(path: Path, format: ConfigFormat) -> dict[str, Any]:
     return document
 
 
+def read_agent_document(
+    agent_type: str,
+    source_path: Path | None = None,
+) -> tuple[AgentConfigProfile, Path, dict[str, Any]]:
+    """Resolve and parse one Agent configuration without modifying it."""
+    profile = get_agent_profile(agent_type)
+    path = source_path or find_agent_config(agent_type)
+    if path is None:
+        raise FileNotFoundError(f"No {profile.name} MCP configuration was found")
+    return profile, path, _read_document(path, profile.format)
+
+
+def write_agent_document_with_backup(
+    profile: AgentConfigProfile,
+    path: Path,
+    document: dict[str, Any],
+) -> Path:
+    """Back up and atomically replace one parsed Agent configuration."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_path = path.with_name(f"{path.name}.mcp-hub-backup-{timestamp}")
+    backup_path.write_bytes(path.read_bytes())
+    source_mode = path.stat().st_mode
+    with contextlib.suppress(OSError):
+        backup_path.chmod(source_mode)
+
+    serialized = (
+        tomli_w.dumps(document)
+        if profile.format == "toml"
+        else json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    )
+    temp_path = path.with_suffix(f"{path.suffix}.mcp-hub.tmp")
+    temp_path.write_text(serialized, encoding="utf-8")
+    with contextlib.suppress(OSError):
+        temp_path.chmod(source_mode)
+    temp_path.replace(path)
+    return backup_path
+
+
 def _gateway_entry(
     profile: AgentConfigProfile,
     *,
@@ -183,11 +221,7 @@ def prepare_agent_migration(
     source_path: Path | None = None,
 ) -> AgentMigration:
     """Parse an Agent config and separate supported Gateway connections."""
-    profile = get_agent_profile(agent_type)
-    path = source_path or find_agent_config(agent_type)
-    if path is None:
-        raise FileNotFoundError(f"No {profile.name} MCP configuration was found")
-    document = _read_document(path, profile.format)
+    profile, path, document = read_agent_document(agent_type, source_path)
     raw_servers = document.get(profile.server_key, {})
     if not isinstance(raw_servers, dict):
         raise ValueError(f"{profile.server_key} must be an object")
@@ -240,20 +274,8 @@ def apply_agent_migration(
     )
     document = {**migration.document, migration.profile.server_key: retained}
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = path.with_name(f"{path.name}.mcp-hub-backup-{timestamp}")
-    backup_path.write_bytes(path.read_bytes())
-    source_mode = path.stat().st_mode
-    with contextlib.suppress(OSError):
-        backup_path.chmod(source_mode)
-
-    if migration.profile.format == "toml":
-        serialized = tomli_w.dumps(document)
-    else:
-        serialized = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
-    temp_path = path.with_suffix(f"{path.suffix}.mcp-hub.tmp")
-    temp_path.write_text(serialized, encoding="utf-8")
-    with contextlib.suppress(OSError):
-        temp_path.chmod(source_mode)
-    temp_path.replace(path)
-    return backup_path
+    return write_agent_document_with_backup(
+        migration.profile,
+        path,
+        document,
+    )

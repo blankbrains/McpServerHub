@@ -164,9 +164,29 @@ CLI 会在确认后：
 诊断：
 
 ```bash
+mcp-hub agent verify --agent codex
+mcp-hub agent verify --agent codex --json
 mcp-hub agent status --agent codex
 mcp-hub agent doctor --agent codex
 ```
+
+`agent verify` 是首选的端到端检查。它会区分：
+
+- `hub_unreachable`：Hub 网络或超时问题；
+- `telemetry_token_invalid`：设备令牌无效或属于其他 Hub；
+- `device_revoked`：设备已撤销；
+- `gateway_not_seen` / `gateway_offline`：Agent 尚未加载 Gateway 或 Gateway 已离线；
+- `first_call_missing`：Gateway 在线但还没有真实工具调用；
+- `queue_backlog`：本地或服务端仍看到待上传事件；
+- `version_incompatible`：CLI、Hub 或 Gateway 的主次版本不兼容。
+
+默认命令只读取配置、检查 SQLite 队列并调用健康/令牌验证接口，不修改 Agent 配置。自动化可读取 `--json` 的稳定 `checks[].code`。只有需要安全修复时才执行：
+
+```bash
+mcp-hub agent verify --agent codex --fix
+```
+
+CLI 会先展示修复预览并要求确认。涉及 Agent 配置时会先创建带时间戳备份；自动修复只处理可证明等价的重复入口、已知旧命令、缺失的非敏感路径字段、状态目录和队列立即重试。冲突入口、缺失令牌、OAuth 和无法判断归属的配置不会自动修改。自动化环境必须同时提供 `--fix --yes`，否则 JSON 模式只返回预览并退出。
 
 更新网页追踪列表后同步：
 

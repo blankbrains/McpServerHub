@@ -44,7 +44,7 @@ uv tool uninstall mcp-hub-cli
 - Agent 类型
 - 监控页生成的一次性设备令牌
 
-先验证：
+接入前先验证 Hub 网络和本地基础配置：
 
 ```bash
 curl "<Hub URL>/api/v1/health"
@@ -62,10 +62,19 @@ mcp-hub agent setup \
 
 执行前必须展示迁移预览并获得用户确认。完成后提醒用户完全重启 Agent，并实际调用一次 MCP 工具。
 
+接入后必须运行端到端验证：
+
+```bash
+mcp-hub agent verify --agent <agent>
+```
+
+自动化读取结果时使用 `--json`，根据 `checks[].code` 区分网络、令牌、撤销、Gateway 心跳、首次调用和队列问题。默认验证只读。只有用户明确同意预览后才可执行 `--fix`；非交互执行必须使用 `--fix --yes`。任何 Agent 配置写入都必须先生成备份，不得自动创建新设备令牌或修复无法确认归属的配置。
+
 ## 安全规则
 
 - 不输出、记录或提交设备令牌、API Key、环境变量值或请求头值。
 - 不覆盖 Agent 配置；必须保留 CLI 创建的备份。
+- 网络不可达时不得声称设备令牌无效。
 - 不把“加入追踪”描述为安装或启动本地进程。
 - 不声称 Agent 直连 Server 的调用会被监控。
 - 不执行 `mcp-hub install/start/stop`，除非用户明确说明这是可信自托管 Hub，且已启用进程管理。

@@ -33,6 +33,7 @@ from mcp_hub.api.routes_telemetry import (
     ingest_telemetry_events,
     ingest_telemetry_inventory,
     revoke_telemetry_device,
+    validate_telemetry_token,
 )
 from mcp_hub.api.routes_usage import get_usage_stats
 from mcp_hub.cli.agent import agent
@@ -185,6 +186,33 @@ async def test_revoked_device_token_cannot_upload_events() -> None:
     await revoke_telemetry_device(device_id, "alice")
     with pytest.raises(HTTPException, match="无效或已撤销"):
         await get_telemetry_identity(f"Bearer {token}")
+
+
+async def test_device_token_validation_distinguishes_valid_revoked_and_unknown() -> None:
+    await _prepare_telemetry_tables()
+    created = await create_telemetry_device(
+        DeviceCreateRequest(name="Verifier", agent_type="codex"),
+        "alice",
+    )
+    device_id = created["data"]["device"]["id"]
+    token = created["data"]["token"]
+
+    valid = await validate_telemetry_token(f"Bearer {token}")
+    assert valid["data"]["valid"] is True
+    assert valid["data"]["revoked"] is False
+    assert valid["data"]["online"] is False
+    assert valid["data"]["state"] == "waiting_configuration"
+    assert valid["data"]["agent_type"] == "codex"
+
+    await revoke_telemetry_device(device_id, "alice")
+    revoked = await validate_telemetry_token(f"Bearer {token}")
+    assert revoked["data"]["valid"] is False
+    assert revoked["data"]["revoked"] is True
+    assert revoked["data"]["state"] == "revoked"
+
+    with pytest.raises(HTTPException) as exc_info:
+        await validate_telemetry_token("Bearer mcpht_unknown-token")
+    assert exc_info.value.status_code == 401
 
 
 def test_telemetry_schema_rejects_raw_tool_payloads() -> None:
@@ -633,6 +661,32 @@ async def test_non_gateway_event_uploader_does_not_mark_gateway_online() -> None
 
     status = await get_telemetry_connection_status(user_id="alice")
     assert status["data"]["devices"][0]["state"] == "waiting_restart"
+    assert status["data"]["devices"][0]["gateway_last_seen_at"] is None
+
+
+async def test_verify_queue_retry_does_not_mark_gateway_online() -> None:
+    await _prepare_telemetry_tables()
+    _created, identity = await _connection_device()
+
+    await ingest_telemetry_events(
+        TelemetryBatchRequest(
+            source="verify",
+            session_id="verify-session-0001",
+            events=[
+                TelemetryEventInput(
+                    event_id="verify-flushed-heartbeat",
+                    event_type="heartbeat",
+                    session_id="old-gateway-session",
+                    queue_depth=0,
+                    occurred_at=datetime.now(timezone.utc),
+                )
+            ],
+        ),
+        identity,
+    )
+
+    status = await get_telemetry_connection_status(user_id="alice")
+    assert status["data"]["devices"][0]["state"] == "waiting_configuration"
     assert status["data"]["devices"][0]["gateway_last_seen_at"] is None
 
 

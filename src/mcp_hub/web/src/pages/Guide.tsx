@@ -97,12 +97,12 @@ mcp-hub --version`,
     },
     {
       num: 10,
-      title: '无数据时运行诊断',
+      title: '运行端到端接入验证',
       icon: '🩺',
-      description: '先运行本地状态和自检命令，再检查 Agent 是否完全重启、设备是否撤销、Hub 是否可达，以及调用是否仍绕过 Gateway 直连 Server。',
-      code: `mcp-hub agent status --agent codex
-mcp-hub agent doctor --agent codex`,
-      note: '网络中断时，遥测事件会进入本地 SQLite 队列并在恢复后重试。若页面自动复制仍被 HTTP 浏览器策略阻止，可直接选中页面中的完整命令并按 Ctrl+C（macOS 按 Cmd+C）。',
+      description: 'verify 会一次检查 Agent 入口、Gateway 配置、本地命令与队列、Hub 网络、设备令牌、Gateway 心跳和首次真实工具调用，并给出稳定错误码。',
+      code: `mcp-hub agent verify --agent codex
+mcp-hub agent verify --agent codex --json`,
+      note: '默认验证只读。需要修复时使用 --fix，CLI 会先展示预览；配置写入前自动备份，冲突配置和缺失令牌不会被猜测修复。网络中断时，遥测事件仍保留在本地 SQLite 队列中。',
     },
   ]
 }
@@ -244,7 +244,9 @@ export default function Guide() {
             <p className="font-medium text-gray-800">Q: 为什么已经创建设备，监控页仍然没有调用？</p>
             <p className="text-gray-600 mt-0.5">
               A: 创建设备只生成上报凭证。还必须运行 agent setup、完全重启 Agent，并实际调用一次经过 Gateway 的 MCP 工具。
-              直接连接 Server 的调用、普通聊天和仅查看工具列表都不会产生监控数据。
+              直接连接 Server 的调用、普通聊天和仅查看工具列表都不会产生监控数据。运行
+              <code className="mx-1 font-mono">mcp-hub agent verify --agent &lt;agent&gt;</code>
+              可以明确区分网络、令牌、Gateway 心跳、首次调用和队列问题。
             </p>
           </div>
           <div>

@@ -86,9 +86,9 @@ export default function ConnectionStatusPanel({
 }: ConnectionStatusPanelProps) {
   const [copyMessage, setCopyMessage] = useState('')
 
-  const copyDoctorCommand = async (agentType: string) => {
-    const copied = await copyText(`mcp-hub agent doctor --agent ${agentType}`)
-    setCopyMessage(copyStatus(copied, '诊断命令已复制'))
+  const copyVerifyCommand = async (agentType: string) => {
+    const copied = await copyText(`mcp-hub agent verify --agent ${agentType}`)
+    setCopyMessage(copyStatus(copied, '验证命令已复制'))
   }
 
   return (
@@ -136,11 +136,7 @@ export default function ConnectionStatusPanel({
       ) : (
         <div className="divide-y divide-gray-200">
           {data.devices.map((device) => {
-            const canRunDoctor = [
-              'partial_connection',
-              'offline',
-              'data_backlog',
-            ].includes(device.state)
+            const canRunVerify = !['connected', 'revoked'].includes(device.state)
             return (
               <article key={device.id} className="px-4 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -163,13 +159,13 @@ export default function ConnectionStatusPanel({
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-sm">
-                    {canRunDoctor && (
+                    {canRunVerify && (
                       <button
                         type="button"
-                        onClick={() => void copyDoctorCommand(device.agent_type)}
+                        onClick={() => void copyVerifyCommand(device.agent_type)}
                         className="border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50"
                       >
-                        复制诊断命令
+                        复制验证命令
                       </button>
                     )}
                     {device.state === 'partial_connection' && (
