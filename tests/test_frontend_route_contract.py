@@ -45,3 +45,22 @@ def test_my_mcp_workspace_keeps_configuration_and_inventory_reachable() -> None:
     assert "本地清单" in workspace
     assert "to=\"/compare\"" in market
     assert "to=\"/builder\"" in publish
+
+
+def test_desktop_sidebar_keeps_auxiliary_actions_at_viewport_bottom() -> None:
+    layout = (WEB_SRC / "components" / "Layout.tsx").read_text(encoding="utf-8")
+    aside = re.search(r"<aside className=\{`(.*?)`\}>", layout, re.DOTALL)
+
+    assert aside is not None
+    aside_classes = aside.group(1)
+    for required_class in (
+        "overflow-hidden",
+        "md:sticky",
+        "md:top-0",
+        "md:h-screen",
+        "md:self-start",
+    ):
+        assert required_class in aside_classes
+
+    assert 'className="min-h-0 flex-1 overflow-y-auto py-1"' in layout
+    assert 'className="flex-shrink-0 border-t border-gray-100 py-1' in layout

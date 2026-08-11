@@ -129,7 +129,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const sidebar = (
     <>
       {/* Logo */}
-      <Link to="/" className="flex items-center gap-2 px-3 py-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+      <Link to="/" className="flex flex-shrink-0 items-center gap-2 px-3 py-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
         <svg width="28" height="28" viewBox="0 0 64 64" className="flex-shrink-0">
           <defs><linearGradient id="ls" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#3B82F6"/><stop offset="100%" stopColor="#8B5CF6"/></linearGradient></defs>
           <circle cx="32" cy="32" r="30" fill="url(#ls)"/>
@@ -139,7 +139,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </Link>
 
       {/* Search */}
-      <div className="px-2 py-2" ref={searchRef}>
+      <div className="flex-shrink-0 px-2 py-2" ref={searchRef}>
         <div className="relative">
           <input
             type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -162,7 +162,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 py-1 overflow-y-auto" aria-label="主导航">
+      <nav className="min-h-0 flex-1 overflow-y-auto py-1" aria-label="主导航">
         {navItems.map((item) => {
           const active = matchesRoute(location.pathname, item.matches)
           return (
@@ -179,7 +179,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      <div className="border-t border-gray-100 py-1 dark:border-gray-700">
+      <div className="flex-shrink-0 border-t border-gray-100 py-1 dark:border-gray-700">
         <Link to="/guide"
           className="mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           title={sidebarCollapsed ? '指南' : undefined}>
@@ -201,7 +201,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </div>
 
       {/* 底部工具栏 */}
-      <div className="flex items-center gap-1 mx-2 mb-1">
+      <div className="mx-2 mb-1 flex flex-shrink-0 items-center gap-1">
         <button onClick={() => setDark(!dark)}
           className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           title={dark ? '切换亮色模式' : '切换深色模式'}>
@@ -215,7 +215,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Auth */}
-      <div className="border-t border-gray-100 dark:border-gray-700 px-3 py-3">
+      <div className="flex-shrink-0 border-t border-gray-100 px-3 py-3 dark:border-gray-700">
         {auth.userId ? (
           <div className={sidebarCollapsed ? 'text-center' : ''}>
             {sidebarCollapsed ? (
@@ -250,9 +250,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         )}
 
         {/* Sidebar — 桌面端常显，移动端 overlay */}
-        <aside className={`flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 z-50
+        <aside className={`z-50 flex flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 dark:border-gray-700 dark:bg-gray-800
           ${sidebarOpen ? 'fixed inset-y-0 left-0' : 'hidden'}
-          md:relative md:flex
+          md:sticky md:top-0 md:flex md:h-screen md:self-start
           ${sidebarCollapsed ? 'w-16' : 'w-52'}`}>
           {/* 移动端关闭按钮 */}
           <button onClick={() => setSidebarOpen(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg">✕</button>
