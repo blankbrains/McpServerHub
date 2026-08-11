@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   apiDelete,
   apiGet,
@@ -111,11 +112,19 @@ export default function Market() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">🏪 MCP 市场</h1>
-        <button onClick={() => setShowFilters(!showFilters)} className="text-sm text-blue-600 hover:text-blue-800">
-          {showFilters ? '收起筛选 ↑' : '展开筛选 ↓'}
-        </button>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">发现 MCP</h1>
+          <p className="mt-1 text-sm text-gray-500">搜索、筛选并追踪适合当前工作流的 MCP Server。</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link to="/compare" className="text-sm font-medium text-gray-600 hover:text-blue-700">
+            ⚖️ 对比 Server
+          </Link>
+          <button onClick={() => setShowFilters(!showFilters)} className="text-sm text-blue-600 hover:text-blue-800">
+            {showFilters ? '收起筛选 ↑' : '展开筛选 ↓'}
+          </button>
+        </div>
       </div>
 
       {/* Search + Sort */}

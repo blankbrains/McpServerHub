@@ -81,9 +81,9 @@ export default function Login() {
             {userInfo?.email && <p className="text-xs text-gray-400">{userInfo.email}</p>}
           </div>
           <div className="flex gap-2 text-xs text-gray-400 justify-center">
-            <Link to="/my-servers" className="hover:text-blue-600">📦 我的 Server</Link>
+            <Link to="/my-servers" className="hover:text-blue-600">📦 我的 MCP</Link>
             <span>·</span>
-            <Link to="/my-config" className="hover:text-blue-600">⚙️ 我的配置</Link>
+            <Link to="/my-config" className="hover:text-blue-600">⚙️ 配置与同步</Link>
             <span>·</span>
             <Link to="/publish/mine" className="hover:text-blue-600">📤 我的发布</Link>
           </div>
@@ -94,7 +94,7 @@ export default function Login() {
             </button>
             <button onClick={() => navigate('/')}
               className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-              返回仪表盘
+              返回概览
             </button>
           </div>
         </div>

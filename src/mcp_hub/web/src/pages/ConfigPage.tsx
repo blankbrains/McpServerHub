@@ -17,6 +17,10 @@ const AGENTS = [
 
 type TrackingDecision = 'idle' | 'uploaded' | 'cancelled'
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 export default function ConfigPage() {
   const navigate = useNavigate()
   const [dragging, setDragging] = useState(false)
@@ -39,8 +43,14 @@ export default function ConfigPage() {
     setTrackingDecision('idle')
     try {
       const text = await file.text()
-      const json = JSON.parse(text)
-      const servers = json.mcpServers || {}
+      const json: unknown = JSON.parse(text)
+      if (!isRecord(json) || !isRecord(json.mcpServers)) {
+        setMessage('⚠️ 网页检查仅支持根节点包含 mcpServers 对象的 JSON 配置')
+        setPreviewData(null)
+        setPendingFile(null)
+        return
+      }
+      const servers = json.mcpServers
       const names = Object.keys(servers)
       if (names.length === 0) { setMessage('⚠️ 配置文件中未找到 mcpServers 定义'); setPendingFile(null); return }
       setPreviewData({ fileName: file.name, serverCount: names.length, servers: names })
@@ -172,7 +182,9 @@ export default function ConfigPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">📤 步骤 1：检查你的 MCP 配置</h2>
         <p className="text-sm text-gray-500 mb-4">
-          上传你本地的 <code className="px-1 bg-gray-100 rounded text-xs">claude_desktop_config.json</code> 或 <code className="px-1 bg-gray-100 rounded text-xs">mcp.json</code>
+          仅支持根节点为 <code className="px-1 bg-gray-100 rounded text-xs">mcpServers</code> 的 JSON，例如
+          <code className="mx-1 px-1 bg-gray-100 rounded text-xs">claude_desktop_config.json</code>。
+          Codex TOML 和 VS Code Copilot 的 <code className="px-1 bg-gray-100 rounded text-xs">servers</code> JSON 请在步骤 4 使用 agent setup
         </p>
 
         {/* 文件选择区 */}
@@ -260,7 +272,7 @@ export default function ConfigPage() {
             <div className="space-y-2">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded-full text-sm font-medium">✅ 已开始追踪</span>
               <p className="text-sm text-green-700">
-                这些 Server 已保存到你的个人追踪列表。服务端状态、健康检查和已上报的调用统计可在监控页查看。
+                这些 Server 已保存到你的个人追踪列表。完成 Gateway 接入后，可在监控页查看设备上报的运行状态、调用、延迟、错误和估算 Token。
               </p>
               <button onClick={handleCancelTracking}
                 className="px-4 py-1.5 bg-white text-red-600 border border-red-300 rounded-lg text-xs font-medium hover:bg-red-50">
@@ -280,7 +292,7 @@ export default function ConfigPage() {
             <div className="space-y-2">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-full text-sm font-medium">⚠️ 待确认</span>
               <p className="text-sm text-amber-700">
-                匹配完成。确认后会保存你的 Server 列表；本地调用数据需要通过已授权的遥测设备或网关主动上报。
+                匹配完成。确认后会保存你的 Server 列表；本地调用数据只会由已授权的本地 Gateway 主动上报。
               </p>
               <div className="flex gap-3 mt-3">
                 <button onClick={handleUploadToHub}
@@ -335,13 +347,11 @@ export default function ConfigPage() {
       <div className="bg-white rounded-xl border border-green-200 bg-green-50 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">📊 步骤 4：接入本地 <InfoTooltip description="Gateway 在本机代理 Agent 与 MCP Server 的通信，并上报不含原始请求和响应内容的运行指标。">Gateway</InfoTooltip>（监控必需）</h2>
         <p className="text-sm text-gray-600 mb-4">
-          追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应 <InfoTooltip description="设备令牌只用于本地 Gateway 上报指标，服务端会将它绑定到创建时选择的 Agent 类型。">设备令牌</InfoTooltip> 配置到本地 <InfoTooltip description="Gateway 是连接本地 Agent 与 MCP Server 的转发程序，负责在调用时采集最小化指标。">Gateway</InfoTooltip>；调用、延迟和 Token 统计才会上报且会按 Agent 隔离。
+          追踪 Server 不会自动产生本地调用数据。请为每个使用的 Agent（如 Claude Code、Codex）在监控页分别创建设备，并将对应 <InfoTooltip description="设备令牌只用于本地 Gateway 上报指标，服务端会将它绑定到创建时选择的 Agent 类型。">设备令牌</InfoTooltip> 配置到本地 <InfoTooltip description="Gateway 是连接本地 Agent 与 MCP Server 的转发程序，负责在调用时采集最小化指标。">Gateway</InfoTooltip>；调用、延迟和估算 Token 才会上报且会按 Agent 隔离。
         </p>
         <div className="bg-gray-900 rounded-lg p-3 mb-3">
           <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">
-{`mcp-hub agent setup --agent ${selectedAgent} \\
-  --hub-url ${window.location.origin} \\
-  --telemetry-token mcpht_设备令牌`}
+{`mcp-hub agent setup --agent ${selectedAgent} --hub-url ${window.location.origin} --telemetry-token mcpht_设备令牌`}
           </pre>
         </div>
         <p className="text-xs text-gray-500 mb-3">

@@ -1,29 +1,31 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
 import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet } from '../api/client'
+import McpWorkspaceNav from './McpWorkspaceNav'
 
 const navItems = [
-  { path: '/', label: '仪表盘', icon: '📊' },
-  { path: '/guide', label: '指南', icon: '📖' },
-  { path: '/market', label: '市场', icon: '🏪' },
-  { path: '/my-servers', label: '我的 Server', icon: '📦' },
-  { path: '/my-config', label: '配置', icon: '⚙️' },
-  { path: '/compare', label: '对比', icon: '⚖️' },
-  { path: '/presets', label: '方案', icon: '📋' },
-  { path: '/builder', label: '构建', icon: '🛠️' },
-  { path: '/monitor', label: '监控', icon: '📈' },
-  { path: '/local', label: '发现', icon: '🔍' },
-  { path: '/publish', label: '发布', icon: '📤' },
-  { path: '/profile', label: '个人中心', icon: '👤' },
-]
+  { path: '/', label: '概览', icon: '📊', matches: ['/'] },
+  { path: '/market', label: '发现 MCP', icon: '🔎', matches: ['/market', '/servers', '/compare'] },
+  { path: '/my-servers', label: '我的 MCP', icon: '📦', matches: ['/my-servers', '/my-config', '/config', '/local'] },
+  { path: '/monitor', label: '监控', icon: '📈', matches: ['/monitor'] },
+  { path: '/publish', label: '发布', icon: '📤', matches: ['/publish', '/builder'] },
+] as const
 
 // 面包屑映射
 const breadcrumbLabels: Record<string, string> = {
-  '': '仪表盘', guide: '指南', market: '市场', 'my-servers': '我的 Server',
-  'my-config': '配置', compare: '对比', presets: '方案', builder: '构建',
-  monitor: '监控', local: '发现', publish: '发布', profile: '个人中心',
+  '': '概览', guide: '指南', market: '发现 MCP', 'my-servers': '我的 MCP',
+  'my-config': '配置与同步', compare: 'Server 对比', presets: '方案市场', builder: '项目脚手架',
+  monitor: '监控', local: '本地清单', publish: '发布', profile: '个人中心',
   notifications: '通知', config: '配置中心', login: '登录',
   servers: 'Server 详情', admin: '管理后台',
+}
+
+function matchesRoute(pathname: string, prefixes: readonly string[]): boolean {
+  return prefixes.some(prefix => (
+    prefix === '/'
+      ? pathname === '/'
+      : pathname === prefix || pathname.startsWith(`${prefix}/`)
+  ))
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -121,7 +123,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         label: breadcrumbLabels[p] || p,
         path: '/' + pathParts.slice(0, i + 1).join('/'),
       }))]
-    : [{ label: '仪表盘', path: '/' }]
+    : [{ label: '概览', path: '/' }]
   const sidebarCollapsed = collapsed && !sidebarOpen
 
   const sidebar = (
@@ -162,7 +164,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Nav items */}
       <nav className="flex-1 py-1 overflow-y-auto" aria-label="主导航">
         {navItems.map((item) => {
-          const active = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'))
+          const active = matchesRoute(location.pathname, item.matches)
           return (
             <Link key={item.path} to={item.path} title={sidebarCollapsed ? item.label : undefined}
               className={`flex items-center gap-2.5 mx-2 mb-0.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -177,18 +179,26 @@ export default function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      {/* 通知铃铛 */}
-      <Link to="/notifications"
-        className="relative mx-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2">
-        <span className="relative">🔔
-          {unreadNotif > 0 && (
-            <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
-              {unreadNotif > 99 ? '99+' : unreadNotif}
-            </span>
-          )}
-        </span>
-        {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">通知{unreadNotif > 0 ? ` (${unreadNotif})` : ''}</span>}
-      </Link>
+      <div className="border-t border-gray-100 py-1 dark:border-gray-700">
+        <Link to="/guide"
+          className="mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          title={sidebarCollapsed ? '指南' : undefined}>
+          <span aria-hidden="true">📖</span>
+          {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">指南</span>}
+        </Link>
+        <Link to="/notifications"
+          className="relative mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          title={sidebarCollapsed ? '通知' : undefined}>
+          <span className="relative" aria-hidden="true">🔔
+            {unreadNotif > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+                {unreadNotif > 99 ? '99+' : unreadNotif}
+              </span>
+            )}
+          </span>
+          {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">通知{unreadNotif > 0 ? ` (${unreadNotif})` : ''}</span>}
+        </Link>
+      </div>
 
       {/* 底部工具栏 */}
       <div className="flex items-center gap-1 mx-2 mb-1">
@@ -209,12 +219,12 @@ export default function Layout({ children }: { children: ReactNode }) {
         {auth.userId ? (
           <div className={sidebarCollapsed ? 'text-center' : ''}>
             {sidebarCollapsed ? (
-              <span className="text-sm" title={auth.userId}>👤</span>
+              <Link to="/profile" className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" title="个人中心">👤</Link>
             ) : (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={auth.userId}>
+                <Link to="/profile" className="max-w-[120px] truncate text-xs text-gray-600 hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300" title="个人中心">
                   👤 {auth.userId}
-                </span>
+                </Link>
                 <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">退出</button>
               </div>
             )}
@@ -275,6 +285,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
 
           <main id="main-content" className="px-4 md:px-6 py-4 md:py-8">
+            <McpWorkspaceNav />
             {children}
           </main>
         </div>

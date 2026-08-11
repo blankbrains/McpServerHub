@@ -46,7 +46,7 @@ export default function AdminOverview() {
         <Card label="总 Server" value={fmtNum(stats.total_servers)} color="purple" />
         <Card label="追踪关系" value={fmtNum(stats.total_installs)} color="green" />
         <Card label="总调用" value={fmtNum(stats.total_calls)} color="orange" />
-        <Card label="总 Token" value={fmtNum(stats.total_tokens)} color="red" />
+        <Card label="总估算 Token" value={fmtNum(stats.total_tokens)} color="red" />
         <Card label="7日活跃" value={fmtNum(stats.active_users_7d)} color="indigo" />
       </div>
 
@@ -55,7 +55,7 @@ export default function AdminOverview() {
         <h2 className="font-semibold text-gray-900 dark:text-white mb-3">📈 每日调用趋势（30 天）</h2>
         <div className="flex items-end gap-1 h-40">
           {daily_trend.map((d: any) => (
-            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.date}: ${d.calls} 调用, ${fmtNum(d.tokens)} Token`}>
+            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.date}: ${d.calls} 调用, ${fmtNum(d.tokens)} 估算 Token`}>
               <div className="w-full bg-blue-500 dark:bg-blue-400 rounded-t-sm transition-all"
                 style={{ height: `${Math.max((d.calls / maxCalls) * 100, 2)}%`, opacity: 0.6 + (d.tokens / Math.max(...daily_trend.map((x: any) => x.tokens), 1)) * 0.4 }} />
             </div>

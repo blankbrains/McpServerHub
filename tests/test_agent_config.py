@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from mcp_hub.cli.agent import agent
@@ -125,13 +126,26 @@ def test_agent_setup_requires_confirmation_and_leaves_source_unchanged(tmp_path)
     assert source.read_text(encoding="utf-8") == original
 
 
-def test_agent_config_uses_unique_mcp_hub_command(tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("agent_type", "server_key", "format"),
+    [
+        ("cursor", "mcpServers", "json"),
+        ("vscode-copilot", "servers", "json"),
+        ("codex", "mcp_servers", "toml"),
+    ],
+)
+def test_agent_config_uses_agent_specific_format(
+    tmp_path,
+    agent_type: str,
+    server_key: str,
+    format: str,
+) -> None:
     result = CliRunner().invoke(
         agent,
         [
             "config",
             "--agent",
-            "cursor",
+            agent_type,
             "--hub-url",
             "https://hub.example.test",
             "--telemetry-token",
@@ -142,8 +156,9 @@ def test_agent_config_uses_unique_mcp_hub_command(tmp_path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    config = json.loads(result.output)
-    assert config["mcpServers"]["mcp-hub"]["command"] == "mcp-hub"
+    config = tomllib.loads(result.output) if format == "toml" else json.loads(result.output)
+    assert config[server_key]["mcp-hub"]["command"] == "mcp-hub"
+    assert ("type" in config[server_key]["mcp-hub"]) is (agent_type == "vscode-copilot")
 
 
 def test_agent_setup_writes_gateway_and_replaces_direct_entries(tmp_path) -> None:

@@ -267,14 +267,14 @@ export default function MyServers() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-gray-500">正在读取你的 Server...</div>
+    return <div className="py-16 text-center text-sm text-gray-500">正在读取你的 MCP...</div>
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">我的 Server</h1>
+          <h1 className="text-2xl font-bold text-gray-900">我的 MCP</h1>
           <p className="mt-1 text-sm text-gray-500">
             {servers.length} 个已追踪，{connectedCount} 个已由本地 Gateway 上报，{runningCount} 个当前运行。
           </p>
@@ -332,7 +332,7 @@ export default function MyServers() {
           value={query}
           onChange={event => setQuery(event.target.value)}
           placeholder="搜索名称或 ID"
-          aria-label="搜索我的 Server"
+          aria-label="搜索我的 MCP"
           className="w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
         />
       </div>
@@ -388,7 +388,7 @@ export default function MyServers() {
                       <span>调用 {fmtNum(server.call_count_7d)}</span>
                     </InfoTooltip>
                     <InfoTooltip description="根据 MCP 请求和响应载荷估算，不等同于模型供应商账单 Token。">
-                      <span>Token {fmtNum(server.token_consumption)}</span>
+                      <span>估算 Token {fmtNum(server.token_consumption)}</span>
                     </InfoTooltip>
                     <InfoTooltip description="有真实调用时按成功调用占比计算；没有调用时显示 0。">
                       <span>成功率 {server.reliability_score}%</span>

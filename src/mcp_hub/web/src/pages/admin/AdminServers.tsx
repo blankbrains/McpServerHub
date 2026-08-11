@@ -66,7 +66,7 @@ export default function AdminServers() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
               <th className="px-4 py-2">Server</th><th className="px-4 py-2">分类</th><th className="px-4 py-2 text-right">追踪</th>
-              <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日Token</th>
+              <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日估算 Token</th>
               <th className="px-4 py-2 text-right">评分</th><th className="px-4 py-2">安全</th>
             </tr></thead>
             <tbody>

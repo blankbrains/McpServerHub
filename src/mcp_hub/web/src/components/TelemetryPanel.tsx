@@ -198,20 +198,13 @@ export default function TelemetryPanel() {
         `--telemetry-token ${createdDevice.token}`,
       ].join(' ')
     : ''
-  const gatewayConfigText = createdDevice
-    ? JSON.stringify({
-        mcpServers: {
-          'mcp-hub': {
-            command: 'mcp-hub',
-            args: ['serve'],
-            env: {
-              MCP_HUB_REPORT_URL: hubUrl,
-              MCP_HUB_TELEMETRY_TOKEN: createdDevice.token,
-              MCP_HUB_AGENT_TYPE: createdDevice.device.agent_type,
-            },
-          },
-        },
-      }, null, 2)
+  const manualConfigCommand = createdDevice
+    ? [
+        'mcp-hub agent config',
+        `--agent ${createdDevice.device.agent_type}`,
+        `--hub-url ${hubUrl}`,
+        `--telemetry-token ${createdDevice.token}`,
+      ].join(' ')
     : ''
 
   useEffect(() => {
@@ -320,9 +313,9 @@ export default function TelemetryPanel() {
   }
 
   const copyConfig = async () => {
-    if (!gatewayConfigText) return
-    const copied = await copyText(gatewayConfigText)
-    setCopyState(copyStatus(copied, 'Gateway 配置已复制'))
+    if (!manualConfigCommand) return
+    const copied = await copyText(manualConfigCommand)
+    setCopyState(copyStatus(copied, '配置生成命令已复制'))
   }
 
   const copySetupCommand = async () => {
@@ -610,13 +603,16 @@ mcp-hub agent doctor --agent codex`}</pre>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button type="button" onClick={() => void copyToken()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制密钥</button>
                 <button type="button" onClick={() => void copySetupCommand()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制一键接入命令</button>
-                <button type="button" onClick={() => void copyConfig()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制 Gateway 配置</button>
+                <button type="button" onClick={() => void copyConfig()} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-100">复制配置生成命令</button>
                 {copyState && <span className="self-center text-xs text-amber-900" role="status">{copyState}</span>}
               </div>
               <details className="mt-3">
-                <summary className="cursor-pointer text-xs font-medium text-amber-900">查看可手动复制的 Gateway 配置</summary>
+                <summary className="cursor-pointer text-xs font-medium text-amber-900">高级备用：输出 Agent 对应格式的 Gateway 入口</summary>
+                <p className="mt-2 text-xs text-amber-800">
+                  此命令会按 Agent 输出 JSON 或 TOML 入口片段，但不会迁移现有 Server；首次接入仍应优先运行 agent setup。
+                </p>
                 <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-white p-2 text-xs text-gray-700" tabIndex={0}>
-                  {gatewayConfigText}
+                  {manualConfigCommand}
                 </pre>
               </details>
             </div>

@@ -99,7 +99,7 @@ export default function Dashboard() {
       setError(
         loadError instanceof ApiRequestError && loadError.status === 401
           ? '登录状态已失效，请重新登录。'
-          : '仪表盘数据加载失败，请稍后重试。'
+          : '概览数据加载失败，请稍后重试。'
       )
     } finally {
       setLoading(false)
@@ -112,7 +112,7 @@ export default function Dashboard() {
   }, [authenticated])
 
   if (loading) {
-    return <div className="py-16 text-center text-sm text-gray-500">正在加载仪表盘...</div>
+    return <div className="py-16 text-center text-sm text-gray-500">正在加载概览...</div>
   }
 
   const summary = monitor?.summary
@@ -122,7 +122,7 @@ export default function Dashboard() {
     <div className="mx-auto max-w-6xl space-y-7">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">仪表盘</h1>
+          <h1 className="text-2xl font-bold text-gray-900">概览</h1>
           <p className="mt-1 text-sm text-gray-500">
             {authenticated
               ? `最近一次设备上报：${formatLastSeen(telemetry?.last_seen_at)}`

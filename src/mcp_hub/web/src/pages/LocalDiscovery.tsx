@@ -94,7 +94,7 @@ export default function LocalDiscovery() {
   if (!authenticated) {
     return (
       <div className="mx-auto max-w-3xl space-y-5">
-        <h1 className="text-2xl font-bold text-gray-900">本地 MCP 发现</h1>
+        <h1 className="text-2xl font-bold text-gray-900">本地清单</h1>
         <div className="border border-gray-200 bg-white p-8 text-center">
           <p className="text-sm text-gray-600">登录后查看由你的本地 Agent 设备主动上报的 MCP 清单。</p>
           <Link to="/login" className="mt-4 inline-flex bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
@@ -109,7 +109,7 @@ export default function LocalDiscovery() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">本地 MCP 发现</h1>
+          <h1 className="text-2xl font-bold text-gray-900">本地清单</h1>
           <p className="mt-1 text-sm text-gray-500">
             仅展示已授权设备上报的脱敏清单，不会由服务器扫描浏览器所在电脑。
           </p>

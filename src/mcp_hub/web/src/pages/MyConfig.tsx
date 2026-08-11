@@ -22,6 +22,17 @@ interface ConfigServer {
   group_name?: string
 }
 
+const SYNC_AGENT_OPTIONS = [
+  ['claude-code', 'Claude Code'],
+  ['claude-desktop', 'Claude Desktop'],
+  ['codex', 'Codex'],
+  ['cursor', 'Cursor'],
+  ['windsurf', 'Windsurf'],
+  ['vscode-copilot', 'VS Code Copilot'],
+  ['trae', 'Trae'],
+  ['generic', '通用 MCP 客户端'],
+] as const
+
 export default function MyConfig() {
   const [servers, setServers] = useState<ConfigServer[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,7 +40,9 @@ export default function MyConfig() {
   const [message, setMessage] = useState('')
   const [trackingStatus, setTrackingStatus] = useState<'idle' | 'uploaded' | 'cancelled'>('idle')
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [syncAgent, setSyncAgent] = useState('claude-code')
   const { token, userId } = getAuthState()
+  const syncCommand = `mcp-hub config sync --agent ${syncAgent} --server ${window.location.origin}`
 
   const toPreviewServers = (result: any): ConfigServer[] => [
     ...(result.data?.matched || []).map((server: any) => ({
@@ -142,7 +155,7 @@ export default function MyConfig() {
         await saveToServer(servers)
       }
       setTrackingStatus('uploaded')
-      setMessage('已保存到你的追踪列表。健康检查和已上报的调用数据可在监控页查看。')
+      setMessage('已保存到你的追踪列表。完成 Gateway 接入后，可在监控页查看上报的运行状态与调用指标。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '开始追踪失败，请稍后重试')
     }
@@ -208,7 +221,7 @@ export default function MyConfig() {
   if (!token || !userId) {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
+        <h1 className="text-2xl font-bold text-gray-900">配置与同步</h1>
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
           <p className="text-gray-700 font-medium">登录后检查配置、维护追踪列表并同步本地 Gateway</p>
           <Link to="/login" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
@@ -221,7 +234,7 @@ export default function MyConfig() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">⚙️ 我的配置</h1>
+          <h1 className="text-2xl font-bold text-gray-900">配置与同步</h1>
           <p className="text-sm text-gray-500 mt-1">检查本地 MCP 配置，确认追踪后通过 Gateway 同步并监控</p>
         </div>
         <Link to="/market" className="text-sm text-blue-600 hover:text-blue-800">去市场添加 →</Link>
@@ -234,7 +247,7 @@ export default function MyConfig() {
           <div className="bg-white rounded-lg p-3 border border-blue-100">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">1</span>
             <p className="font-medium text-gray-800">上传配置</p>
-            <p className="text-xs text-gray-500 mt-0.5">上传你本地的 MCP 配置文件，Hub 自动识别并匹配 Server</p>
+            <p className="text-xs text-gray-500 mt-0.5">上传根节点为 mcpServers 的 JSON，Hub 自动识别并匹配 Server</p>
           </div>
           <div className="bg-white rounded-lg p-3 border border-blue-100">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold mb-1">2</span>
@@ -249,7 +262,7 @@ export default function MyConfig() {
         </div>
         <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
           <p className="font-medium">💡 说明</p>
-          <p>确认追踪只保存 Server 列表。调用次数、响应时长和 Token 数据需要已授权的本地网关或遥测设备主动上报；取消追踪不会删除市场条目或影响其他用户。</p>
+          <p>确认追踪只保存 Server 列表。调用次数、响应时长和估算 Token 需要已授权的本地 Gateway 主动上报；取消追踪不会删除市场条目或影响其他用户。</p>
         </div>
       </div>
 
@@ -257,7 +270,8 @@ export default function MyConfig() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-2">📤 步骤 1：上传本地 MCP 配置</h2>
         <p className="text-sm text-gray-500 mb-3">
-          上传 <code className="px-1 bg-gray-100 rounded text-xs">claude_desktop_config.json</code> 或 <code className="px-1 bg-gray-100 rounded text-xs">mcp.json</code>，Hub 自动识别并匹配市场中的 Server
+          此简化页面仅支持根节点为 <code className="px-1 bg-gray-100 rounded text-xs">mcpServers</code> 的 JSON。
+          Codex TOML 和 VS Code Copilot 的 <code className="px-1 bg-gray-100 rounded text-xs">servers</code> JSON 请前往完整配置中心查看接入说明
         </p>
         <div className="flex gap-2">
           <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 cursor-pointer transition-colors">
@@ -288,7 +302,7 @@ export default function MyConfig() {
                 <span className="text-sm text-green-700">你的 {servers.length} 个 MCP Server 已在个人追踪列表中</span>
               </div>
               <p className="text-sm text-green-700">
-                已保存的 Server 可显示服务端状态和健康检查；本地调用数据仅在网关或遥测设备上报后出现。
+                完成本地 Gateway 接入后，已保存的 Server 才会显示设备清单、运行状态和调用指标。
               </p>
               <button
                 onClick={handleCancelTracking}
@@ -439,7 +453,7 @@ export default function MyConfig() {
                 {servers.map(s => (
                   <li key={s.name}>{s.name}</li>
                 ))}
-                <li className="text-blue-600">mcp-hub-gateway（需配置设备令牌后才会上报本地遥测）</li>
+                <li className="text-blue-600">mcp-hub（需完成 agent setup 并配置设备令牌后才会上报本地遥测）</li>
               </ul>
             </div>
           </div>
@@ -450,20 +464,32 @@ export default function MyConfig() {
           <div className="bg-gray-50 rounded-lg p-4 mt-4">
             <p className="text-sm font-medium text-gray-700 mb-2">🔄 一键同步到本地（CLI）</p>
             <p className="text-xs text-gray-500 mb-2">先完成 agent setup，再在本地运行以下命令更新 Gateway 管理清单：</p>
+            <label className="mb-2 block text-xs font-medium text-gray-600">
+              目标 Agent
+              <select
+                value={syncAgent}
+                onChange={(event) => setSyncAgent(event.target.value)}
+                className="ml-2 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700"
+              >
+                {SYNC_AGENT_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </label>
             <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto">
               <pre className="text-green-400 text-xs font-mono">
-                {`mcp-hub config sync --server ${window.location.origin}`}
+                {syncCommand}
               </pre>
             </div>
             <button onClick={async () => {
-              const copied = await copyText(`mcp-hub config sync --server ${window.location.origin}`)
+              const copied = await copyText(syncCommand)
               setMessage(copyStatus(copied, '命令已复制到剪贴板'))
               setTimeout(() => setMessage(''), 3000)
             }} className="mt-2 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700 transition-colors">
               📋 复制命令
             </button>
             <p className="text-xs text-gray-400 mt-2">
-              需要先安装 mcp-hub-cli、使用 mcp-hub login 登录，并在监控页完成 agent setup。同步只更新 gateway.json，写入前会确认和备份，并保留本地环境变量、请求头与工作目录。
+              目标 Agent 必须与 agent setup 使用的类型一致。需要先安装 mcp-hub-cli、使用 mcp-hub login 登录，并在监控页完成 agent setup。同步只更新 gateway.json，写入前会确认和备份，并保留本地环境变量、请求头与工作目录。
             </p>
           </div>
         )}

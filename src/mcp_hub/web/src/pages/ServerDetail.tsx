@@ -134,7 +134,8 @@ export default function ServerDetail() {
 
   const handleCopy = async () => {
     if (!configData) return
-    const didCopy = await copyText(JSON.stringify(configData.config_content, null, 2))
+    const configText = configData.config_text || JSON.stringify(configData.config_content, null, 2)
+    const didCopy = await copyText(configText)
     setCopied(didCopy)
     if (!didCopy) {
       setMessage(copyStatus(false, ''))
@@ -607,11 +608,12 @@ export default function ServerDetail() {
           {showConfig && configData && (
             <div className="space-y-3">
               <p className="text-sm text-gray-500">
-                将以下 JSON 添加到 <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{configData.config_path}</code>
+                将以下 {(configData.config_format || 'json').toUpperCase()} 合并到
+                <code className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{configData.config_path}</code>
               </p>
               <div className="relative bg-gray-900 rounded-lg p-4 overflow-x-auto">
                 <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
-                  {JSON.stringify(configData.config_content, null, 2)}
+                  {configData.config_text || JSON.stringify(configData.config_content, null, 2)}
                 </pre>
               </div>
               <button

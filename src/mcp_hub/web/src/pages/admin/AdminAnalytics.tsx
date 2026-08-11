@@ -49,10 +49,10 @@ export default function AdminAnalytics() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-        <h2 className="font-semibold text-gray-900 dark:text-white mb-3">每日调用 + Token 趋势</h2>
+        <h2 className="font-semibold text-gray-900 dark:text-white mb-3">每日调用 + 估算 Token 趋势</h2>
         <div className="flex items-end gap-1 h-44">
           {trend.map((d: any) => (
-            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.date}: ${d.calls} 调用, ${d.tokens} Token, ${d.active_users} 用户`}>
+            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.date}: ${d.calls} 调用, ${d.tokens} 估算 Token, ${d.active_users} 用户`}>
               <div className="w-full bg-blue-500 dark:bg-blue-400 rounded-t-sm" style={{ height: `${Math.max((d.calls / maxCalls) * 100, 2)}%`, opacity: 0.4 + (d.tokens / Math.max(...trend.map((x: any) => x.tokens), 1)) * 0.6 }} />
             </div>
           ))}

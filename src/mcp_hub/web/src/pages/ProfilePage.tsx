@@ -63,7 +63,7 @@ export default function ProfilePage() {
         }
 
         if (userId && token) {
-          // 用户配置定义“我的 Server”；监控接口仅补齐服务端状态与指标。
+          // 用户配置定义“我的 Server”；监控接口补齐本地 Gateway 清单与调用指标。
           try {
             const configResult = await apiGet<any[]>('/config/user-servers')
             const [monitorResult, usageResult] = await Promise.allSettled([
@@ -76,7 +76,7 @@ export default function ProfilePage() {
               setMonitorWarning('监控数据暂时不可用，当前仅显示已追踪配置')
             }
             if (usageResult.status === 'rejected') {
-              setUsageWarning('调用与 Token 数据暂时不可用')
+              setUsageWarning('调用与估算 Token 数据暂时不可用')
             }
             const monitorById = new Map(
               (monitorData?.servers || []).map((server: any) => [server.server_id, server])
@@ -120,7 +120,7 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-gray-900">👤 个人中心</h1>
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-700 font-medium">登录后查看你的追踪 Server、调用和 Token 使用数据</p>
+          <p className="text-gray-700 font-medium">登录后查看你的追踪 Server、调用和估算 Token 数据</p>
           <div className="mt-4 flex justify-center gap-4 text-sm">
             <Link to="/login" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
             <Link to="/market" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">浏览市场</Link>
@@ -174,7 +174,7 @@ export default function ProfilePage() {
       {/* 使用统计卡片 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon="📦" label="我的 Server" description="当前账户已追踪的 Server 数量。" value={String(servers.length)} color="blue" />
-        <StatCard icon="📞" label="30 日调用" description="过去 30 天由已授权 Gateway 或遥测设备上报的工具调用总数。" value={fmtNum(totalCalls)} color="green" />
+        <StatCard icon="📞" label="30 日调用" description="过去 30 天由已授权本地 Gateway 上报的工具调用总数。" value={fmtNum(totalCalls)} color="green" />
         <StatCard icon="🔤" label="30 日估算 Token" description="过去 30 天按上报调用载荷估算的 Token 总数，不包含原始请求和响应内容，也不等同于模型账单。" value={fmtNum(totalTokens)} color="purple" />
         <StatCard icon="✅" label="成功率" description="成功调用占已上报调用总数的比例；没有调用数据时显示为“-”。" value={successRate === null ? '-' : `${successRate}%`} color={successRate !== null && successRate >= 95 ? 'green' : 'yellow'} />
       </div>

@@ -7,6 +7,8 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+import tomli_w
+
 from mcp_hub.core.agent_config import get_agent_profiles
 from mcp_hub.core.gateway_config import split_legacy_command
 
@@ -22,6 +24,16 @@ AGENT_CONFIGS: dict[str, dict[str, Any]] = {
     }
     for agent_type, profile in get_agent_profiles().items()
 }
+
+
+def _serialize_config(
+    config_content: dict[str, Any],
+    config_format: str,
+) -> str:
+    """Serialize one Agent configuration without diverging from its structured form."""
+    if config_format == "toml":
+        return str(tomli_w.dumps(config_content))
+    return json.dumps(config_content, indent=2, ensure_ascii=False)
 
 
 def command_config(command: str) -> dict[str, object]:
@@ -51,10 +63,13 @@ def get_config_for_agent(
     if cfg.get("requires_stdio_type"):
         server_config = {"type": "stdio", **server_config}
 
+    config_content = {cfg["server_key"]: {server_name: server_config}}
     return {
         "agent": cfg["name"],
         "config_path": cfg["config_path"],
-        "config_content": {cfg["server_key"]: {server_name: server_config}},
+        "config_format": cfg["format"],
+        "config_content": config_content,
+        "config_text": _serialize_config(config_content, cfg["format"]),
     }
 
 
@@ -153,6 +168,11 @@ class ConfigManager:
                 if isinstance(server_entry, dict):
                     server_entry["env"] = env_vars
                     break
+        if isinstance(config_content, dict):
+            base_config["config_text"] = _serialize_config(
+                config_content,
+                str(base_config["config_format"]),
+            )
 
         return base_config
 

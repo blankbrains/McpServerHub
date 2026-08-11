@@ -64,7 +64,7 @@ export default function AdminUsers() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
               <th className="px-4 py-2">用户</th><th className="px-4 py-2">角色</th><th className="px-4 py-2 text-right">Server</th>
-              <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日Token</th>
+              <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日估算 Token</th>
               <th className="px-4 py-2">最后活跃</th><th className="px-4 py-2">注册时间</th>
             </tr></thead>
             <tbody>

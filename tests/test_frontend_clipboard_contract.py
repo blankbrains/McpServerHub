@@ -33,6 +33,26 @@ def test_monitoring_setup_command_remains_visible_and_selectable() -> None:
     assert "tabIndex={0}" in source
     assert "首次接入：按顺序完成" in source
     assert "mcp-hub agent doctor --agent codex" in source
+    assert "mcp-hub agent config" in source
+    assert "首次接入仍应优先运行 agent setup" in source
+
+
+def test_config_sync_command_requires_explicit_agent() -> None:
+    source = (WEB_SRC / "pages" / "MyConfig.tsx").read_text(encoding="utf-8")
+
+    assert "mcp-hub config sync --agent ${syncAgent}" in source
+    assert "目标 Agent 必须与 agent setup 使用的类型一致" in source
+    assert "mcp-hub-gateway" not in source
+
+
+def test_web_upload_copy_matches_backend_json_contract() -> None:
+    config_page = (WEB_SRC / "pages" / "ConfigPage.tsx").read_text(encoding="utf-8")
+    guide = (WEB_SRC / "pages" / "Guide.tsx").read_text(encoding="utf-8")
+
+    assert "isRecord(json.mcpServers)" in config_page
+    assert "网页检查仅支持根节点包含 mcpServers 对象的 JSON 配置" in config_page
+    assert "网页配置上传仅支持根节点为 mcpServers 的 JSON" in guide
+    assert "VS Code Copilot mcp.json 使用 servers" in guide
 
 
 def test_readme_documents_current_github_install_and_first_call() -> None:

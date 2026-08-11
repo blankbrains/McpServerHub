@@ -9,9 +9,14 @@ import shutil
 from pathlib import Path
 
 import click
+import tomli_w
 
 from mcp_hub.agent_types import AGENT_TYPES, DEFAULT_AGENT_TYPE
-from mcp_hub.core.agent_config import apply_agent_migration, prepare_agent_migration
+from mcp_hub.core.agent_config import (
+    apply_agent_migration,
+    get_agent_profile,
+    prepare_agent_migration,
+)
 from mcp_hub.core.gateway_config import (
     GATEWAY_CONFIG_ENV,
     get_gateway_config_path,
@@ -71,22 +76,27 @@ def agent_config(
     """输出可放入 MCP 客户端配置的 Gateway 配置片段。"""
     agent_state_dir = state_dir or get_agent_state_dir(agent_type)
     gateway_config_path = get_gateway_config_path(agent_state_dir)
-    config = {
-        "mcpServers": {
-            "mcp-hub": {
-                "command": "mcp-hub",
-                "args": ["serve"],
-                "env": {
-                    REPORT_URL_ENV: hub_url.rstrip("/"),
-                    TELEMETRY_TOKEN_ENV: telemetry_token,
-                    STATE_DIR_ENV: str(agent_state_dir),
-                    AGENT_TYPE_ENV: agent_type,
-                    GATEWAY_CONFIG_ENV: str(gateway_config_path),
-                },
-            }
-        }
+    profile = get_agent_profile(agent_type)
+    entry: dict[str, object] = {
+        "command": "mcp-hub",
+        "args": ["serve"],
+        "env": {
+            REPORT_URL_ENV: hub_url.rstrip("/"),
+            TELEMETRY_TOKEN_ENV: telemetry_token,
+            STATE_DIR_ENV: str(agent_state_dir),
+            AGENT_TYPE_ENV: agent_type,
+            GATEWAY_CONFIG_ENV: str(gateway_config_path),
+        },
     }
-    click.echo(json.dumps(config, ensure_ascii=False, indent=2))
+    if profile.requires_stdio_type:
+        entry = {"type": "stdio", **entry}
+    config = {profile.server_key: {"mcp-hub": entry}}
+    output = (
+        tomli_w.dumps(config)
+        if profile.format == "toml"
+        else json.dumps(config, ensure_ascii=False, indent=2)
+    )
+    click.echo(output)
 
 
 @agent.command("setup")

@@ -160,7 +160,12 @@ export default function Publish() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">发布 MCP Server</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-800">发布 MCP Server</h1>
+        <Link to="/builder" className="text-sm font-medium text-gray-600 hover:text-blue-700">
+          🛠️ 创建项目脚手架
+        </Link>
+      </div>
       <p className="text-sm text-gray-500 mb-8">
         将你的 MCP Server 提交到 Hub 市场。提交时会自动执行 <InfoTooltip description="安全扫描会基于安装命令、依赖来源、发布者和代码模式等信号计算风险提示；它不能替代发布者和使用者自己的安全审查。">安全扫描</InfoTooltip>，<InfoTooltip description="安全评分为 0-100 分的风险提示。低于 50 分的安装命令会被拒绝发布。">安全评分</InfoTooltip>低于 50 的安装命令会被拒绝。
       </p>
