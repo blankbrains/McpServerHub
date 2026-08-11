@@ -14,8 +14,19 @@ import tomli_w
 from mcp_hub.agent_types import AGENT_TYPES, DEFAULT_AGENT_TYPE
 from mcp_hub.core.agent_config import (
     apply_agent_migration,
+    create_timestamped_backup,
     get_agent_profile,
     prepare_agent_migration,
+    restore_file_from_backup,
+)
+from mcp_hub.core.agent_recovery import (
+    RecoveryPreview,
+    apply_agent_recovery,
+    create_migration_manifest,
+    ensure_setup_can_create_manifest,
+    list_migration_manifests,
+    manifest_summary,
+    prepare_agent_recovery,
 )
 from mcp_hub.core.agent_verify import (
     VerificationReport,
@@ -159,6 +170,15 @@ def agent_setup(
 
     agent_state_dir = state_dir or get_agent_state_dir(agent_type)
     gateway_config_path = get_gateway_config_path(agent_state_dir)
+    try:
+        ensure_setup_can_create_manifest(
+            agent_type,
+            source_path=migration.source_path,
+            state_dir=agent_state_dir,
+        )
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
     click.echo(f"Agent: {migration.profile.name}")
     click.echo(f"配置: {migration.source_path}")
     click.echo(f"将迁移 {len(migration.specs)} 个 MCP Server 到: {gateway_config_path}")
@@ -178,7 +198,15 @@ def agent_setup(
         click.echo("已取消，未修改任何配置。")
         return
 
+    gateway_existed = gateway_config_path.is_file()
+    gateway_backup_path: Path | None = None
+    backup_path: Path | None = None
     try:
+        gateway_backup_path = (
+            create_timestamped_backup(gateway_config_path)
+            if gateway_existed
+            else None
+        )
         write_gateway_config(list(migration.specs), gateway_config_path)
         backup_path = apply_agent_migration(
             migration,
@@ -187,11 +215,46 @@ def agent_setup(
             state_dir=agent_state_dir,
             gateway_config_path=gateway_config_path,
         )
+        manifest = create_migration_manifest(
+            migration,
+            backup_path=backup_path,
+            gateway_config_path=gateway_config_path,
+            state_dir=agent_state_dir,
+        )
     except (OSError, TypeError, ValueError) as exc:
-        raise click.ClickException(f"配置迁移失败: {exc}") from exc
+        rollback_errors: list[str] = []
+        if backup_path is not None:
+            try:
+                restore_file_from_backup(migration.source_path, backup_path)
+            except OSError as rollback_exc:
+                rollback_errors.append(f"Agent 配置回滚失败: {rollback_exc}")
+        try:
+            if gateway_backup_path is not None:
+                restore_file_from_backup(gateway_config_path, gateway_backup_path)
+            elif not gateway_existed and gateway_config_path.exists():
+                gateway_config_path.unlink()
+        except OSError as rollback_exc:
+            rollback_errors.append(f"Gateway 配置回滚失败: {rollback_exc}")
 
+        detail = (
+            "；".join(rollback_errors)
+            if rollback_errors
+            else "已恢复迁移前配置"
+        )
+        backup_hint = f"；原配置备份: {backup_path}" if backup_path else ""
+        raise click.ClickException(
+            f"配置迁移失败: {exc}；{detail}{backup_hint}"
+        ) from exc
+
+    assert backup_path is not None
     click.echo(f"配置完成，原文件备份: {backup_path}")
+    click.echo(
+        "迁移清单: "
+        f"{agent_state_dir / 'migration-manifest.json'} ({manifest.migration_id})"
+    )
     click.echo(f"Gateway 管理配置: {gateway_config_path}")
+    if gateway_backup_path:
+        click.echo(f"原 Gateway 配置备份: {gateway_backup_path}")
     try:
         reporter = TelemetryReporter(
             hub_url,
@@ -218,6 +281,291 @@ def agent_setup(
     except Exception:
         click.echo("警告：本地配置已完成，但发现清单暂未上传，将在 Gateway 启动后重试。")
     click.echo("重启 Agent 后，所有已迁移 Server 调用会经过 mcp-hub 并上报监控指标。")
+
+
+@agent.command("backups")
+@click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="本地 Agent 状态目录；默认使用对应 Agent 的标准目录。",
+)
+@click.option("--json", "json_output", is_flag=True, help="输出稳定 JSON 结果。")
+def agent_backups(
+    agent_type: str,
+    state_dir: Path | None,
+    json_output: bool,
+) -> None:
+    """列出可用于安全断开和恢复的迁移清单与备份。"""
+    try:
+        manifests = list_migration_manifests(
+            state_dir,
+            agent_type=agent_type,
+        )
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    summaries = [manifest_summary(path, manifest) for path, manifest in manifests]
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "success": True,
+                    "agent_type": agent_type,
+                    "backups": summaries,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    if not summaries:
+        click.echo("没有找到迁移清单。首次接入请运行 agent setup。")
+        return
+    for item in summaries:
+        migrated_names = item["migrated_server_names"]
+        migrated_count = len(migrated_names) if isinstance(migrated_names, list) else 0
+        click.echo(
+            f"{item['migration_time']}  {item['status']}  "
+            f"{migrated_count} 个 Server"
+        )
+        click.echo(f"  Agent 配置: {item['source_config_path']}")
+        backup_state = "存在" if item["original_backup_exists"] else "缺失"
+        click.echo(f"  原始备份: {item['original_backup_path']} ({backup_state})")
+        if item["disconnect_backup_path"]:
+            disconnect_state = (
+                "存在" if item["disconnect_backup_exists"] else "缺失"
+            )
+            click.echo(
+                f"  断开前备份: {item['disconnect_backup_path']} "
+                f"({disconnect_state})"
+            )
+
+
+def _render_recovery_preview(preview: RecoveryPreview, *, operation: str) -> None:
+    title = "断开本地 Gateway" if operation == "disconnect" else "恢复 Agent 配置"
+    click.echo(f"{title}: {preview.source_path}")
+    if preview.already_disconnected:
+        click.echo("此迁移清单已完成断开，当前命令不会再次写入配置。")
+        return
+    click.echo(
+        "当前文件"
+        + ("仍等于迁移后版本。" if preview.post_hash_matches else "已有后续修改，将执行安全合并。")
+    )
+    if preview.restore_server_names:
+        click.echo("将恢复直连 Server: " + ", ".join(preview.restore_server_names))
+    if preview.already_restored_server_names:
+        click.echo(
+            "已是原配置的 Server: "
+            + ", ".join(preview.already_restored_server_names)
+        )
+    click.echo(
+        "将移除本次 Gateway 入口。"
+        if preview.remove_gateway
+        else "当前未发现可移除的本次 Gateway 入口。"
+    )
+    if preview.preserved_server_names:
+        click.echo(
+            "将保留其他 Server: " + ", ".join(preview.preserved_server_names)
+        )
+    if preview.changed_top_level_keys:
+        click.echo(
+            "将保留迁移后的顶层设置改动: "
+            + ", ".join(preview.changed_top_level_keys)
+        )
+    if preview.conflicts:
+        click.echo("无法自动合并的冲突：")
+        for conflict in preview.conflicts:
+            click.echo(
+                f"  - [{conflict.code}] {conflict.path}: {conflict.message}"
+            )
+
+
+def _run_agent_recovery(
+    context: click.Context,
+    *,
+    operation: str,
+    agent_type: str,
+    state_dir: Path | None,
+    manifest_path: Path | None,
+    json_output: bool,
+    yes: bool,
+) -> None:
+    try:
+        preview = prepare_agent_recovery(
+            agent_type,
+            state_dir=state_dir,
+            manifest_path=manifest_path,
+        )
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if preview.conflicts:
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        **preview.to_dict(),
+                        "operation": operation,
+                        "confirmation_required": False,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            context.exit(1)
+        _render_recovery_preview(preview, operation=operation)
+        raise click.ClickException(
+            "当前配置无法安全自动合并；请按冲突路径手工处理后重试。"
+        )
+
+    if preview.already_disconnected:
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        **preview.to_dict(),
+                        "operation": operation,
+                        "confirmation_required": False,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            _render_recovery_preview(preview, operation=operation)
+        return
+
+    if json_output and not yes:
+        click.echo(
+            json.dumps(
+                {
+                    **preview.to_dict(),
+                    "operation": operation,
+                    "confirmation_required": True,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        context.exit(1)
+
+    if not json_output:
+        _render_recovery_preview(preview, operation=operation)
+        if not yes and not click.confirm(
+            "继续前会再次校验配置并创建断开前备份，是否继续？",
+            default=False,
+        ):
+            click.echo("已取消，未修改任何配置。")
+            return
+
+    try:
+        result = apply_agent_recovery(
+            agent_type,
+            state_dir=state_dir,
+            manifest_path=manifest_path,
+        )
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    **result.to_dict(),
+                    "operation": operation,
+                    "confirmation_required": False,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    if result.changed:
+        click.echo(f"已恢复 Agent 配置，断开前备份: {result.backup_path}")
+    else:
+        click.echo("当前配置已是恢复结果，未重复写入。")
+    click.echo("请完全退出并重新打开 Agent，使直连配置生效。")
+    click.echo("设备令牌不会自动撤销；如需停止 Hub 上报，请在网页单独撤销设备。")
+
+
+@agent.command("disconnect")
+@click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+)
+@click.option("--state-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--json", "json_output", is_flag=True, help="输出稳定 JSON 结果。")
+@click.option("--yes", is_flag=True, help="确认预览并执行安全断开。")
+@click.pass_context
+def agent_disconnect(
+    context: click.Context,
+    agent_type: str,
+    state_dir: Path | None,
+    json_output: bool,
+    yes: bool,
+) -> None:
+    """恢复原 Server 直连并移除本次 setup 创建的 Gateway 入口。"""
+    _run_agent_recovery(
+        context,
+        operation="disconnect",
+        agent_type=agent_type,
+        state_dir=state_dir,
+        manifest_path=None,
+        json_output=json_output,
+        yes=yes,
+    )
+
+
+@agent.command("restore")
+@click.option(
+    "--agent",
+    "agent_type",
+    type=click.Choice(AGENT_TYPES),
+    default=DEFAULT_AGENT_TYPE,
+    show_default=True,
+)
+@click.option("--state-dir", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--manifest",
+    "manifest_path",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=None,
+    help="指定迁移清单；默认使用状态目录中的 migration-manifest.json。",
+)
+@click.option("--json", "json_output", is_flag=True, help="输出稳定 JSON 结果。")
+@click.option("--yes", is_flag=True, help="确认预览并执行安全恢复。")
+@click.pass_context
+def agent_restore(
+    context: click.Context,
+    agent_type: str,
+    state_dir: Path | None,
+    manifest_path: Path | None,
+    json_output: bool,
+    yes: bool,
+) -> None:
+    """从当前或指定迁移清单安全恢复原 Agent Server 条目。"""
+    _run_agent_recovery(
+        context,
+        operation="restore",
+        agent_type=agent_type,
+        state_dir=state_dir,
+        manifest_path=manifest_path,
+        json_output=json_output,
+        yes=yes,
+    )
 
 
 @agent.command("discover")

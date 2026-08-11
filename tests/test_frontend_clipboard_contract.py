@@ -87,6 +87,8 @@ def test_install_guides_explain_custom_location_and_uninstall() -> None:
 
     for source in (guide, readme, install_guide, agent_guide):
         assert "mcp-hub agent verify" in source
+        assert "mcp-hub agent backups" in source
+        assert "mcp-hub agent disconnect" in source
 
     assert "当前终端所在目录不会决定 uv 的安装位置" in guide
     assert "不会修改远程 Hub、GitHub 仓库或项目源码" in readme

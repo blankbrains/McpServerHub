@@ -188,6 +188,34 @@ mcp-hub agent verify --agent codex --fix
 
 CLI 会先展示修复预览并要求确认。涉及 Agent 配置时会先创建带时间戳备份；自动修复只处理可证明等价的重复入口、已知旧命令、缺失的非敏感路径字段、状态目录和队列立即重试。冲突入口、缺失令牌、OAuth 和无法判断归属的配置不会自动修改。自动化环境必须同时提供 `--fix --yes`，否则 JSON 模式只返回预览并退出。
 
+### 安全断开、备份和恢复
+
+`agent setup` 除原文件备份外，还会在 Agent 状态目录写入 `migration-manifest.json`。清单只记录 Agent 类型、配置与备份路径、迁移时间、迁移前后哈希、Server 名称、Gateway 配置路径和 CLI 版本；不记录设备令牌、环境变量值、请求头值或 Server 参数。
+
+查看本地迁移和备份：
+
+```bash
+mcp-hub agent backups --agent codex
+mcp-hub agent backups --agent codex --json
+```
+
+恢复原 Server 直连并移除本次 setup 创建的 Gateway 入口：
+
+```bash
+mcp-hub agent disconnect --agent codex
+```
+
+需要从当前或指定迁移清单恢复时：
+
+```bash
+mcp-hub agent restore --agent codex
+mcp-hub agent restore --agent codex --manifest <migration-manifest.json>
+```
+
+两个写入命令都会先显示恢复 Server、保留 Server、顶层设置变更和冲突路径，确认后再次读取当前文件并创建断开前备份。安全合并只恢复本次迁移拥有的条目，保留迁移后新增的其他设置和 Server；同名 Server 内容不同、Gateway 命令或本地路径被修改时会停止，不进行整文件强制恢复。重复运行 `disconnect` 不会再次写入或创建备份。
+
+恢复后必须完全退出并重新打开 Agent。恢复本地配置不会撤销设备令牌；网页撤销设备令牌也不会修改本地 Agent 配置。这两个动作需要按实际目标分别执行。
+
 更新网页追踪列表后同步：
 
 ```bash

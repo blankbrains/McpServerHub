@@ -104,6 +104,16 @@ mcp-hub --version`,
 mcp-hub agent verify --agent codex --json`,
       note: '默认验证只读。需要修复时使用 --fix，CLI 会先展示预览；配置写入前自动备份，冲突配置和缺失令牌不会被猜测修复。网络中断时，遥测事件仍保留在本地 SQLite 队列中。',
     },
+    {
+      num: 11,
+      title: '需要时安全断开或恢复',
+      icon: '↩️',
+      description: 'setup 会保存不含凭证的迁移清单。先查看本地备份，再用 disconnect 恢复原 Server 直连；restore 可从当前或指定清单执行相同的安全恢复。',
+      code: `mcp-hub agent backups --agent codex
+mcp-hub agent disconnect --agent codex
+mcp-hub agent restore --agent codex`,
+      note: '恢复命令会先预览并再次备份当前 Agent 配置，只恢复本次迁移的条目并保留后续新增设置。冲突时停止，不会整文件覆盖。网页撤销设备令牌只停止 Hub 上报，不会修改本地配置。',
+    },
   ]
 }
 
@@ -268,6 +278,14 @@ export default function Guide() {
             <p className="text-gray-600 mt-0.5">
               A: 是的。你可以在「我的 Server」或「配置」页面随时移除任何已追踪的 Server，
               也可以停止整份追踪列表；这些操作不会卸载或停止本地进程。
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-800">Q: 撤销设备令牌会恢复原来的 Agent 配置吗？</p>
+            <p className="text-gray-600 mt-0.5">
+              A: 不会。网页撤销只停止该令牌继续向 Hub 上报。恢复原 MCP Server 直连必须在本地终端运行
+              <code className="mx-1 font-mono">mcp-hub agent disconnect --agent &lt;agent&gt;</code>。
+              浏览器不能直接读取或修改你电脑上的 Agent 配置。
             </p>
           </div>
           <div>

@@ -166,18 +166,40 @@ def read_agent_document(
     return profile, path, _read_document(path, profile.format)
 
 
+def create_timestamped_backup(path: Path) -> Path:
+    """Copy one existing configuration beside itself with restrictive metadata."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    backup_path = path.with_name(f"{path.name}.mcp-hub-backup-{timestamp}")
+    backup_path.write_bytes(path.read_bytes())
+    source_mode = path.stat().st_mode
+    if os.name != "nt":
+        with contextlib.suppress(OSError):
+            backup_path.chmod(0o600)
+    else:
+        with contextlib.suppress(OSError):
+            backup_path.chmod(source_mode)
+    return backup_path
+
+
+def restore_file_from_backup(path: Path, backup_path: Path) -> None:
+    """Atomically restore one file from a verified local backup."""
+    payload = backup_path.read_bytes()
+    source_mode = path.stat().st_mode if path.exists() else backup_path.stat().st_mode
+    temp_path = path.with_suffix(f"{path.suffix}.mcp-hub-rollback.tmp")
+    temp_path.write_bytes(payload)
+    with contextlib.suppress(OSError):
+        temp_path.chmod(source_mode)
+    temp_path.replace(path)
+
+
 def write_agent_document_with_backup(
     profile: AgentConfigProfile,
     path: Path,
     document: dict[str, Any],
 ) -> Path:
     """Back up and atomically replace one parsed Agent configuration."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    backup_path = path.with_name(f"{path.name}.mcp-hub-backup-{timestamp}")
-    backup_path.write_bytes(path.read_bytes())
+    backup_path = create_timestamped_backup(path)
     source_mode = path.stat().st_mode
-    with contextlib.suppress(OSError):
-        backup_path.chmod(source_mode)
 
     serialized = (
         tomli_w.dumps(document)

@@ -70,6 +70,15 @@ mcp-hub agent verify --agent <agent>
 
 自动化读取结果时使用 `--json`，根据 `checks[].code` 区分网络、令牌、撤销、Gateway 心跳、首次调用和队列问题。默认验证只读。只有用户明确同意预览后才可执行 `--fix`；非交互执行必须使用 `--fix --yes`。任何 Agent 配置写入都必须先生成备份，不得自动创建新设备令牌或修复无法确认归属的配置。
 
+需要断开 Gateway 或恢复原配置时，必须先查看本地迁移记录：
+
+```bash
+mcp-hub agent backups --agent <agent>
+mcp-hub agent disconnect --agent <agent>
+```
+
+`disconnect` / `restore` 必须展示预览并获得用户确认；自动化执行使用 `--json --yes`。只允许基于 `migration-manifest.json` 做结构化安全合并，保留迁移后新增的无关设置和 Server。遇到 `server_name_conflict` 或 `gateway_entry_modified` 必须停止，不得整文件覆盖。网页撤销设备令牌只停止上报，不等于恢复本地 Agent 配置。
+
 ## 安全规则
 
 - 不输出、记录或提交设备令牌、API Key、环境变量值或请求头值。

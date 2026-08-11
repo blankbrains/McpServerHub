@@ -192,6 +192,10 @@ export default function TelemetryPanel() {
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [createdDevice, setCreatedDevice] = useState<CreatedDevice | null>(null)
   const [copyState, setCopyState] = useState('')
+  const [recoveryCopyState, setRecoveryCopyState] = useState<{
+    deviceId: string
+    message: string
+  } | null>(null)
   const hubUrl = window.location.origin
   const setupCommand = createdDevice
     ? [
@@ -299,7 +303,7 @@ export default function TelemetryPanel() {
   }
 
   const revokeDevice = async (deviceId: string) => {
-    if (!window.confirm('确定要撤销此设备令牌吗？使用该令牌的本地 Gateway 将无法继续上报，且无法恢复。')) return
+    if (!window.confirm('确定要撤销此设备令牌吗？这只会停止 Hub 上报，不会恢复或修改本地 Agent 配置；令牌撤销后无法恢复。')) return
     setRevokingId(deviceId)
     setError('')
     try {
@@ -328,6 +332,19 @@ export default function TelemetryPanel() {
     if (!setupCommand) return
     const copied = await copyText(setupCommand)
     setCopyState(copyStatus(copied, '接入命令已复制'))
+  }
+
+  const copyRecoveryCommand = async (
+    deviceId: string,
+    agentType: string,
+    action: 'backups' | 'disconnect',
+  ) => {
+    const copied = await copyText(`mcp-hub agent ${action} --agent ${agentType}`)
+    const label = action === 'backups' ? '备份查询命令已复制' : '安全断开命令已复制'
+    setRecoveryCopyState({
+      deviceId,
+      message: copyStatus(copied, label),
+    })
   }
 
   const registeredAgentTypes = new Set(agents.map((agent) => agent.agent_type))
@@ -569,6 +586,9 @@ mcp-hub agent doctor --agent codex`}</pre>
           <p className="mt-1 text-xs text-gray-500">
             为每个使用的 Agent 分别创建 <InfoTooltip description="设备令牌将 Agent 类型绑定在服务端。上报事件无法自行声明或伪造归属。">设备令牌</InfoTooltip>，避免 Claude Code、Codex 等客户端的数据混在一起。
           </p>
+          <p className="mt-1 text-xs text-gray-500">
+            网页只能撤销 Hub 设备令牌，不能读取或修改你电脑上的 Agent 配置。查看备份和恢复直连必须在本地终端执行对应命令。
+          </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
               value={deviceName}
@@ -630,7 +650,7 @@ mcp-hub agent doctor --agent codex`}</pre>
             {devices.length === 0 ? (
               <li className="py-4 text-sm text-gray-500">还没有已授权的本地 Agent。</li>
             ) : devices.map((device) => (
-              <li key={device.id} className="flex items-center gap-3 py-3">
+              <li key={device.id} className="flex flex-wrap items-start gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-800">{device.name}</p>
                   <p className="text-xs text-gray-500">
@@ -641,19 +661,45 @@ mcp-hub agent doctor --agent codex`}</pre>
                       {device.platform || 'unknown'} {device.architecture} · Python {device.runtime_version || '-'} · Gateway {device.gateway_version || '-'}
                     </p>
                   )}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void copyRecoveryCommand(device.id, device.agent_type, 'backups')}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      查看最近备份
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyRecoveryCommand(device.id, device.agent_type, 'disconnect')}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      恢复 Agent 配置
+                    </button>
+                    {recoveryCopyState?.deviceId === device.id && (
+                      <span className="text-xs text-gray-500" role="status">
+                        {recoveryCopyState.message}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {device.revoked_at ? (
-                  <span className="text-xs text-gray-500">已撤销</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void revokeDevice(device.id)}
-                    disabled={revokingId === device.id}
-                    className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {revokingId === device.id ? '撤销中...' : '撤销'}
-                  </button>
-                )}
+                <div className="text-right">
+                  {device.revoked_at ? (
+                    <span className="text-xs text-gray-500">设备令牌已撤销</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void revokeDevice(device.id)}
+                      disabled={revokingId === device.id}
+                      className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {revokingId === device.id ? '撤销中...' : '撤销设备令牌'}
+                    </button>
+                  )}
+                  <p className="mt-1 max-w-44 text-[11px] text-gray-400">
+                    撤销令牌不会恢复本地直连配置。
+                  </p>
+                </div>
               </li>
             ))}
           </ul>

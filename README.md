@@ -78,6 +78,16 @@ mcp-hub agent doctor --agent codex
 
 `agent verify` 会同时检查 Agent 入口、Gateway 配置、命令与 cwd、本地遥测队列、Hub 网络、设备令牌、Gateway 心跳和首次真实工具调用。默认只读；只有显式执行 `--fix` 并确认预览后，才会创建缺失的状态目录、备份并规范可安全判定的重复/旧 Gateway 入口，或立即重试遥测队列。它不会生成新令牌，也不会把网络超时误报为令牌无效。
 
+查看接入备份或恢复原直连配置：
+
+```bash
+mcp-hub agent backups --agent codex
+mcp-hub agent disconnect --agent codex
+mcp-hub agent restore --agent codex
+```
+
+`agent setup` 会在本地状态目录保存不含凭证的 `migration-manifest.json`。`disconnect` 和 `restore` 会先展示预览并再次备份当前 Agent 配置，再恢复本次迁移的原 Server 条目、移除本次 Gateway 入口，同时保留之后新增的其他设置和 Server。若同名 Server 或 Gateway 核心字段已被修改，命令停止并列出冲突路径，不会整文件覆盖。网页撤销设备令牌只会停止 Hub 上报，不会修改或恢复本地 Agent 配置。
+
 后续在网页调整追踪列表后同步 Gateway：
 
 ```bash
@@ -128,6 +138,9 @@ mcp-hub compare <server-a> <server-b>
 # Agent / Gateway
 mcp-hub agent setup --agent codex --hub-url <url> --telemetry-token <token>
 mcp-hub agent verify --agent codex
+mcp-hub agent backups --agent codex
+mcp-hub agent disconnect --agent codex
+mcp-hub agent restore --agent codex
 mcp-hub agent status --agent codex
 mcp-hub agent doctor --agent codex
 mcp-hub config sync --agent codex --server <url>
