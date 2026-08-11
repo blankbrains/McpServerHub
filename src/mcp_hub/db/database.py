@@ -483,6 +483,13 @@ async def _run_migrations() -> None:
         "runtime_version": "VARCHAR(50) NOT NULL DEFAULT ''",
         "platform": "VARCHAR(50) NOT NULL DEFAULT ''",
         "architecture": "VARCHAR(50) NOT NULL DEFAULT ''",
+        "setup_completed_at": "TIMESTAMP",
+        "gateway_first_seen_at": "TIMESTAMP",
+        "gateway_last_seen_at": "TIMESTAMP",
+        "first_call_at": "TIMESTAMP",
+        "last_event_at": "TIMESTAMP",
+        "last_queue_depth": "INTEGER",
+        "last_error_code": "VARCHAR(64) NOT NULL DEFAULT ''",
     }
     telemetry_inventory_columns = {
         "server_version": "VARCHAR(50) DEFAULT ''",
@@ -508,6 +515,13 @@ async def _run_migrations() -> None:
                             f"ADD COLUMN {column_name} {column_sql}"
                         )
                     )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_telemetry_devices_gateway_last_seen_at "
+                    "ON telemetry_devices(gateway_last_seen_at)"
+                )
+            )
 
             inventory_columns = await conn.run_sync(
                 lambda sync_conn: {
@@ -525,6 +539,87 @@ async def _run_migrations() -> None:
                     )
     except Exception:
         logger.debug("迁移步骤遥测设备与清单扩展字段失败", exc_info=True)
+
+    # Existing Gateway events are sufficient to reconstruct connection milestones.
+    try:
+        async with engine.begin() as conn:
+            device_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_devices")
+                }
+            )
+            event_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("telemetry_events")
+                }
+            )
+            required_device_columns = {
+                "id",
+                "gateway_first_seen_at",
+                "gateway_last_seen_at",
+                "first_call_at",
+                "last_event_at",
+                "last_queue_depth",
+                "last_error_code",
+            }
+            required_event_columns = {
+                "device_id",
+                "event_type",
+                "occurred_at",
+                "queue_depth",
+                "error_code",
+            }
+            if required_device_columns <= device_columns and (
+                required_event_columns <= event_columns
+            ):
+                await conn.execute(
+                    text(
+                        "UPDATE telemetry_devices SET "
+                        "gateway_first_seen_at = COALESCE("
+                        "gateway_first_seen_at, ("
+                        "SELECT MIN(event.occurred_at) "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id"
+                        ")), "
+                        "gateway_last_seen_at = COALESCE("
+                        "gateway_last_seen_at, ("
+                        "SELECT MAX(event.occurred_at) "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id"
+                        ")), "
+                        "first_call_at = COALESCE(first_call_at, ("
+                        "SELECT MIN(event.occurred_at) "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id "
+                        "AND event.event_type = 'tool_call'"
+                        ")), "
+                        "last_event_at = COALESCE(last_event_at, ("
+                        "SELECT MAX(event.occurred_at) "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id"
+                        ")), "
+                        "last_queue_depth = COALESCE(last_queue_depth, ("
+                        "SELECT event.queue_depth "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id "
+                        "AND event.queue_depth IS NOT NULL "
+                        "ORDER BY event.occurred_at DESC LIMIT 1"
+                        ")), "
+                        "last_error_code = CASE "
+                        "WHEN COALESCE(last_error_code, '') <> '' "
+                        "THEN last_error_code ELSE COALESCE(("
+                        "SELECT event.error_code "
+                        "FROM telemetry_events AS event "
+                        "WHERE event.device_id = telemetry_devices.id "
+                        "AND COALESCE(event.error_code, '') <> '' "
+                        "ORDER BY event.occurred_at DESC LIMIT 1"
+                        "), '') END"
+                    )
+                )
+    except Exception:
+        logger.debug("迁移步骤遥测设备接入状态回填失败", exc_info=True)
 
     # 将真实 tool_call 遥测幂等投影到兼容的 usage_stats 分析表。
     # 旧版个人中心和管理员统计仍读取该表，因此需要保留历史兼容性。

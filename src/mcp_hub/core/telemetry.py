@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
@@ -200,9 +200,17 @@ class TelemetrySpool:
 class TelemetryReporter:
     """将指标先持久化，再以非阻塞批量请求上传至 Hub。"""
 
-    def __init__(self, report_url: str, token: str, state_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        report_url: str,
+        token: str,
+        state_dir: Path | None = None,
+        *,
+        source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy",
+    ) -> None:
         self.report_url = report_url.rstrip("/")
         self.token = token
+        self.source = source
         self.spool = TelemetrySpool(state_dir)
         self.session_id = uuid.uuid4().hex
         self._flush_lock = asyncio.Lock()
@@ -215,7 +223,12 @@ class TelemetryReporter:
         token = os.environ.get(TELEMETRY_TOKEN_ENV, "").strip()
         if not report_url or not token:
             return None
-        return cls(report_url, token, get_agent_state_dir())
+        return cls(
+            report_url,
+            token,
+            get_agent_state_dir(),
+            source="gateway",
+        )
 
     async def record(
         self,
@@ -278,11 +291,15 @@ class TelemetryReporter:
         self,
         servers: list[dict[str, Any]],
         configuration_errors: list[dict[str, str]] | None = None,
+        *,
+        source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy",
     ) -> None:
         """Reliably report a redacted local configuration snapshot."""
         event_id = uuid.uuid4().hex
         payload = {
             "event_id": event_id,
+            "source": source,
+            "session_id": self.session_id,
             "gateway_version": __version__,
             "runtime_version": runtime_platform.python_version(),
             "platform": runtime_platform.system().lower(),
@@ -323,6 +340,8 @@ class TelemetryReporter:
                     if endpoint == _SPOOL_ENDPOINT_EVENTS:
                         path = "/api/v1/telemetry/events"
                         body: dict[str, Any] = {
+                            "source": self.source,
+                            "session_id": self.session_id,
                             "events": [entry["payload"] for entry in batch]
                         }
                     elif endpoint == _SPOOL_ENDPOINT_INVENTORY:

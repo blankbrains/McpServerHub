@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet, apiPost } from '../api/client'
 import { copyStatus, copyText } from '../utils/clipboard'
+import ConnectionStatusPanel, { type ConnectionStatusData } from './ConnectionStatusPanel'
 import InfoTooltip from './InfoTooltip'
 
 interface TelemetrySummary {
@@ -49,6 +50,7 @@ interface TelemetryDevice {
   architecture: string
   created_at: string | null
   last_seen_at: string | null
+  gateway_last_seen_at: string | null
   revoked_at: string | null
 }
 
@@ -178,6 +180,7 @@ export default function TelemetryPanel() {
   const [errors, setErrors] = useState<TelemetryError[]>([])
   const [operations, setOperations] = useState<TelemetryOperation[]>([])
   const [lifecycleEvents, setLifecycleEvents] = useState<TelemetryLifecycleEvent[]>([])
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatusData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deviceName, setDeviceName] = useState('Local MCP Agent')
@@ -218,6 +221,7 @@ export default function TelemetryPanel() {
       setError('')
       try {
         const [
+          connectionStatusResult,
           summaryResult,
           serversResult,
           devicesResult,
@@ -229,6 +233,7 @@ export default function TelemetryPanel() {
           operationsResult,
           lifecycleResult,
         ] = await Promise.all([
+          apiGet<ConnectionStatusData>('/telemetry/connection-status'),
           apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
           apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=${days}${query}`),
           apiGet<TelemetryDevice[]>('/telemetry/devices'),
@@ -241,6 +246,7 @@ export default function TelemetryPanel() {
           apiGet<{ days: number; events: TelemetryLifecycleEvent[] }>(`/telemetry/lifecycle?days=${days}${query}`),
         ])
         if (!active) return
+        setConnectionStatus(connectionStatusResult.data)
         setSummary(summaryResult.data)
         setServers(serversResult.data?.servers || [])
         setDevices(devicesResult.data || [])
@@ -366,6 +372,8 @@ export default function TelemetryPanel() {
           {error}
         </div>
       )}
+
+      <ConnectionStatusPanel data={connectionStatus} loading={loading} />
 
       <div className="border border-blue-200 bg-blue-50 px-4 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -556,7 +564,7 @@ mcp-hub agent doctor --agent codex`}</pre>
           )}
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div id="telemetry-device-management" className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="font-semibold text-gray-900"><InfoTooltip description="设备是某个本地 Agent 的独立遥测身份。它的令牌只可用于上报指标，不能作为网页登录凭证。">本地 Agent 设备</InfoTooltip></h3>
           <p className="mt-1 text-xs text-gray-500">
             为每个使用的 Agent 分别创建 <InfoTooltip description="设备令牌将 Agent 类型绑定在服务端。上报事件无法自行声明或伪造归属。">设备令牌</InfoTooltip>，避免 Claude Code、Codex 等客户端的数据混在一起。
@@ -626,7 +634,7 @@ mcp-hub agent doctor --agent codex`}</pre>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-800">{device.name}</p>
                   <p className="text-xs text-gray-500">
-                    {agentLabel(device.agent_type)} · 最后在线 {formatDate(device.last_seen_at)}
+                    {agentLabel(device.agent_type)} · 最近心跳 {formatDate(device.gateway_last_seen_at)}
                   </p>
                   {(device.gateway_version || device.runtime_version || device.platform) && (
                     <p className="mt-1 truncate text-[11px] text-gray-400" title={`${device.platform} ${device.architecture} · Python ${device.runtime_version} · Gateway ${device.gateway_version}`}>

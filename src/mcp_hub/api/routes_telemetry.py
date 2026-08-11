@@ -30,6 +30,7 @@ from mcp_hub.logging_config import get_logger
 router = APIRouter(tags=["telemetry"])
 logger = get_logger(__name__)
 _MAX_EVENT_BATCH = 100
+_GATEWAY_ONLINE_WINDOW = timedelta(minutes=3)
 
 
 class DeviceCreateRequest(BaseModel):
@@ -93,6 +94,8 @@ class TelemetryBatchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy"
+    session_id: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
     events: list[TelemetryEventInput] = Field(min_length=1, max_length=_MAX_EVENT_BATCH)
 
 
@@ -138,6 +141,8 @@ class InventorySnapshotRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    source: Literal["legacy", "setup", "gateway", "discovery"] = "legacy"
+    session_id: str = Field(default="", max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
     gateway_version: str = Field(default="", max_length=50)
     runtime_version: str = Field(default="", max_length=50)
     platform: str = Field(default="", max_length=50, pattern=r"^[A-Za-z0-9_.-]*$")
@@ -159,7 +164,7 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _serialize_device(device: TelemetryDeviceModel) -> dict[str, str | None]:
+def _serialize_device(device: TelemetryDeviceModel) -> dict[str, Any]:
     return {
         "id": device.id,
         "name": device.name,
@@ -170,7 +175,126 @@ def _serialize_device(device: TelemetryDeviceModel) -> dict[str, str | None]:
         "architecture": device.architecture or "",
         "created_at": device.created_at.isoformat() if device.created_at else None,
         "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
+        "setup_completed_at": (
+            device.setup_completed_at.isoformat() if device.setup_completed_at else None
+        ),
+        "gateway_first_seen_at": (
+            device.gateway_first_seen_at.isoformat()
+            if device.gateway_first_seen_at
+            else None
+        ),
+        "gateway_last_seen_at": (
+            device.gateway_last_seen_at.isoformat()
+            if device.gateway_last_seen_at
+            else None
+        ),
+        "first_call_at": (
+            device.first_call_at.isoformat() if device.first_call_at else None
+        ),
+        "last_event_at": (
+            device.last_event_at.isoformat() if device.last_event_at else None
+        ),
+        "last_queue_depth": int(device.last_queue_depth or 0),
+        "last_error_code": device.last_error_code or "",
         "revoked_at": device.revoked_at.isoformat() if device.revoked_at else None,
+    }
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _mark_gateway_seen(device: TelemetryDeviceModel, seen_at: datetime) -> None:
+    if (
+        device.gateway_first_seen_at is None
+        or seen_at < device.gateway_first_seen_at
+    ):
+        device.gateway_first_seen_at = seen_at
+    if device.gateway_last_seen_at is None or seen_at > device.gateway_last_seen_at:
+        device.gateway_last_seen_at = seen_at
+
+
+def _connection_state(
+    device: TelemetryDeviceModel,
+    *,
+    server_count: int,
+    configuration_error_count: int,
+    now: datetime,
+) -> dict[str, str]:
+    gateway_online = bool(
+        device.gateway_last_seen_at
+        and device.gateway_last_seen_at >= now - _GATEWAY_ONLINE_WINDOW
+    )
+    queue_depth = int(device.last_queue_depth or 0)
+
+    if device.revoked_at is not None:
+        return {
+            "state": "revoked",
+            "label": "已撤销",
+            "reason": "此设备令牌已撤销，本地 Gateway 无法继续上报。",
+            "next_action": "创建新设备并重新执行接入命令。",
+            "next_action_code": "create_device",
+        }
+    if configuration_error_count > 0:
+        return {
+            "state": "partial_connection",
+            "label": "部分接入",
+            "reason": f"{configuration_error_count} 个本地 Server 存在配置或迁移错误。",
+            "next_action": "查看本地清单中的配置错误，并运行 Agent doctor。",
+            "next_action_code": "review_configuration_errors",
+        }
+    if device.gateway_first_seen_at is not None and not gateway_online:
+        return {
+            "state": "offline",
+            "label": "Gateway 离线",
+            "reason": "Gateway 曾经接入，但最近 3 分钟没有收到心跳或运行事件。",
+            "next_action": "确认 Agent 正在运行；必要时完全退出后重新打开。",
+            "next_action_code": "restart_agent",
+        }
+    if gateway_online and queue_depth > 0:
+        return {
+            "state": "data_backlog",
+            "label": "数据待上传",
+            "reason": f"Gateway 在线，但本地仍有 {queue_depth} 条遥测等待上传。",
+            "next_action": "检查 Hub 网络与设备令牌，稍后刷新确认队列下降。",
+            "next_action_code": "check_upload",
+        }
+    if gateway_online and device.first_call_at is not None:
+        return {
+            "state": "connected",
+            "label": "已完成接入",
+            "reason": "Gateway 在线，并且已经收到真实 MCP 工具调用。",
+            "next_action": "查看下方调用、延迟、错误和 Token 指标。",
+            "next_action_code": "view_monitoring",
+        }
+    if gateway_online:
+        return {
+            "state": "gateway_online",
+            "label": "Gateway 已在线",
+            "reason": f"已发现 {server_count} 个可监控 Server，尚未收到真实工具调用。",
+            "next_action": "在 Agent 中触发一次真实 MCP 工具调用，然后刷新本页。",
+            "next_action_code": "trigger_tool_call",
+        }
+    if device.setup_completed_at is not None:
+        return {
+            "state": "waiting_restart",
+            "label": "等待重启 Agent",
+            "reason": "本地配置已经迁移，但尚未收到 Gateway 会话。",
+            "next_action": "完全退出并重新打开 Agent，让新配置生效。",
+            "next_action_code": "restart_agent",
+        }
+    return {
+        "state": "waiting_configuration",
+        "label": "等待配置",
+        "reason": "设备已创建，但尚未确认本地接入配置完成。",
+        "next_action": "在本地终端执行此设备对应的 agent setup 命令。",
+        "next_action_code": "run_setup",
     }
 
 
@@ -212,7 +336,7 @@ async def get_telemetry_identity(
         )
         if device is None:
             raise HTTPException(status_code=401, detail="设备遥测令牌无效或已撤销")
-        device.last_seen_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        device.last_seen_at = _utc_now_naive()
         await session.commit()
         return TelemetryIdentity(device_id=device.id, user_id=device.user_id)
 
@@ -261,6 +385,89 @@ async def list_telemetry_devices(
     return {"success": True, "data": [_serialize_device(device) for device in devices]}
 
 
+@router.get("/telemetry/connection-status")
+async def get_telemetry_connection_status(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return one authoritative connection stage for every user-owned device."""
+    now = _utc_now_naive()
+    async with async_session_factory() as session:
+        device_result = await session.execute(
+            select(TelemetryDeviceModel)
+            .where(TelemetryDeviceModel.user_id == user_id)
+            .order_by(TelemetryDeviceModel.created_at, TelemetryDeviceModel.id)
+        )
+        devices = list(device_result.scalars())
+        inventory_result = await session.execute(
+            select(TelemetryInventoryModel).where(
+                TelemetryInventoryModel.user_id == user_id,
+                TelemetryInventoryModel.active == True,  # noqa: E712
+            )
+        )
+        inventory_rows = list(inventory_result.scalars())
+
+    inventory_by_device: dict[str, list[TelemetryInventoryModel]] = {}
+    for row in inventory_rows:
+        inventory_by_device.setdefault(row.device_id, []).append(row)
+
+    serialized_devices: list[dict[str, Any]] = []
+    for device in devices:
+        rows = inventory_by_device.get(device.id, [])
+        configuration_errors = [
+            row for row in rows if bool((row.configuration_error or "").strip())
+        ]
+        server_count = len(rows) - len(configuration_errors)
+        state = _connection_state(
+            device,
+            server_count=server_count,
+            configuration_error_count=len(configuration_errors),
+            now=now,
+        )
+        serialized_devices.append(
+            {
+                **_serialize_device(device),
+                **state,
+                "queue_depth": int(device.last_queue_depth or 0),
+                "server_count": server_count,
+                "configuration_error_count": len(configuration_errors),
+            }
+        )
+
+    connected_states = {"connected", "gateway_online", "data_backlog"}
+    attention_states = {
+        "waiting_configuration",
+        "waiting_restart",
+        "data_backlog",
+        "partial_connection",
+        "offline",
+        "revoked",
+    }
+    return {
+        "success": True,
+        "data": {
+            "total_devices": len(serialized_devices),
+            "online_devices": sum(
+                1
+                for device in devices
+                if device.revoked_at is None
+                and device.gateway_last_seen_at is not None
+                and device.gateway_last_seen_at >= now - _GATEWAY_ONLINE_WINDOW
+            ),
+            "connected_devices": sum(
+                1
+                for device in serialized_devices
+                if device["state"] in connected_states
+            ),
+            "attention_devices": sum(
+                1
+                for device in serialized_devices
+                if device["state"] in attention_states
+            ),
+            "devices": serialized_devices,
+        },
+    }
+
+
 @router.post("/telemetry/devices/{device_id}/revoke")
 async def revoke_telemetry_device(
     device_id: str,
@@ -292,12 +499,12 @@ async def ingest_telemetry_events(
     """接收设备批量遥测，按事件 ID 幂等写入。"""
     saved = 0
     duplicates = 0
+    received_at = _utc_now_naive()
+    normalized_events = [
+        (event, _utc_naive(event.occurred_at)) for event in data.events
+    ]
     async with async_session_factory() as session:
-        for event in data.events:
-            occurred_at = event.occurred_at
-            if occurred_at.tzinfo is None:
-                occurred_at = occurred_at.replace(tzinfo=timezone.utc)
-            stored_at = occurred_at.astimezone(timezone.utc).replace(tzinfo=None)
+        for event, stored_at in normalized_events:
             try:
                 async with session.begin_nested():
                     session.add(
@@ -344,6 +551,61 @@ async def ingest_telemetry_events(
                 saved += 1
             except IntegrityError:
                 duplicates += 1
+
+        device = await session.scalar(
+            select(TelemetryDeviceModel).where(
+                TelemetryDeviceModel.id == identity.device_id,
+                TelemetryDeviceModel.user_id == identity.user_id,
+            )
+        )
+        if device is not None:
+            previous_last_event_at = device.last_event_at
+            latest_event_at = max(stored_at for _event, stored_at in normalized_events)
+            if data.source == "gateway":
+                _mark_gateway_seen(device, received_at)
+            elif data.source == "legacy":
+                _mark_gateway_seen(device, min(latest_event_at, received_at))
+            if device.last_event_at is None or latest_event_at > device.last_event_at:
+                device.last_event_at = latest_event_at
+
+            tool_call_times = [
+                stored_at
+                for event, stored_at in normalized_events
+                if event.event_type == "tool_call"
+            ]
+            if tool_call_times:
+                first_call_at = min(tool_call_times)
+                if (
+                    device.first_call_at is None
+                    or first_call_at < device.first_call_at
+                ):
+                    device.first_call_at = first_call_at
+
+            queue_events = [
+                (stored_at, event.queue_depth)
+                for event, stored_at in normalized_events
+                if event.queue_depth is not None
+            ]
+            if queue_events:
+                _queue_time, queue_depth = max(queue_events, key=lambda item: item[0])
+                if (
+                    previous_last_event_at is None
+                    or _queue_time >= previous_last_event_at
+                ):
+                    device.last_queue_depth = int(queue_depth or 0)
+
+            error_events = [
+                (stored_at, event.error_code)
+                for event, stored_at in normalized_events
+                if event.error_code
+            ]
+            if error_events:
+                _error_time, error_code = max(error_events, key=lambda item: item[0])
+                if (
+                    previous_last_event_at is None
+                    or latest_event_at >= previous_last_event_at
+                ):
+                    device.last_error_code = error_code
         await session.commit()
 
     return {
@@ -358,10 +620,8 @@ async def ingest_telemetry_inventory(
     identity: TelemetryIdentity = Depends(get_telemetry_identity),
 ) -> dict[str, Any]:
     """Replace one device's active inventory without storing secrets or full commands."""
-    reported_at = data.reported_at
-    if reported_at.tzinfo is None:
-        reported_at = reported_at.replace(tzinfo=timezone.utc)
-    observed_at = reported_at.astimezone(timezone.utc).replace(tzinfo=None)
+    observed_at = _utc_naive(data.reported_at)
+    received_at = _utc_now_naive()
     errors = {error.server_id: error.error_code for error in data.configuration_errors}
 
     async with async_session_factory() as session:
@@ -376,6 +636,12 @@ async def ingest_telemetry_inventory(
             device.runtime_version = data.runtime_version
             device.platform = data.platform
             device.architecture = data.architecture
+            if data.source == "setup":
+                device.setup_completed_at = received_at
+            elif data.source == "gateway":
+                _mark_gateway_seen(device, received_at)
+            if data.configuration_errors:
+                device.last_error_code = data.configuration_errors[-1].error_code
         await session.execute(
             update(TelemetryInventoryModel)
             .where(TelemetryInventoryModel.device_id == identity.device_id)
@@ -412,6 +678,16 @@ async def ingest_telemetry_inventory(
                 "discovered_at": observed_at,
                 "last_seen_at": observed_at,
             }
+            if row is not None and data.source != "gateway":
+                values.update(
+                    {
+                        "server_version": row.server_version or "",
+                        "protocol_version": row.protocol_version or "",
+                        "capabilities": row.capabilities or "[]",
+                        "tool_count": int(row.tool_count or 0),
+                        "running": bool(row.running),
+                    }
+                )
             if row is None:
                 session.add(
                     TelemetryInventoryModel(
@@ -521,15 +797,17 @@ async def get_telemetry_summary(
             )
         ).one()
 
-        last_seen_query = select(func.max(TelemetryDeviceModel.last_seen_at)).where(
+        last_seen_query = select(
+            func.max(TelemetryDeviceModel.gateway_last_seen_at)
+        ).where(
             TelemetryDeviceModel.user_id == user_id,
             TelemetryDeviceModel.revoked_at.is_(None),
         )
         active_devices_query = select(func.count(TelemetryDeviceModel.id)).where(
             TelemetryDeviceModel.user_id == user_id,
             TelemetryDeviceModel.revoked_at.is_(None),
-            TelemetryDeviceModel.last_seen_at
-            >= datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3),
+            TelemetryDeviceModel.gateway_last_seen_at
+            >= _utc_now_naive() - _GATEWAY_ONLINE_WINDOW,
         )
         if selected_agent:
             last_seen_query = last_seen_query.where(
@@ -733,7 +1011,9 @@ async def get_telemetry_agents(
                     0,
                 ).label("total_tokens"),
                 func.count(func.distinct(TelemetryDeviceModel.id)).label("device_count"),
-                func.max(TelemetryDeviceModel.last_seen_at).label("last_seen_at"),
+                func.max(TelemetryDeviceModel.gateway_last_seen_at).label(
+                    "last_seen_at"
+                ),
             )
             .select_from(TelemetryDeviceModel)
             .outerjoin(TelemetryEventModel, event_join)
@@ -1160,7 +1440,7 @@ async def get_telemetry_inventory(
     user_id: str = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return the current user's device-reported local MCP inventory."""
-    online_since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
+    online_since = _utc_now_naive() - _GATEWAY_ONLINE_WINDOW
     async with async_session_factory() as session:
         device_result = await session.execute(
             select(TelemetryDeviceModel)
@@ -1194,7 +1474,10 @@ async def get_telemetry_inventory(
         serialized_devices.append(
             {
                 **_serialize_device(device),
-                "online": bool(device.last_seen_at and device.last_seen_at >= online_since),
+                "online": bool(
+                    device.gateway_last_seen_at
+                    and device.gateway_last_seen_at >= online_since
+                ),
                 "server_count": len(rows),
                 "servers": [
                     {

@@ -837,7 +837,11 @@ class McpGateway:
                 }
             )
             entries.append(entry)
-        await self._telemetry.report_inventory(entries, self._configuration_errors)
+        await self._telemetry.report_inventory(
+            entries,
+            self._configuration_errors,
+            source="gateway",
+        )
 
     async def _load_server_specs(self) -> list[GatewayServerSpec]:
         """Load canonical local configuration, with Registry as a legacy fallback."""

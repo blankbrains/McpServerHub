@@ -33,6 +33,7 @@ async def test_sqlite_migrations_add_all_legacy_columns(
     monkeypatch.setattr(database_module, "engine", engine)
     try:
         await database_module._run_migrations()
+        await database_module._run_migrations()
 
         async with engine.connect() as connection:
             columns = await connection.run_sync(
@@ -65,6 +66,13 @@ async def test_sqlite_migrations_add_all_legacy_columns(
         "runtime_version",
         "platform",
         "architecture",
+        "setup_completed_at",
+        "gateway_first_seen_at",
+        "gateway_last_seen_at",
+        "first_call_at",
+        "last_event_at",
+        "last_queue_depth",
+        "last_error_code",
     } <= columns["telemetry_devices"]
     assert {
         "session_id",
@@ -161,3 +169,66 @@ async def test_sqlite_migration_backfills_tool_call_usage_projection(
         await engine.dispose()
 
     assert rows == [("tool-event", "@example/weather", "alice", 20)]
+
+
+async def test_sqlite_migration_backfills_existing_device_connection_milestones(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'connection.db'}")
+    legacy_schema = (
+        "CREATE TABLE reviews (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE user_servers (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE usage_stats (id INTEGER PRIMARY KEY, created_at TIMESTAMP)",
+        "CREATE TABLE install_history (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE telemetry_devices (id TEXT PRIMARY KEY)",
+        (
+            "CREATE TABLE telemetry_events ("
+            "id TEXT PRIMARY KEY, device_id TEXT, event_type TEXT, "
+            "occurred_at TIMESTAMP, received_at TIMESTAMP, "
+            "queue_depth INTEGER, error_code TEXT)"
+        ),
+        "CREATE TABLE telemetry_inventory (id INTEGER PRIMARY KEY)",
+    )
+    async with engine.begin() as connection:
+        for statement in legacy_schema:
+            await connection.execute(text(statement))
+        await connection.execute(
+            text("INSERT INTO telemetry_devices (id) VALUES ('existing-device')")
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO telemetry_events "
+                "(id, device_id, event_type, occurred_at, received_at, "
+                "queue_depth, error_code) VALUES "
+                "('heartbeat', 'existing-device', 'heartbeat', "
+                "'2026-08-11 08:00:00', '2026-08-11 08:00:01', 3, ''), "
+                "('tool-call', 'existing-device', 'tool_call', "
+                "'2026-08-11 08:01:00', '2026-08-11 08:01:01', 0, 'timeout')"
+            )
+        )
+
+    monkeypatch.setattr(database_module, "engine", engine)
+    try:
+        await database_module._run_migrations()
+        await database_module._run_migrations()
+        async with engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT gateway_first_seen_at, gateway_last_seen_at, "
+                        "first_call_at, last_event_at, last_queue_depth, "
+                        "last_error_code FROM telemetry_devices "
+                        "WHERE id = 'existing-device'"
+                    )
+                )
+            ).one()
+    finally:
+        await engine.dispose()
+
+    assert str(row.gateway_first_seen_at).startswith("2026-08-11 08:00:00")
+    assert str(row.gateway_last_seen_at).startswith("2026-08-11 08:01:00")
+    assert str(row.first_call_at).startswith("2026-08-11 08:01:00")
+    assert str(row.last_event_at).startswith("2026-08-11 08:01:00")
+    assert row.last_queue_depth == 0
+    assert row.last_error_code == "timeout"

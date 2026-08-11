@@ -321,6 +321,7 @@ async def test_heartbeat_records_child_exit_and_refreshes_inventory(
     reporter.report_inventory.assert_awaited_once()
     inventory = reporter.report_inventory.await_args.args[0]
     assert inventory[0]["running"] is False
+    assert reporter.report_inventory.await_args.kwargs["source"] == "gateway"
 
 
 async def test_gateway_starts_remote_server_without_spawning_local_process(

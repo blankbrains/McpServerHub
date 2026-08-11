@@ -188,7 +188,12 @@ def agent_setup(
     click.echo(f"配置完成，原文件备份: {backup_path}")
     click.echo(f"Gateway 管理配置: {gateway_config_path}")
     try:
-        reporter = TelemetryReporter(hub_url, telemetry_token, agent_state_dir)
+        reporter = TelemetryReporter(
+            hub_url,
+            telemetry_token,
+            agent_state_dir,
+            source="setup",
+        )
 
         async def _report_inventory() -> None:
             await reporter.report_inventory(
@@ -200,6 +205,7 @@ def agent_setup(
                     }
                     for error in migration.errors
                 ],
+                source="setup",
             )
             await reporter.close()
 
@@ -251,7 +257,12 @@ def agent_discover(
         raise click.ClickException(str(exc)) from exc
 
     agent_state_dir = state_dir or get_agent_state_dir(agent_type)
-    reporter = TelemetryReporter(hub_url, telemetry_token, agent_state_dir)
+    reporter = TelemetryReporter(
+        hub_url,
+        telemetry_token,
+        agent_state_dir,
+        source="discovery",
+    )
 
     async def _run() -> None:
         await reporter.report_inventory(
@@ -263,6 +274,7 @@ def agent_discover(
                 }
                 for error in migration.errors
             ],
+            source="discovery",
         )
         await reporter.close()
 

@@ -296,6 +296,21 @@ class TelemetryDeviceModel(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
+    setup_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    gateway_first_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    gateway_last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    first_call_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_queue_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error_code: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
