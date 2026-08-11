@@ -67,3 +67,23 @@ def test_readme_documents_current_github_install_and_first_call() -> None:
     assert "完全重启 Agent" in readme
     assert "触发真实调用并验证" in readme
     assert "未经过本地 Gateway 的直接连接也不会被监控" in readme
+
+
+def test_install_guides_explain_custom_location_and_uninstall() -> None:
+    guide = (WEB_SRC / "pages" / "Guide.tsx").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    install_guide = (ROOT / "deploy" / "install.md").read_text(encoding="utf-8")
+    agent_guide = (ROOT / "deploy" / "install-skillhub.md").read_text(
+        encoding="utf-8"
+    )
+
+    for source in (guide, install_guide, agent_guide):
+        assert "UV_TOOL_DIR" in source
+        assert "UV_TOOL_BIN_DIR" in source
+        assert "UV_CACHE_DIR" in source
+        assert "UV_PYTHON_INSTALL_DIR" in source
+        assert "uv tool uninstall mcp-hub-cli" in source
+
+    assert "当前终端所在目录不会决定 uv 的安装位置" in guide
+    assert "不会修改远程 Hub、GitHub 仓库或项目源码" in readme
+    assert "不要把“在 D 盘目录执行命令”解释为“安装到 D 盘”" in agent_guide

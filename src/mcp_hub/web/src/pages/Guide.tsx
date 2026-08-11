@@ -1,6 +1,13 @@
 import { Link } from 'react-router-dom'
 
 const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"'
+const WINDOWS_D_DRIVE_INSTALL_COMMAND = `[Environment]::SetEnvironmentVariable("UV_TOOL_DIR", "D:\\uv\\tools", "User")
+[Environment]::SetEnvironmentVariable("UV_TOOL_BIN_DIR", "D:\\uv\\bin", "User")
+[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "D:\\uv\\cache", "User")
+[Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", "D:\\uv\\python", "User")`
+const CLI_UNINSTALL_COMMAND = `uv tool list --show-paths
+uv tool uninstall mcp-hub-cli
+where.exe mcp-hub`
 
 interface GuideStep {
   num: number
@@ -25,11 +32,11 @@ function buildSteps(hubUrl: string): GuideStep[] {
       num: 2,
       title: '安装 uv 和 mcp-hub CLI',
       icon: '⬇️',
-      description: '当前 0.2.0 尚未发布到 PyPI，请从 GitHub 安装。先安装 uv，再执行以下命令；运行 uv tool update-shell 后必须关闭并重新打开终端。',
+      description: '当前 0.2.0 尚未发布到 PyPI，请从 GitHub 安装。这一步只在你的电脑上安装 CLI 和本地 Gateway，不会修改 Hub 服务器、GitHub 仓库或项目代码。运行 uv tool update-shell 后必须关闭并重新打开终端。',
       code: `${CLI_INSTALL_COMMAND}
 uv tool update-shell
 mcp-hub --version`,
-      note: 'Windows 可用官方 PowerShell 安装脚本安装 uv；macOS/Linux 可用官方 shell 安装脚本。若 mcp-hub 仍找不到，先重开终端，再确认 uv 的工具目录已加入 PATH。',
+      note: '仅切换到 D 盘后运行命令不会改变安装位置。uv 默认安装到用户目录；Windows 如需把工具、命令入口、缓存和 uv 管理的 Python 放到 D 盘，请先按下方“安装位置与卸载”设置目录。',
     },
     {
       num: 3,
@@ -170,6 +177,49 @@ export default function Guide() {
           </div>
         ))}
       </div>
+
+      <section className="border-y border-gray-200 py-6">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">安装位置与卸载</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            以下操作只影响当前电脑上的 uv 和 mcp-hub CLI，不会修改远程 Hub、生产服务或项目源码。
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+          <div className="min-w-0">
+            <h3 className="font-medium text-gray-900">Windows 安装到 D 盘</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              在 PowerShell 中保存这些用户环境变量，关闭并重新打开终端后，再执行上面的安装命令。
+              当前终端所在目录不会决定 uv 的安装位置。
+            </p>
+            <div className="mt-3 bg-gray-900 rounded-lg p-4">
+              <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap break-all">
+                {WINDOWS_D_DRIVE_INSTALL_COMMAND}
+              </pre>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              安装后可使用 uv tool dir、uv tool dir --bin、uv python dir 和 where.exe mcp-hub 核对实际路径。
+            </p>
+          </div>
+
+          <div className="min-w-0">
+            <h3 className="font-medium text-gray-900">卸载 mcp-hub CLI</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              如果使用了自定义目录，卸载时必须保留相同的 UV_TOOL_DIR 和 UV_TOOL_BIN_DIR，
+              让 uv 能找到对应安装。
+            </p>
+            <div className="mt-3 bg-gray-900 rounded-lg p-4">
+              <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap break-all">
+                {CLI_UNINSTALL_COMMAND}
+              </pre>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              卸载只删除 mcp-hub-cli 的工具环境和命令入口，不会卸载 uv，也不会自动恢复已经写入 Agent 的 MCP 配置。
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* Quick tips */}
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6">

@@ -36,6 +36,58 @@ mcp-hub --help
 
 `mcp-hub` 必须位于 Agent 进程可见的 `PATH` 中，因为接入后 Agent 会通过 `mcp-hub serve` 启动本地 Gateway。
 
+`uv tool install` 只在当前电脑安装 CLI 和本地 Gateway，不会修改远程 Hub、GitHub 仓库或项目源码。命令在哪个工作目录或磁盘中执行，也不会决定工具的安装位置。
+
+### Windows 安装到 D 盘
+
+如需把 mcp-hub 工具环境、命令入口、缓存和 uv 管理的 Python 放到 D 盘，请先在 PowerShell 中保存用户环境变量：
+
+```powershell
+[Environment]::SetEnvironmentVariable("UV_TOOL_DIR", "D:\uv\tools", "User")
+[Environment]::SetEnvironmentVariable("UV_TOOL_BIN_DIR", "D:\uv\bin", "User")
+[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "D:\uv\cache", "User")
+[Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", "D:\uv\python", "User")
+```
+
+关闭并重新打开终端，再安装和检查路径：
+
+```powershell
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+uv tool update-shell
+
+uv tool dir
+uv tool dir --bin
+uv python dir
+where.exe mcp-hub
+mcp-hub --version
+```
+
+预期主要目录为：
+
+- 工具环境：`D:\uv\tools`
+- 命令入口：`D:\uv\bin`
+- 下载缓存：`D:\uv\cache`
+- uv 管理的 Python：`D:\uv\python`
+
+仅切换到 `D:\` 再执行安装命令不会产生以上效果。环境变量也不会自动搬迁已有安装；已经安装在默认目录时，应先用原目录配置卸载，再切换目录重新安装。uv 可执行文件本身可能仍位于原安装目录，但 mcp-hub 及其主要依赖会存放在上述 D 盘目录。
+
+### 卸载 mcp-hub
+
+先查看 uv 当前识别的安装及路径：
+
+```powershell
+uv tool list --show-paths
+```
+
+然后卸载 Python 包名 `mcp-hub-cli`：
+
+```powershell
+uv tool uninstall mcp-hub-cli
+where.exe mcp-hub
+```
+
+如果安装时使用了自定义 `UV_TOOL_DIR` 和 `UV_TOOL_BIN_DIR`，卸载时必须继续使用相同设置，否则 uv 会查找默认目录。该命令会删除 mcp-hub 的独立工具环境和命令入口，但不会卸载 uv、清理所有 uv 公共缓存，也不会自动恢复已经写入 Codex、Claude Desktop 等 Agent 的 MCP 配置。不要直接删除整个 `D:\uv`，其中可能还有其他 uv 工具。
+
 ## 2. 使用远程 Hub 监控本地 MCP
 
 ### 检查网络

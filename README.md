@@ -44,6 +44,8 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
    mcp-hub --version
    ```
 
+   这条命令只在当前电脑安装 `mcp-hub` CLI 和本地 Gateway，不会修改远程 Hub、GitHub 仓库或项目源码。当前终端位于哪个磁盘不会决定安装位置；Windows 安装到 D 盘以及卸载方法见[安装与部署指南](deploy/install.md#windows-安装到-d-盘)。
+
 2. 确认运行 Agent 的电脑可以访问 Hub：
 
    ```bash

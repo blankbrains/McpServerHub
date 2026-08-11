@@ -14,6 +14,28 @@ mcp-hub --version
 
 如果 `uv` 未安装，先让用户确认后按照 uv 官方安装方式安装。安装完成后可能需要重开终端。
 
+安装命令只影响用户电脑上的 CLI 和本地 Gateway，不会修改远程 Hub、GitHub 仓库或项目源码。不要把“在 D 盘目录执行命令”解释为“安装到 D 盘”；uv 的工具位置由环境变量决定。
+
+用户明确要求 Windows 安装到 D 盘时，应先展示并获得确认，再设置：
+
+```powershell
+[Environment]::SetEnvironmentVariable("UV_TOOL_DIR", "D:\uv\tools", "User")
+[Environment]::SetEnvironmentVariable("UV_TOOL_BIN_DIR", "D:\uv\bin", "User")
+[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "D:\uv\cache", "User")
+[Environment]::SetEnvironmentVariable("UV_PYTHON_INSTALL_DIR", "D:\uv\python", "User")
+```
+
+重开终端后再执行安装命令，并使用 `uv tool dir`、`uv tool dir --bin`、`uv python dir` 和 `where.exe mcp-hub` 验证。已有安装不会被环境变量自动搬迁。
+
+只有用户明确要求卸载时才执行：
+
+```powershell
+uv tool list --show-paths
+uv tool uninstall mcp-hub-cli
+```
+
+使用自定义安装目录时，卸载进程必须看到相同的 `UV_TOOL_DIR` 和 `UV_TOOL_BIN_DIR`。卸载 CLI 不等于删除 uv，也不会自动恢复 Agent 的 MCP 配置；不得直接删除整个 uv 目录。
+
 ## 接入现有 Hub
 
 必须由用户提供：
