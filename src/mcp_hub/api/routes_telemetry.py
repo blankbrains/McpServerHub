@@ -556,6 +556,9 @@ async def revoke_telemetry_device(
             await session.commit()
             await session.refresh(device)
 
+    from mcp_hub.core.alerts import evaluate_user_alerts_safely
+
+    await evaluate_user_alerts_safely(user_id)
     return {"success": True, "data": _serialize_device(device)}
 
 
@@ -676,6 +679,9 @@ async def ingest_telemetry_events(
                     device.last_error_code = error_code
         await session.commit()
 
+    from mcp_hub.core.alerts import evaluate_user_alerts_safely
+
+    await evaluate_user_alerts_safely(identity.user_id)
     return {
         "success": True,
         "data": {"saved": saved, "duplicates": duplicates},
@@ -801,6 +807,9 @@ async def ingest_telemetry_inventory(
                     setattr(row, key, value)
         await session.commit()
 
+    from mcp_hub.core.alerts import evaluate_user_alerts_safely
+
+    await evaluate_user_alerts_safely(identity.user_id)
     return {
         "success": True,
         "data": {

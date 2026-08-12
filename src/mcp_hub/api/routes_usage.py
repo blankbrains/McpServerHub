@@ -74,29 +74,10 @@ async def record_usage(
         logger.error("usage.record_failed", error=str(e), records_count=len(records))
         return {"success": False, "error": f"记录失败: {str(e)}"}
 
-    # 对 error 记录自动创建告警通知
-    error_servers: set[str] = set()
-    for rec in records:
-        if rec.get("status") == "error":
-            sid = rec.get("server_id", "")
-            if sid and sid not in error_servers:
-                error_servers.add(sid)
-                try:
-                    from mcp_hub.api.routes_notifications import create_notification
+    # The alert evaluator aggregates recent failures and de-duplicates incidents.
+    from mcp_hub.core.alerts import evaluate_user_alerts_safely
 
-                    await create_notification(
-                        user_id=user_id,
-                        notif_type="alert",
-                        title=f"Server 调用异常: {sid.split('/')[-1]}",
-                        message=(
-                            f"工具 {rec.get('tool_name', 'unknown')} 调用失败，"
-                            f"耗时 {rec.get('duration_ms', 0)}ms"
-                        ),
-                        server_id=sid,
-                        link=f"/servers/{sid}",
-                    )
-                except Exception:
-                    logger.warning("创建告警通知失败", server_id=sid, exc_info=True)
+    await evaluate_user_alerts_safely(user_id)
 
     logger.info("usage.recorded", saved=saved, user=user_id)
     return {

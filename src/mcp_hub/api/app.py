@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -53,8 +54,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except Exception as e:
         logger.error("db.init_failed", error=str(e))
         raise
-    yield
-    logger.info("app.shutting_down")
+    stop_event = asyncio.Event()
+
+    async def alert_loop() -> None:
+        from mcp_hub.core.alerts import evaluate_all_users_alerts_safely
+
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60)
+            except asyncio.TimeoutError:
+                await evaluate_all_users_alerts_safely()
+
+    alert_task = asyncio.create_task(alert_loop())
+    try:
+        yield
+    finally:
+        stop_event.set()
+        alert_task.cancel()
+        await asyncio.gather(alert_task, return_exceptions=True)
+        logger.info("app.shutting_down")
 
 
 def create_app(dev: bool = False) -> FastAPI:

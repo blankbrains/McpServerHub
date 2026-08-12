@@ -238,8 +238,36 @@ class NotificationModel(Base):
     server_id: Mapped[str] = mapped_column(String(255), default="", nullable=True)
     link: Mapped[str] = mapped_column(String(500), default="", nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    alert_rule: Mapped[str] = mapped_column(String(64), default="", nullable=True)
+    alert_key: Mapped[str | None] = mapped_column(String(96), nullable=True, index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="warning", nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=True, index=True)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=True)
+    first_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    observed_value: Mapped[str] = mapped_column(String(255), default="", nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=True
+    )
+
+
+class AlertPreferenceModel(Base):
+    """Per-user alert switches and thresholds."""
+
+    __tablename__ = "alert_preferences"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    rule: Mapped[str] = mapped_column(String(64), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "rule", name="uq_alert_preference_user_rule"),
     )
 
 

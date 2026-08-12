@@ -95,6 +95,72 @@ async def test_sqlite_migrations_add_all_legacy_columns(
     } <= columns["telemetry_inventory"]
 
 
+async def test_sqlite_migration_adds_alert_lifecycle_without_colliding_notifications(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'alerts.db'}")
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "CREATE TABLE notifications ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "user_id TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, "
+                "message TEXT DEFAULT '', server_id TEXT DEFAULT '', link TEXT DEFAULT '', "
+                "is_read INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+            )
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO notifications (user_id, type, title) VALUES "
+                "('alice', 'system', 'First'), ('alice', 'system', 'Second')"
+            )
+        )
+
+    monkeypatch.setattr(database_module, "engine", engine)
+    try:
+        await database_module._run_migrations()
+        await database_module._run_migrations()
+        async with engine.connect() as connection:
+            columns = {
+                column["name"]
+                for column in await connection.run_sync(
+                    lambda sync_connection: inspect(sync_connection).get_columns(
+                        "notifications"
+                    )
+                )
+            }
+            rows = (
+                await connection.execute(
+                    text(
+                        "SELECT alert_key, status, occurrence_count "
+                        "FROM notifications ORDER BY id"
+                    )
+                )
+            ).fetchall()
+            preferences_exists = await connection.run_sync(
+                lambda sync_connection: inspect(sync_connection).has_table(
+                    "alert_preferences"
+                )
+            )
+    finally:
+        await engine.dispose()
+
+    assert {
+        "alert_rule",
+        "alert_key",
+        "severity",
+        "status",
+        "occurrence_count",
+        "first_seen_at",
+        "last_seen_at",
+        "resolved_at",
+        "observed_value",
+    } <= columns
+    assert rows == [(None, "active", 1), (None, "active", 1)]
+    assert preferences_exists is True
+
+
 async def test_seed_database_returns_inserted_count(
     tmp_path: Path,
     monkeypatch,

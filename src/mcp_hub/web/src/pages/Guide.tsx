@@ -106,6 +106,14 @@ mcp-hub agent verify --agent codex --json`,
     },
     {
       num: 11,
+      title: '查看告警并按需调整阈值',
+      icon: '🔔',
+      description: '接入后，通知页会基于 Gateway 的脱敏遥测摘要聚合离线、连续初始化失败、错误率、延迟、队列积压、令牌撤销、版本不兼容和多设备配置冲突。相同问题只保留一条，恢复后自动关闭。',
+      note: '通知页可按处理中、已恢复和已暂停筛选，并可暂停单条规则或调整阈值。告警不会上传或显示工具请求/响应正文、设备令牌、环境变量值、请求头值、完整命令或本地配置内容。',
+      action: { text: '前往通知中心 →', to: '/notifications' },
+    },
+    {
+      num: 12,
       title: '需要时安全断开或恢复',
       icon: '↩️',
       description: 'setup 会保存不含凭证的迁移清单。先查看本地备份，再用 disconnect 恢复原 Server 直连；restore 可从当前或指定清单执行相同的安全恢复。',
@@ -115,7 +123,7 @@ mcp-hub agent restore --agent codex`,
       note: '恢复命令会先预览并再次备份当前 Agent 配置，只恢复本次迁移的条目并保留后续新增设置。冲突时停止，不会整文件覆盖。网页撤销设备令牌只停止 Hub 上报，不会修改本地配置。',
     },
     {
-      num: 12,
+      num: 13,
       title: '检查或升级 CLI 与 Gateway',
       icon: '🔄',
       description: '监控页会显示每台设备的 Gateway 版本。稳定通道固定到 Git Tag；main 仅用于测试，不应作为常规安装或升级来源。',
@@ -267,6 +275,13 @@ export default function Guide() {
               直接连接 Server 的调用、普通聊天和仅查看工具列表都不会产生监控数据。运行
               <code className="mx-1 font-mono">mcp-hub agent verify --agent &lt;agent&gt;</code>
               可以明确区分网络、令牌、Gateway 心跳、首次调用和队列问题。
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-800">Q: 我已经执行接入命令，通知页为什么还没有告警？</p>
+            <p className="text-gray-600 mt-0.5">
+              A: 告警依赖 Gateway 心跳、真实工具调用或本地清单摘要。先完全重启 Agent，并实际调用一次已迁移的 MCP 工具；
+              没有经过 Gateway 的直接连接不会产生监控或告警数据。没有异常时，通知页保持为空是正常结果。
             </p>
           </div>
           <div>

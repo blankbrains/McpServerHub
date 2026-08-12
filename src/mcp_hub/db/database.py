@@ -342,6 +342,90 @@ async def _run_migrations() -> None:
         except Exception:
             logger.debug("迁移步骤 notifications 表失败", exc_info=True)
 
+    # Extend notifications with alert lifecycle fields and create preferences.
+    try:
+        async with engine.begin() as conn:
+            notification_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("notifications")
+                }
+            )
+            notification_column_sql = {
+                "alert_rule": "VARCHAR(64) DEFAULT ''",
+                "alert_key": "VARCHAR(96)",
+                "severity": "VARCHAR(20) DEFAULT 'warning'",
+                "status": "VARCHAR(20) DEFAULT 'active'",
+                "occurrence_count": "INTEGER DEFAULT 1",
+                "first_seen_at": "TIMESTAMP",
+                "last_seen_at": "TIMESTAMP",
+                "resolved_at": "TIMESTAMP",
+                "observed_value": "VARCHAR(255) DEFAULT ''",
+            }
+            for column_name, column_sql in notification_column_sql.items():
+                if column_name not in notification_columns:
+                    await conn.execute(
+                        text(
+                            f"ALTER TABLE notifications ADD COLUMN "
+                            f"{column_name} {column_sql}"
+                        )
+                    )
+            await conn.execute(
+                text("UPDATE notifications SET alert_key = NULL WHERE alert_key = ''")
+            )
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_notifications_user_alert_key "
+                    "ON notifications(user_id, alert_key) "
+                    "WHERE alert_key IS NOT NULL"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_notifications_status "
+                    "ON notifications(user_id, status)"
+                )
+            )
+    except Exception:
+        logger.debug("迁移步骤 notifications 告警字段失败", exc_info=True)
+
+    try:
+        async with engine.begin() as conn:
+            if conn.dialect.name == "postgresql":
+                create_preferences_sql = (
+                    "CREATE TABLE IF NOT EXISTS alert_preferences ("
+                    "id SERIAL PRIMARY KEY, "
+                    "user_id VARCHAR(255) NOT NULL, "
+                    "rule VARCHAR(64) NOT NULL, "
+                    "enabled BOOLEAN NOT NULL DEFAULT TRUE, "
+                    "threshold DOUBLE PRECISION NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT NOW(), "
+                    "UNIQUE(user_id, rule)"
+                    ")"
+                )
+            else:
+                create_preferences_sql = (
+                    "CREATE TABLE IF NOT EXISTS alert_preferences ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "user_id TEXT NOT NULL, "
+                    "rule TEXT NOT NULL, "
+                    "enabled INTEGER NOT NULL DEFAULT 1, "
+                    "threshold REAL NOT NULL, "
+                    "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                    "UNIQUE(user_id, rule)"
+                    ")"
+                )
+            await conn.execute(text(create_preferences_sql))
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_alert_preferences_user_id "
+                    "ON alert_preferences(user_id)"
+                )
+            )
+    except Exception:
+        logger.debug("迁移步骤 alert_preferences 表失败", exc_info=True)
+
     # 创建 presets 表（如果不存在）
     try:
         async with engine.connect() as conn:
