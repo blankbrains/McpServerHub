@@ -850,13 +850,18 @@ async def _run_migrations() -> None:
 
 async def init_db() -> None:
     """初始化数据库：创建所有表 + 种子数据。"""
+    await ensure_database_schema()
+
+    from mcp_hub.db.seed import seed_database
+
+    await seed_database()
+
+
+async def ensure_database_schema() -> None:
+    """Create and upgrade schema without inserting catalog seed data."""
     import mcp_hub.db.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     await _run_migrations()
-
-    from mcp_hub.db.seed import seed_database
-
-    await seed_database()

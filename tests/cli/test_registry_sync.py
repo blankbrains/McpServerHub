@@ -37,3 +37,36 @@ def test_registry_sync_official_dry_run_reports_source_result(monkeypatch) -> No
 
     assert result.exit_code == 0, result.output
     assert "Official Registry previewed: 2" in result.output
+
+
+async def test_official_registry_sync_prepares_schema_before_writing(monkeypatch) -> None:
+    prepared = False
+
+    async def ensure_database_schema() -> None:
+        nonlocal prepared
+        prepared = True
+
+    async def sync(self, client) -> dict[str, int | str]:
+        del self, client
+        assert prepared is True
+        return {
+            "source": "official_mcp",
+            "entries": 1,
+            "created": 1,
+            "updated": 0,
+            "hidden": 0,
+        }
+
+    monkeypatch.setattr(
+        "mcp_hub.db.database.ensure_database_schema",
+        ensure_database_schema,
+    )
+    monkeypatch.setattr(
+        "mcp_hub.core.registry_sources.sync.RegistrySourceSynchronizer.sync",
+        sync,
+    )
+
+    result = await registry_sync_module.sync_from_official_registry(dry_run=False)
+
+    assert result["created"] == 1
+    assert prepared is True

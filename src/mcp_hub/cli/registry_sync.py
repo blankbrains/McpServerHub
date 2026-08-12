@@ -15,6 +15,11 @@ console = Console()
 
 async def sync_from_official_registry(dry_run: bool) -> dict[str, int | str]:
     """Synchronize the official MCP Registry through the source-owned adapter."""
+    if not dry_run:
+        from mcp_hub.db.database import ensure_database_schema
+
+        await ensure_database_schema()
+
     from mcp_hub.core.registry_sources import (
         OfficialMcpRegistrySource,
         RegistrySourceSynchronizer,
