@@ -18,7 +18,12 @@ def test_application_factory_builds_the_api():
     assert isinstance(app, FastAPI)
     assert "/api/v1/config/upload" in app.openapi()["paths"]
     assert "/api/v1/telemetry/events" in app.openapi()["paths"]
+    assert "/api/v1/telemetry/contribution-consent" in app.openapi()["paths"]
     assert "/api/v1/client-compatibility" in app.openapi()["paths"]
+    assert (
+        "/api/v1/publish/mine/{server_id}/compatibility-feedback"
+        in app.openapi()["paths"]
+    )
 
 
 def test_static_top_reliability_route_is_not_shadowed(monkeypatch) -> None:

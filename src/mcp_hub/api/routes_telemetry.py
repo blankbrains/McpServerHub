@@ -24,6 +24,7 @@ from mcp_hub.core.version_policy import version_command_for_gateway
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import (
     ServerModel,
+    TelemetryContributionConsentModel,
     TelemetryDeviceModel,
     TelemetryEventModel,
     TelemetryInventoryModel,
@@ -58,6 +59,14 @@ class DeviceCreateRequest(BaseModel):
     @classmethod
     def validate_agent_type(cls, value: str) -> str:
         return normalize_agent_type(value)
+
+
+class TelemetryContributionConsentUpdate(BaseModel):
+    """Explicit, revocable permission for anonymous publisher feedback."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
 
 
 class TelemetryEventInput(BaseModel):
@@ -407,6 +416,41 @@ async def create_telemetry_device(
             "token": token,
         },
     }
+
+
+@router.get("/telemetry/contribution-consent")
+async def get_telemetry_contribution_consent(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return the current account's publisher-feedback contribution setting."""
+    async with async_session_factory() as session:
+        consent = await session.get(TelemetryContributionConsentModel, user_id)
+    return {
+        "success": True,
+        "data": {
+            "enabled": bool(consent.enabled) if consent else False,
+        },
+    }
+
+
+@router.put("/telemetry/contribution-consent")
+async def update_telemetry_contribution_consent(
+    data: TelemetryContributionConsentUpdate,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Update a revocable opt-in; it never changes the local Gateway payload."""
+    async with async_session_factory() as session:
+        consent = await session.get(TelemetryContributionConsentModel, user_id)
+        if consent is None:
+            consent = TelemetryContributionConsentModel(
+                user_id=user_id,
+                enabled=data.enabled,
+            )
+            session.add(consent)
+        else:
+            consent.enabled = data.enabled
+        await session.commit()
+    return {"success": True, "data": {"enabled": data.enabled}}
 
 
 @router.get("/telemetry/devices")

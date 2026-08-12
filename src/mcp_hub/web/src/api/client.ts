@@ -88,6 +88,16 @@ export async function apiPatch<T>(path: string, body?: any): Promise<{ success: 
   return res.json()
 }
 
+export async function apiPut<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new ApiRequestError(res.status)
+  return res.json()
+}
+
 export async function searchServers(params: {
   q?: string
   category?: string

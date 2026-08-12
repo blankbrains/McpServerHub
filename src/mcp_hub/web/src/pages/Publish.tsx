@@ -22,6 +22,26 @@ interface PublishedServer {
   download_count: number
 }
 
+interface CompatibilityFeedback {
+  server_id: string
+  days: number
+  available: boolean
+  minimum_contributors: number
+  contributor_cohort: string
+  summary?: {
+    activity: string
+    success_rate_band: string
+    latency_band: string
+  }
+  agents?: Array<{
+    agent_type: string
+    contributor_cohort: string
+    activity: string
+    success_rate_band: string
+    latency_band: string
+  }>
+}
+
 const CATEGORIES = [
   { id: 'browser', name: '浏览器 & 搜索' },
   { id: 'database', name: '数据库' },
@@ -47,6 +67,27 @@ const INSTALL_TYPES = [
   { id: 'uvx', name: 'uvx (Python)' },
 ]
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  low: '低',
+  moderate: '中',
+  high: '高',
+}
+
+const LATENCY_LABELS: Record<string, string> = {
+  under_100ms: '低于 100ms',
+  '100_to_499ms': '100 至 499ms',
+  '500ms_to_1.9s': '500ms 至 1.9 秒',
+  '2s_or_more': '2 秒及以上',
+}
+
+function activityLabel(value: string | undefined): string {
+  return ACTIVITY_LABELS[value || ''] || '暂无'
+}
+
+function latencyLabel(value: string | undefined): string {
+  return LATENCY_LABELS[value || ''] || '暂无'
+}
+
 function loadForm(): PublishForm {
   try {
     const saved = sessionStorage.getItem('mcp_hub_publish_form')
@@ -62,6 +103,7 @@ export default function Publish() {
   const [published, setPublished] = useState<PublishedServer[]>([])
   const [publishedLoading, setPublishedLoading] = useState(true)
   const [publishedError, setPublishedError] = useState('')
+  const [feedbackByServer, setFeedbackByServer] = useState<Record<string, CompatibilityFeedback>>({})
   const { userId, token } = getAuthState()
 
   const saveForm = (data: PublishForm) => {
@@ -80,7 +122,27 @@ export default function Publish() {
     setPublishedError('')
     try {
       const result = await apiGet<PublishedServer[]>('/publish/mine')
-      setPublished(result.data || [])
+      const servers = result.data || []
+      setPublished(servers)
+      const feedback = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            const response = await apiGet<CompatibilityFeedback>(
+              `/publish/mine/${encodeURIComponent(server.id)}/compatibility-feedback`,
+            )
+            return [server.id, response.data] as const
+          } catch {
+            return [server.id, null] as const
+          }
+        }),
+      )
+      setFeedbackByServer(
+        Object.fromEntries(
+          feedback.filter(
+            (entry): entry is readonly [string, CompatibilityFeedback] => entry[1] !== null,
+          ),
+        ),
+      )
     } catch (error) {
       setPublished([])
       setPublishedError(
@@ -145,6 +207,11 @@ export default function Publish() {
       const r: any = await apiPost(`/publish/unpublish/${encodeURIComponent(serverId)}`)
       if (r.success) {
         setPublished(prev => prev.filter(s => s.id !== serverId))
+        setFeedbackByServer(prev => {
+          const next = { ...prev }
+          delete next[serverId]
+          return next
+        })
         setStatus('success')
         setMessage(`${serverId} 已下架`)
       } else {
@@ -274,11 +341,35 @@ export default function Publish() {
           <div className="space-y-2">
             {published.map(s => (
               <div key={s.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <Link to={`/servers/${encodeURIComponent(s.id)}`} className="text-sm font-medium text-gray-900 hover:text-blue-600 truncate block">
                     {s.id}
                   </Link>
                   <p className="text-xs text-gray-400">v{s.version || '?'} · ⭐{s.rating} · 📥{s.download_count}</p>
+                  {feedbackByServer[s.id] && (
+                    <div className="mt-2 border-l-2 border-blue-400 pl-2 text-xs text-gray-600">
+                      {feedbackByServer[s.id].available ? (
+                        <>
+                          <p>
+                            匿名兼容性反馈 · {feedbackByServer[s.id].contributor_cohort} 个贡献账户 ·
+                            活跃度 {activityLabel(feedbackByServer[s.id].summary?.activity)} ·
+                            成功率 {feedbackByServer[s.id].summary?.success_rate_band ?? 'unavailable'} ·
+                            延迟 {latencyLabel(feedbackByServer[s.id].summary?.latency_band)}
+                          </p>
+                          {(feedbackByServer[s.id].agents || []).map(agent => (
+                            <p key={agent.agent_type} className="mt-1">
+                              {agent.agent_type}: {agent.contributor_cohort} 个贡献账户 ·
+                              活跃度 {activityLabel(agent.activity)} · {agent.success_rate_band} · {latencyLabel(agent.latency_band)}
+                            </p>
+                          ))}
+                        </>
+                      ) : (
+                        <p>
+                          匿名兼容性反馈等待最近 30 天至少 {feedbackByServer[s.id].minimum_contributors} 个已授权账户产生实际调用。
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => handleUnpublish(s.id)}
                   className="ml-2 px-3 py-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">

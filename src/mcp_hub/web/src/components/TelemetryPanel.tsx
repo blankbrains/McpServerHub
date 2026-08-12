@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, apiPost } from '../api/client'
+import { apiGet, apiPost, apiPut } from '../api/client'
 import { copyStatus, copyText } from '../utils/clipboard'
 import ConnectionStatusPanel, {
   type ConnectionStatusData,
@@ -72,6 +72,10 @@ interface TelemetryAgentSummary {
 interface CreatedDevice {
   device: TelemetryDevice
   token: string
+}
+
+interface TelemetryContributionConsent {
+  enabled: boolean
 }
 
 interface TelemetryTool {
@@ -195,6 +199,8 @@ export default function TelemetryPanel() {
   const [creating, setCreating] = useState(false)
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const [createdDevice, setCreatedDevice] = useState<CreatedDevice | null>(null)
+  const [contributionEnabled, setContributionEnabled] = useState(false)
+  const [contributionSaving, setContributionSaving] = useState(false)
   const [copyState, setCopyState] = useState('')
   const [recoveryCopyState, setRecoveryCopyState] = useState<{
     deviceId: string
@@ -240,6 +246,7 @@ export default function TelemetryPanel() {
           errorsResult,
           operationsResult,
           lifecycleResult,
+          contributionResult,
         ] = await Promise.all([
           apiGet<ConnectionStatusData>('/telemetry/connection-status'),
           apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
@@ -252,6 +259,7 @@ export default function TelemetryPanel() {
           apiGet<{ days: number; errors: TelemetryError[] }>(`/telemetry/errors?days=${days}${query}`),
           apiGet<{ days: number; operations: TelemetryOperation[] }>(`/telemetry/operations?days=${days}${query}`),
           apiGet<{ days: number; events: TelemetryLifecycleEvent[] }>(`/telemetry/lifecycle?days=${days}${query}`),
+          apiGet<TelemetryContributionConsent>('/telemetry/contribution-consent'),
         ])
         if (!active) return
         setConnectionStatus(connectionStatusResult.data)
@@ -265,6 +273,7 @@ export default function TelemetryPanel() {
         setErrors(errorsResult.data?.errors || [])
         setOperations(operationsResult.data?.operations || [])
         setLifecycleEvents(lifecycleResult.data?.events || [])
+        setContributionEnabled(Boolean(contributionResult.data?.enabled))
       } catch {
         if (active) setError('遥测数据加载失败，请稍后重试。')
       } finally {
@@ -317,6 +326,23 @@ export default function TelemetryPanel() {
       setError('设备撤销失败，请稍后重试。')
     } finally {
       setRevokingId(null)
+    }
+  }
+
+  const updateContributionConsent = async (enabled: boolean) => {
+    setContributionSaving(true)
+    setError('')
+    try {
+      const result = await apiPut<TelemetryContributionConsent>(
+        '/telemetry/contribution-consent',
+        { enabled },
+      )
+      if (!result.success) throw new Error('Contribution consent update failed')
+      setContributionEnabled(enabled)
+    } catch {
+      setError('匿名兼容性贡献设置更新失败，请稍后重试。')
+    } finally {
+      setContributionSaving(false)
     }
   }
 
@@ -411,6 +437,24 @@ export default function TelemetryPanel() {
       )}
 
       <ConnectionStatusPanel data={connectionStatus} loading={loading} />
+
+      <div className="border border-gray-200 bg-white px-4 py-3">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={contributionEnabled}
+            disabled={contributionSaving}
+            onChange={(event) => void updateContributionConsent(event.target.checked)}
+            className="mt-1 h-4 w-4 accent-blue-600"
+          />
+          <span className="text-sm text-gray-700">
+            匿名贡献兼容性数据
+            <span className="mt-0.5 block text-xs text-gray-500">
+              仅在你已追踪且 Gateway 精确识别到市场 Server 时参与；发布者仅在最近 30 天至少 5 个账户有实际调用后看到分桶聚合结果。
+            </span>
+          </span>
+        </label>
+      </div>
 
       <div className="border border-blue-200 bg-blue-50 px-4 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

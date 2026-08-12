@@ -324,6 +324,18 @@ class AlertPreferenceModel(Base):
     )
 
 
+class TelemetryContributionConsentModel(Base):
+    """User-controlled opt-in for anonymous publisher compatibility aggregates."""
+
+    __tablename__ = "telemetry_contribution_consents"
+
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
+
+
 class PresetModel(Base):
     """配置方案 — 用户可发布整套 MCP 配置供他人一键导入。"""
 
