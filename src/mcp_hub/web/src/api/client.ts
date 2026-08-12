@@ -247,6 +247,14 @@ export async function exportConfig(share: boolean): Promise<Blob> {
   return res.blob()
 }
 
+export async function exportTelemetryReport(days: number = 7): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/export/telemetry-report?days=${days}`, {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new Error(`Telemetry report export failed: ${res.status}`)
+  return res.blob()
+}
+
 export async function searchAdvanced(params: {
   q?: string; category?: string; tag?: string; author?: string; language?: string; install_type?: string; security_level?: string; tracked_filter?: string; sort?: string; page?: number; page_size?: number
 }): Promise<{ success: boolean; data: ServerInfo[]; meta: { total: number; page: number; page_size: number } }> {

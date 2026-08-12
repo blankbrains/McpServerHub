@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
 from mcp_hub.api.routes_config import download_config, generate_config
-from mcp_hub.api.routes_export import export_config
+from mcp_hub.api.routes_export import export_config, export_telemetry_report
 from mcp_hub.api.routes_export import router as export_router
 from mcp_hub.api.routes_manage import download_all_config
 from mcp_hub.api.routes_monitor import monitor_dashboard
@@ -187,6 +187,16 @@ def test_config_export_requires_authentication() -> None:
     assert response.status_code == 401
 
 
+def test_telemetry_report_export_requires_authentication() -> None:
+    app = FastAPI()
+    app.include_router(export_router, prefix="/api/v1")
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/export/telemetry-report")
+
+    assert response.status_code == 401
+
+
 async def test_config_export_is_user_scoped_and_does_not_create_temp_files(
     monkeypatch,
 ) -> None:
@@ -206,6 +216,58 @@ async def test_config_export_is_user_scoped_and_does_not_create_temp_files(
         "version": "0.2.0",
         "server_count": 1,
     }
+
+
+async def test_telemetry_report_export_is_user_scoped_and_redacted(
+    monkeypatch,
+) -> None:
+    await _prepare_dashboard_data()
+
+    def fail_temp_file(*_args, **_kwargs):
+        raise AssertionError("telemetry report export must not create persistent temporary files")
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", fail_temp_file)
+    response = await export_telemetry_report(days=7, user_id="dashboard-alice")
+    report = json.loads(response.body)
+    serialized = json.dumps(report, ensure_ascii=False)
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="mcp-hub-telemetry-report-7d.json"'
+    )
+    assert report["report_type"] == "mcp_hub_account_telemetry"
+    assert report["summary"]["total_calls"] == 1
+    assert report["summary"]["total_tokens"] == 5
+    assert report["servers"] == [
+        {
+            "server_id": _ALICE_SERVER,
+            "total_calls": 1,
+            "ok_calls": 1,
+            "error_calls": 0,
+            "success_rate": 100.0,
+            "avg_duration_ms": 0.0,
+            "total_tokens": 5,
+            "last_call_at": report["servers"][0]["last_call_at"],
+        }
+    ]
+    assert report["agents"][0]["agent_type"] == "codex"
+    assert "dashboard-bob" not in serialized
+    assert "dashboard-alice-device" not in serialized
+    data_only = {
+        key: value
+        for key, value in report.items()
+        if key != "privacy"
+    }
+    serialized_data = json.dumps(data_only, ensure_ascii=False)
+    for forbidden in (
+        "device_id",
+        "device_name",
+        "session_id",
+        "tool_name",
+        "input_bytes",
+        "output_bytes",
+    ):
+        assert f'"{forbidden}"' not in serialized_data
 
 
 async def test_admin_config_downloads_do_not_create_temp_files(monkeypatch) -> None:

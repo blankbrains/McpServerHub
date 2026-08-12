@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { apiGet, getAuthHeaders, getAuthState, getFavoriteServers } from '../api/client'
+import {
+  apiGet,
+  exportTelemetryReport,
+  getAuthHeaders,
+  getAuthState,
+  getFavoriteServers,
+} from '../api/client'
 import TelemetryPanel from '../components/TelemetryPanel'
 import InfoTooltip from '../components/InfoTooltip'
 
@@ -70,6 +76,7 @@ export default function MonitorDashboard() {
   const [sortAsc, setSortAsc] = useState(false)
   const [search, setSearch] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const [trackedCount, setTrackedCount] = useState(0)
   const [favCount, setFavCount] = useState(0)
@@ -150,6 +157,29 @@ export default function MonitorDashboard() {
     else { setSortField(field); setSortAsc(false) }
   }
 
+  const handleExportReport = async () => {
+    if (!userId) {
+      setErrorMsg('请先登录后导出当前账户的遥测报告')
+      return
+    }
+    setExporting(true)
+    try {
+      const blob = await exportTelemetryReport(7)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'mcp-hub-telemetry-report-7d.json'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErrorMsg('遥测报告导出失败，请检查登录状态后重试')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const sorted = data?.servers
     ? [...data.servers].filter(s => search ? s.server_id.toLowerCase().includes(search.toLowerCase()) : true)
       .sort((a, b) => {
@@ -224,6 +254,15 @@ export default function MonitorDashboard() {
           <p className="text-sm text-gray-500">当前账户已追踪 Server 的 Gateway 清单与近 7 天调用汇总（每 10 秒自动刷新）</p>
         </div>
         <div className="flex items-center gap-2">
+          {userId && (
+            <button
+              onClick={handleExportReport}
+              disabled={exporting}
+              className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exporting ? '导出中...' : '导出报告'}
+            </button>
+          )}
           <button onClick={() => load(true)} disabled={refreshing}
             className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${refreshing ? 'bg-blue-100 text-blue-600 animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {refreshing ? '⏳ 刷新中...' : '🔄 刷新'}
