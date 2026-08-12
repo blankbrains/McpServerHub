@@ -20,7 +20,9 @@ import json
 import os
 import sys
 import time as _time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 import httpx2
@@ -36,6 +38,12 @@ from mcp_hub.core.gateway_config import (
     split_legacy_command,
 )
 from mcp_hub.core.process_env import filter_process_environment
+from mcp_hub.core.protocol import (
+    SUPPORTED_PROTOCOL_VERSIONS,
+    ProtocolState,
+    negotiate_protocol,
+    supports_server_method,
+)
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.telemetry import (
     TelemetryReporter,
@@ -133,6 +141,7 @@ class ManagedMCP:
         *,
         version: str = "",
         transport: str = "stdio",
+        on_notification: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self.server_id = server_id
         self.process = process
@@ -147,6 +156,7 @@ class ManagedMCP:
         self._pending: dict[int, _PendingReq] = {}
         self._reader_task: asyncio.Task[None] | None = None
         self._shutdown = False
+        self._on_notification = on_notification
 
     def _fail_pending(self, message: str) -> None:
         """Fail outstanding requests immediately when the child stream is unusable."""
@@ -186,8 +196,23 @@ class ManagedMCP:
                     msg = json.loads(line.decode())
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
-                # 通知（无 id）直接忽略
                 if "id" not in msg:
+                    method = msg.get("method")
+                    params = msg.get("params", {})
+                    if (
+                        self._on_notification is not None
+                        and isinstance(method, str)
+                        and isinstance(params, dict)
+                    ):
+                        try:
+                            await self._on_notification(method, params)
+                        except Exception as exc:
+                            logger.debug(
+                                "gateway.child_notification_failed",
+                                server_id=self.server_id,
+                                method=method,
+                                error=type(exc).__name__,
+                            )
                     continue
                 req_id = msg["id"]
                 pending = self._pending.pop(req_id, None)
@@ -316,6 +341,19 @@ class ManagedMCP:
 
         try:
             return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.CancelledError:
+            self._pending.pop(req_id, None)
+            profile = negotiate_protocol(self.protocol_version)
+            if profile is not None and profile.supports_cancellation:
+                with contextlib.suppress(Exception):
+                    await self._send_notification(
+                        "notifications/cancelled",
+                        {
+                            "requestId": req_id,
+                            "reason": "Cancelled by MCP Hub Gateway client",
+                        },
+                    )
+            raise
         except asyncio.TimeoutError:
             self._pending.pop(req_id, None)
             logger.warning("gateway.timeout", server_id=self.server_id, method=method)
@@ -353,7 +391,12 @@ class ManagedMCP:
 class RemoteMCP:
     """Official MCP SDK client connection for Streamable HTTP and legacy SSE."""
 
-    def __init__(self, spec: GatewayServerSpec) -> None:
+    def __init__(
+        self,
+        spec: GatewayServerSpec,
+        *,
+        on_notification: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> None:
         self.server_id = spec.server_id
         self.version = spec.version
         self.transport = spec.transport
@@ -365,6 +408,7 @@ class RemoteMCP:
         self._session: ClientSession | None = None
         self._stack: contextlib.AsyncExitStack | None = None
         self._shutdown = False
+        self._on_notification = on_notification
 
     @staticmethod
     def _dump_result(result: Any) -> dict[str, Any]:
@@ -379,6 +423,30 @@ class RemoteMCP:
         if isinstance(result, dict):
             return result
         raise GatewayError("MCP SDK returned an unsupported result type")
+
+    async def _handle_server_message(self, message: Any) -> None:
+        """Relay supported SDK notifications without exposing transport details."""
+        if isinstance(message, Exception):
+            logger.debug(
+                "gateway.remote_notification_error",
+                server_id=self.server_id,
+                error=classify_error(message),
+            )
+            return
+        if self._on_notification is None:
+            return
+        try:
+            payload = self._dump_result(message)
+            method = payload.get("method")
+            params = payload.get("params", {})
+            if isinstance(method, str) and isinstance(params, dict):
+                await self._on_notification(method, params)
+        except Exception as exc:
+            logger.debug(
+                "gateway.remote_notification_failed",
+                server_id=self.server_id,
+                error=type(exc).__name__,
+            )
 
     @staticmethod
     def _pagination(params: dict[str, Any]) -> types.PaginatedRequestParams | None:
@@ -423,6 +491,7 @@ class RemoteMCP:
                         name="mcp-hub",
                         version=__version__,
                     ),
+                    message_handler=self._handle_server_message,
                 )
             )
             result = await asyncio.wait_for(session.initialize(), timeout=60)
@@ -575,6 +644,10 @@ class McpGateway:
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._configuration_errors: list[dict[str, str]] = []
         self._server_specs: list[GatewayServerSpec] = []
+        self._protocol_state = ProtocolState()
+        self._request_tasks: dict[Any, asyncio.Task[None]] = {}
+        self._stdout_writer: Any | None = None
+        self._stdout_lock = asyncio.Lock()
 
     @property
     def configuration_errors(self) -> list[dict[str, str]]:
@@ -708,6 +781,17 @@ class McpGateway:
         if inventory_changed:
             await self._report_inventory_snapshot()
 
+    def _server_notification_handler(
+        self,
+        server_id: str,
+    ) -> Callable[[str, dict[str, Any]], Awaitable[None]]:
+        """Bind one child identity to the Gateway notification relay."""
+
+        async def _handle(method: str, params: dict[str, Any]) -> None:
+            await self._relay_server_notification(server_id, method, params)
+
+        return _handle
+
     async def start_all_managed(self) -> list[str]:
         """启动所有已安装且已启用的 MCP Server 并初始化。
 
@@ -751,9 +835,13 @@ class McpGateway:
                         proc.stdout,
                         version=spec.version,
                         transport=spec.transport,
+                        on_notification=self._server_notification_handler(sid),
                     )
                 else:
-                    managed = RemoteMCP(spec)
+                    managed = RemoteMCP(
+                        spec,
+                        on_notification=self._server_notification_handler(sid),
+                    )
                 ok = await managed.initialize()
                 startup_duration_ms = int((_time.perf_counter() - started_at) * 1000)
                 if ok:
@@ -934,33 +1022,137 @@ class McpGateway:
     async def handle_stdio(self) -> None:
         """处理来自 Agent 的 stdio JSON-RPC 请求（阻塞循环）。"""
         loop = asyncio.get_event_loop()
-        stdout_w = sys.stdout.buffer
+        self._stdout_writer = sys.stdout.buffer
 
-        while True:
-            line = await loop.run_in_executor(None, sys.stdin.buffer.readline)
-            if not line:
-                break
+        try:
+            while True:
+                line = await loop.run_in_executor(None, sys.stdin.buffer.readline)
+                if not line:
+                    break
 
-            try:
-                request = json.loads(line.decode())
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                continue
+                try:
+                    request = json.loads(line.decode())
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
 
-            # 通知（无需响应）
-            if "id" not in request:
-                self._handle_notification(request)
-                continue
+                if not isinstance(request, dict):
+                    continue
 
+                # Notifications never receive a response.
+                if "id" not in request:
+                    self._handle_notification(request)
+                    continue
+
+                req_id = request["id"]
+                if not self._is_valid_request_id(req_id):
+                    await self._write_protocol_message(
+                        self._error(None, -32600, "Invalid request id")
+                    )
+                    continue
+                if req_id in self._request_tasks:
+                    await self._write_protocol_message(
+                        self._error(req_id, -32600, "Duplicate request id")
+                    )
+                    continue
+                task = asyncio.create_task(self._serve_request(request))
+                self._request_tasks[req_id] = task
+                task.add_done_callback(partial(self._clear_request_task, req_id))
+        except asyncio.CancelledError:
+            pending = list(self._request_tasks.values())
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            raise
+        finally:
+            pending = list(self._request_tasks.values())
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            self._request_tasks.clear()
+            self._stdout_writer = None
+
+    @staticmethod
+    def _is_valid_request_id(request_id: Any) -> bool:
+        """Accept only JSON-RPC scalar request identifiers."""
+        return request_id is None or (
+            isinstance(request_id, (str, int, float))
+            and not isinstance(request_id, bool)
+        )
+
+    def _clear_request_task(
+        self,
+        request_id: Any,
+        completed: asyncio.Future[None],
+    ) -> None:
+        """Forget a completed task without removing a newer duplicate guard."""
+        if self._request_tasks.get(request_id) is completed:
+            self._request_tasks.pop(request_id, None)
+
+    async def _serve_request(self, request: dict[str, Any]) -> None:
+        """Process one client request so a cancellation can interrupt only that request."""
+        try:
             response = await self._process_request(request)
-            if response is not None:
-                stdout_w.write((json.dumps(response, ensure_ascii=False) + "\n").encode())
-                stdout_w.flush()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            response = self._error(
+                request.get("id"),
+                -32603,
+                f"Gateway request failed: {type(exc).__name__}",
+            )
+        if response is not None:
+            await self._write_protocol_message(response)
+
+    async def _write_protocol_message(self, message: dict[str, Any]) -> None:
+        """Serialize protocol output so background requests cannot interleave JSON lines."""
+        if self._stdout_writer is None:
+            return
+        async with self._stdout_lock:
+            if self._stdout_writer is None:
+                return
+            self._stdout_writer.write(
+                (json.dumps(message, ensure_ascii=False) + "\n").encode()
+            )
+            self._stdout_writer.flush()
 
     def _handle_notification(self, request: dict[str, Any]) -> None:
         """处理 JSON-RPC 通知（无需响应）。"""
         method = request.get("method", "")
         if method == "notifications/initialized":
-            pass  # Agent 初始化完成通知
+            return
+        if method != "notifications/cancelled":
+            return
+        params = request.get("params", {})
+        if not isinstance(params, dict):
+            return
+        request_id = params.get("requestId")
+        task = self._request_tasks.get(request_id)
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _relay_server_notification(
+        self,
+        _server_id: str,
+        method: str,
+        _params: dict[str, Any],
+    ) -> None:
+        """Forward aggregate-safe child notifications after modern negotiation."""
+        profile = self._protocol_state.profile
+        if profile is None or not profile.supports_list_change_notifications:
+            return
+        if method not in {
+            "notifications/tools/list_changed",
+            "notifications/resources/list_changed",
+            "notifications/prompts/list_changed",
+        }:
+            return
+        await self._write_protocol_message(
+            {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": {},
+            }
+        )
 
     async def _process_request(
         self,
@@ -970,6 +1162,8 @@ class McpGateway:
         method = request.get("method", "")
         req_id = request.get("id")
         params = request.get("params", {})
+        if not isinstance(params, dict):
+            return self._error(req_id, -32602, "Request params must be an object")
 
         if method == "initialize":
             requested_protocol = params.get("protocolVersion")
@@ -978,11 +1172,28 @@ class McpGateway:
                 if isinstance(requested_protocol, str) and requested_protocol
                 else types.LATEST_PROTOCOL_VERSION
             )
+            profile = negotiate_protocol(protocol_version)
+            if profile is None:
+                return self._error(
+                    req_id,
+                    -32022,
+                    "Unsupported protocol version",
+                    data={
+                        "supported": list(SUPPORTED_PROTOCOL_VERSIONS),
+                        "requested": protocol_version,
+                    },
+                )
+            self._protocol_state = ProtocolState(profile=profile, initialized=True)
+            list_changed = profile.supports_list_change_notifications
             return self._respond(
                 req_id,
                 {
-                    "protocolVersion": protocol_version,
-                    "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+                    "protocolVersion": profile.version,
+                    "capabilities": {
+                        "tools": {"listChanged": True} if list_changed else {},
+                        "resources": {"listChanged": True} if list_changed else {},
+                        "prompts": {"listChanged": True} if list_changed else {},
+                    },
                     "serverInfo": {"name": "mcp-hub-gateway", "version": __version__},
                 },
             )
@@ -996,6 +1207,8 @@ class McpGateway:
         if method == "tools/list":
             all_tools: list[dict[str, Any]] = []
             for sid, server in self._servers.items():
+                if not supports_server_method(server, method):
+                    continue
                 prefix = sid.replace("@", "").replace("/", "_")
                 for tool in server.tools:
                     t = dict(tool)
@@ -1012,6 +1225,8 @@ class McpGateway:
         if method == "resources/list":
             all_res = []
             for sid, server in self._servers.items():
+                if not supports_server_method(server, method):
+                    continue
                 try:
                     r = await server._send_request("resources/list", {}, timeout=10)
                     if r and "resources" in r:
@@ -1028,6 +1243,8 @@ class McpGateway:
         if method == "resources/templates/list":
             templates = []
             for sid, server in self._servers.items():
+                if not supports_server_method(server, method):
+                    continue
                 try:
                     result = await server._send_request(
                         "resources/templates/list",
@@ -1062,6 +1279,8 @@ class McpGateway:
         if method == "prompts/list":
             all_prompts = []
             for sid, server in self._servers.items():
+                if not supports_server_method(server, method):
+                    continue
                 try:
                     r = await server._send_request("prompts/list", {}, timeout=10)
                     if r and "prompts" in r:
@@ -1084,6 +1303,13 @@ class McpGateway:
                 params,
                 field="name",
                 separator="__",
+            )
+
+        if method.startswith("tasks/"):
+            return self._error(
+                req_id,
+                -32601,
+                "MCP task requests are not supported by this Gateway",
             )
 
         # 未知方法
@@ -1121,6 +1347,12 @@ class McpGateway:
             return self._error(req_id, -32602, f"Server not found: {prefix}")
 
         server_id, server = target
+        if not supports_server_method(server, method):
+            return self._error(
+                req_id,
+                -32601,
+                f"{server_id} does not advertise support for {method}",
+            )
         child_params = {**params, field: child_value}
         started_at = _time.perf_counter()
         input_tokens = estimate_payload_tokens(child_params)
@@ -1204,6 +1436,13 @@ class McpGateway:
             return self._error(req_id, -32602, f"Server not found: {server_prefix}")
 
         server_id, server = target
+
+        if not supports_server_method(server, "tools/call"):
+            return self._error(
+                req_id,
+                -32601,
+                f"{server_id} does not advertise support for tools/call",
+            )
 
         # 执行调用 + 计时
         t0 = _time.time()
@@ -1312,5 +1551,14 @@ class McpGateway:
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
     @staticmethod
-    def _error(req_id: Any, code: int, message: str) -> dict[str, Any]:
-        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+    def _error(
+        req_id: Any,
+        code: int,
+        message: str,
+        *,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        error: dict[str, Any] = {"code": code, "message": message}
+        if data is not None:
+            error["data"] = data
+        return {"jsonrpc": "2.0", "id": req_id, "error": error}

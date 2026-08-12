@@ -13,18 +13,21 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import and_, case, func, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.api.dependencies import get_current_user
+from mcp_hub.core.protocol import assess_server_compatibility
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import (
+    ServerModel,
     TelemetryDeviceModel,
     TelemetryEventModel,
     TelemetryInventoryModel,
     UsageStatsModel,
+    UserServerModel,
 )
 from mcp_hub.logging_config import get_logger
 
@@ -439,7 +442,6 @@ async def get_telemetry_connection_status(
             )
         )
         inventory_rows = list(inventory_result.scalars())
-
     inventory_by_device: dict[str, list[TelemetryInventoryModel]] = {}
     for row in inventory_rows:
         inventory_by_device.setdefault(row.device_id, []).append(row)
@@ -808,6 +810,40 @@ async def ingest_telemetry_inventory(
 
 def _time_window(days: int) -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+
+def _resolve_inventory_market_ids(
+    rows: list[TelemetryInventoryModel],
+    tracked_rows: list[UserServerModel],
+    market_rows: list[ServerModel],
+) -> dict[str, str | None]:
+    """Resolve local names only when the market association is unambiguous."""
+    market_by_id = {row.id: row for row in market_rows}
+    tracked_aliases: dict[str, list[str]] = {}
+    for tracked in tracked_rows:
+        alias = tracked.server_id.rsplit("/", 1)[-1]
+        tracked_aliases.setdefault(alias, []).append(tracked.server_id)
+    market_aliases: dict[str, list[str]] = {}
+    for market in market_rows:
+        for alias in {market.name or "", market.display_name or ""} - {""}:
+            market_aliases.setdefault(alias, []).append(market.id)
+
+    resolved: dict[str, str | None] = {}
+    for name in {row.server_name for row in rows}:
+        if name in market_by_id:
+            resolved[name] = name
+            continue
+        tracked_candidates = [
+            server_id
+            for server_id in tracked_aliases.get(name, [])
+            if server_id in market_by_id
+        ]
+        if len(tracked_candidates) == 1:
+            resolved[name] = tracked_candidates[0]
+            continue
+        market_candidates = sorted(set(market_aliases.get(name, [])))
+        resolved[name] = market_candidates[0] if len(market_candidates) == 1 else None
+    return resolved
 
 
 @router.get("/telemetry/summary")
@@ -1521,10 +1557,38 @@ async def get_telemetry_inventory(
             )
         )
         inventory_rows = list(inventory_result.scalars())
+        tracked_result = await session.execute(
+            select(UserServerModel).where(UserServerModel.user_id == user_id)
+        )
+        tracked_rows = list(tracked_result.scalars())
+        local_names = {row.server_name for row in inventory_rows}
+        tracked_ids = {row.server_id for row in tracked_rows}
+        market_conditions = []
+        if local_names or tracked_ids:
+            market_conditions.append(ServerModel.id.in_(local_names | tracked_ids))
+        if local_names:
+            market_conditions.extend(
+                [
+                    ServerModel.name.in_(local_names),
+                    ServerModel.display_name.in_(local_names),
+                ]
+            )
+        if market_conditions:
+            market_result = await session.execute(
+                select(ServerModel).where(or_(*market_conditions))
+            )
+            market_rows = list(market_result.scalars())
+        else:
+            market_rows = []
 
     inventory_by_device: dict[str, list[TelemetryInventoryModel]] = {}
     for row in inventory_rows:
         inventory_by_device.setdefault(row.device_id, []).append(row)
+    market_ids_by_local_name = _resolve_inventory_market_ids(
+        inventory_rows,
+        tracked_rows,
+        market_rows,
+    )
 
     serialized_devices: list[dict[str, Any]] = []
     all_server_names: set[str] = set()
@@ -1545,6 +1609,9 @@ async def get_telemetry_inventory(
                 "servers": [
                     {
                         "server_name": row.server_name,
+                        "market_server_id": market_ids_by_local_name.get(
+                            row.server_name
+                        ),
                         "transport": row.transport,
                         "command_name": row.command_name,
                         "env_keys": _decode_string_list(row.env_keys),
@@ -1558,6 +1625,11 @@ async def get_telemetry_inventory(
                         "enabled": bool(row.enabled),
                         "configuration_error": row.configuration_error,
                         "last_seen_at": row.last_seen_at.isoformat(),
+                        "compatibility": assess_server_compatibility(
+                            row.protocol_version or "",
+                            row.transport or "",
+                            _decode_string_list(row.capabilities),
+                        ).__dict__,
                     }
                     for row in rows
                 ],

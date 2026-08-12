@@ -51,10 +51,12 @@ from mcp_hub.core.telemetry import (
 from mcp_hub.db.database import async_session_factory, engine
 from mcp_hub.db.models import (
     Base,
+    ServerModel,
     TelemetryDeviceModel,
     TelemetryEventModel,
     TelemetryInventoryModel,
     UsageStatsModel,
+    UserServerModel,
 )
 
 
@@ -461,6 +463,82 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
     assert other_inventory["data"]["total_devices"] == 0
 
 
+async def test_inventory_market_mapping_requires_a_unique_match() -> None:
+    await _prepare_telemetry_tables()
+    async with async_session_factory() as session:
+        await session.execute(
+            delete(UserServerModel).where(
+                UserServerModel.user_id == "inventory-market-user"
+            )
+        )
+        await session.execute(
+            delete(ServerModel).where(
+                ServerModel.id.in_(
+                    [
+                        "@inventory/weather",
+                        "@inventory/weather-alt",
+                        "@inventory/files",
+                    ]
+                )
+            )
+        )
+        session.add_all(
+            [
+                ServerModel(
+                    id="@inventory/weather",
+                    name="weather",
+                    display_name="Weather",
+                ),
+                ServerModel(
+                    id="@inventory/weather-alt",
+                    name="weather",
+                    display_name="Weather Alt",
+                ),
+                ServerModel(
+                    id="@inventory/files",
+                    name="files",
+                    display_name="Files",
+                ),
+                UserServerModel(
+                    user_id="inventory-market-user",
+                    server_id="@inventory/files",
+                ),
+            ]
+        )
+        await session.commit()
+
+    created = await create_telemetry_device(
+        DeviceCreateRequest(name="Inventory market device"),
+        "inventory-market-user",
+    )
+    identity = await get_telemetry_identity(f"Bearer {created['data']['token']}")
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="inventory-market-mapping-0001",
+            reported_at=datetime.now(timezone.utc),
+            servers=[
+                {
+                    "server_name": "weather",
+                    "config_hash": "e" * 64,
+                },
+                {
+                    "server_name": "files",
+                    "config_hash": "f" * 64,
+                },
+            ],
+        ),
+        identity,
+    )
+
+    inventory = await get_telemetry_inventory(user_id="inventory-market-user")
+    observed = {
+        row["server_name"]: row
+        for row in inventory["data"]["devices"][0]["servers"]
+    }
+    assert observed["weather"]["market_server_id"] is None
+    assert observed["files"]["market_server_id"] == "@inventory/files"
+
+
 async def test_new_inventory_snapshot_marks_removed_servers_inactive() -> None:
     await _prepare_telemetry_tables()
     created = await create_telemetry_device(DeviceCreateRequest(name="Laptop"), "alice")
@@ -801,6 +879,17 @@ async def test_discovery_inventory_does_not_overwrite_gateway_runtime_observatio
     assert server["protocol_version"] == "2025-06-18"
     assert server["capabilities"] == ["tools"]
     assert server["tool_count"] == 3
+    assert server["compatibility"] == {
+        "status": "verified",
+        "reason_code": "compatible",
+        "reason": "Protocol, transport, and advertised capabilities are supported",
+        "features": {
+            "tools": True,
+            "resources": False,
+            "prompts": False,
+            "tasks": False,
+        },
+    }
 
 
 async def test_gateway_events_drive_connected_backlog_and_offline_states() -> None:

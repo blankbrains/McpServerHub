@@ -18,6 +18,17 @@ interface InventoryServer {
   enabled: boolean
   configuration_error: string
   last_seen_at: string
+  compatibility: {
+    status: 'verified' | 'partial' | 'unsupported'
+    reason_code: string
+    reason: string
+    features: {
+      tools: boolean
+      resources: boolean
+      prompts: boolean
+      tasks: boolean
+    }
+  }
 }
 
 interface InventoryDevice {
@@ -64,6 +75,18 @@ function formatDate(value: string | null): string {
   if (!value) return '尚未连接'
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '时间未知' : parsed.toLocaleString()
+}
+
+function compatibilityLabel(status: InventoryServer['compatibility']['status']): string {
+  if (status === 'verified') return '协议已验证'
+  if (status === 'partial') return '协议部分支持'
+  return '协议不支持'
+}
+
+function compatibilityClass(status: InventoryServer['compatibility']['status']): string {
+  if (status === 'verified') return 'border-green-200 bg-green-50 text-green-700'
+  if (status === 'partial') return 'border-amber-200 bg-amber-50 text-amber-700'
+  return 'border-red-200 bg-red-50 text-red-700'
 }
 
 export default function LocalDiscovery() {
@@ -200,6 +223,20 @@ export default function LocalDiscovery() {
                               能力：{server.capabilities.join('、')}
                             </p>
                           )}
+                          <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                            <span
+                              className={`border px-1.5 py-0.5 ${compatibilityClass(server.compatibility.status)}`}
+                              title={server.compatibility.reason}
+                            >
+                              {compatibilityLabel(server.compatibility.status)}
+                            </span>
+                            <span>
+                              工具 {server.compatibility.features.tools ? '支持' : '未声明'} ·
+                              资源 {server.compatibility.features.resources ? '支持' : '未声明'} ·
+                              提示词 {server.compatibility.features.prompts ? '支持' : '未声明'} ·
+                              任务 {server.compatibility.features.tasks ? '支持' : '暂不支持'}
+                            </span>
+                          </p>
                         </div>
                         <span className={`text-xs ${server.running ? 'text-green-700' : server.enabled ? 'text-amber-700' : 'text-gray-500'}`}>
                           {server.configuration_error ? server.configuration_error : server.running ? '运行中' : server.enabled ? '未运行' : '已禁用'}

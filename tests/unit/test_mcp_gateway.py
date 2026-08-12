@@ -523,6 +523,218 @@ async def test_gateway_routes_resource_and_prompt_requests_to_original_values(
     assert reporter.record.await_args_list[1].kwargs["operation"] == "prompts/get"
 
 
+async def test_gateway_rejects_unsupported_client_protocol_with_retry_metadata() -> None:
+    response = await McpGateway()._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2099-01-01"},
+        }
+    )
+
+    assert response is not None
+    assert response["error"]["code"] == -32022
+    assert response["error"]["data"] == {
+        "supported": ["2024-11-05", "2025-06-18", "2026-07-28"],
+        "requested": "2099-01-01",
+    }
+
+
+async def test_gateway_advertises_only_version_appropriate_capabilities() -> None:
+    gateway = McpGateway()
+    legacy = await gateway._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    modern = await gateway._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {"protocolVersion": "2026-07-28"},
+        }
+    )
+
+    assert legacy is not None
+    assert legacy["result"]["capabilities"]["tools"] == {}
+    assert modern is not None
+    assert modern["result"]["capabilities"]["tools"] == {"listChanged": True}
+    assert modern["result"]["capabilities"]["resources"] == {"listChanged": True}
+
+
+async def test_gateway_rejects_requests_absent_from_explicit_child_capabilities(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    gateway = McpGateway()
+    server = MagicMock()
+    server.capabilities = {"resources"}
+    server.tools = [{"name": "should-not-leak"}]
+    gateway._servers["resources-only"] = server
+
+    listed = await gateway._process_request(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    )
+    called = await gateway._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "resources-only__should-not-leak", "arguments": {}},
+        }
+    )
+
+    assert listed is not None and listed["result"]["tools"] == []
+    assert called is not None
+    assert called["error"]["code"] == -32601
+    server.call_tool.assert_not_called()
+
+
+async def test_managed_mcp_cancellation_notifies_modern_child_server() -> None:
+    stdin = MagicMock()
+    stdin.drain = AsyncMock()
+    managed = ManagedMCP(
+        "slow-server",
+        _process(),
+        stdin,
+        MagicMock(),
+    )
+    managed.protocol_version = "2026-07-28"
+
+    task = asyncio.create_task(managed._send_request("tools/call", {"name": "slow"}))
+    await asyncio.sleep(0)
+    task.cancel()
+
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError("request should have been cancelled")
+
+    messages = [
+        json.loads(call.args[0].decode("utf-8"))
+        for call in stdin.write.call_args_list
+    ]
+    assert messages[0]["method"] == "tools/call"
+    assert messages[1] == {
+        "jsonrpc": "2.0",
+        "method": "notifications/cancelled",
+        "params": {
+            "requestId": 1,
+            "reason": "Cancelled by MCP Hub Gateway client",
+        },
+    }
+
+
+async def test_gateway_relays_list_change_notifications_only_to_modern_clients() -> None:
+    gateway = McpGateway()
+    output = io.BytesIO()
+    gateway._stdout_writer = output
+
+    await gateway._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    await gateway._relay_server_notification(
+        "weather",
+        "notifications/tools/list_changed",
+        {},
+    )
+    assert output.getvalue() == b""
+
+    await gateway._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {"protocolVersion": "2026-07-28"},
+        }
+    )
+    await gateway._relay_server_notification(
+        "weather",
+        "notifications/tools/list_changed",
+        {},
+    )
+
+    notification = json.loads(output.getvalue().decode("utf-8"))
+    assert notification == {
+        "jsonrpc": "2.0",
+        "method": "notifications/tools/list_changed",
+        "params": {},
+    }
+
+
+async def test_gateway_rejects_removed_task_requests_explicitly() -> None:
+    response = await McpGateway()._process_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/list",
+            "params": {},
+        }
+    )
+
+    assert response is not None
+    assert response["error"] == {
+        "code": -32601,
+        "message": "MCP task requests are not supported by this Gateway",
+    }
+
+
+async def test_stdio_gateway_rejects_non_scalar_request_id_without_stopping(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
+    monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)
+    requests = [
+        {"jsonrpc": "2.0", "id": {"invalid": True}, "method": "ping", "params": {}},
+        {"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}},
+    ]
+    input_buffer = io.BytesIO(
+        b"".join(
+            (json.dumps(request) + "\n").encode("utf-8")
+            for request in requests
+        )
+    )
+    output_buffer = io.BytesIO()
+    monkeypatch.setattr(
+        mcp_gateway.sys,
+        "stdin",
+        SimpleNamespace(buffer=input_buffer),
+    )
+    monkeypatch.setattr(
+        mcp_gateway.sys,
+        "stdout",
+        SimpleNamespace(buffer=output_buffer),
+    )
+
+    await McpGateway().handle_stdio()
+
+    responses = [
+        json.loads(line)
+        for line in output_buffer.getvalue().decode("utf-8").splitlines()
+    ]
+    assert responses == [
+        {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32600, "message": "Invalid request id"},
+        },
+        {"jsonrpc": "2.0", "id": 2, "result": {}},
+    ]
+
+
 async def test_stdio_gateway_flushes_multiple_protocol_responses(monkeypatch) -> None:
     monkeypatch.delenv("MCP_HUB_REPORT_URL", raising=False)
     monkeypatch.delenv("MCP_HUB_TELEMETRY_TOKEN", raising=False)

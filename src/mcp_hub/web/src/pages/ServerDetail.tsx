@@ -20,6 +20,41 @@ const AGENTS = [
   { id: 'generic', name: '通用 mcp.json', color: 'bg-gray-100 text-gray-800' },
 ]
 
+interface CompatibilityObservation {
+  device_name: string
+  agent_type: string
+  transport: string
+  protocol_version: string
+  capabilities: string[]
+  running: boolean
+  compatibility: {
+    status: 'verified' | 'partial' | 'unsupported'
+    reason: string
+    features: {
+      tools: boolean
+      resources: boolean
+      prompts: boolean
+      tasks: boolean
+    }
+  }
+}
+
+interface InventoryResponse {
+  devices: Array<{
+    name: string
+    agent_type: string
+    servers: Array<{
+      server_name: string
+      market_server_id: string | null
+      transport: string
+      protocol_version: string
+      capabilities: string[]
+      running: boolean
+      compatibility: CompatibilityObservation['compatibility']
+    }>
+  }>
+}
+
 function SecurityBadge({ level }: { level: string }) {
   const config: Record<string, { icon: string; label: string; color: string }> = {
     verified: { icon: '🟢', label: '安全认证', color: 'text-green-700 bg-green-50 border-green-200' },
@@ -35,6 +70,18 @@ function formatTokens(count: number | undefined | null): string {
   if (count == null) return '-'
   if (count < 1000) return `${count} tokens`
   return `${(count / 1000).toFixed(1)}K tokens`
+}
+
+function compatibilityLabel(status: CompatibilityObservation['compatibility']['status']): string {
+  if (status === 'verified') return '已验证'
+  if (status === 'partial') return '部分支持'
+  return '不支持'
+}
+
+function compatibilityClass(status: CompatibilityObservation['compatibility']['status']): string {
+  if (status === 'verified') return 'border-green-200 bg-green-50 text-green-700'
+  if (status === 'partial') return 'border-amber-200 bg-amber-50 text-amber-700'
+  return 'border-red-200 bg-red-50 text-red-700'
 }
 
 export default function ServerDetail() {
@@ -55,6 +102,7 @@ export default function ServerDetail() {
   const [tokenAnalysis, setTokenAnalysis] = useState<TokenAnalysisResult | null>(null)
   const [reliability, setReliability] = useState<any>(null)
   const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
+  const [compatibilityObservations, setCompatibilityObservations] = useState<CompatibilityObservation[]>([])
 
   // Review states
   const [reviews, setReviews] = useState<any[]>([])
@@ -112,6 +160,40 @@ export default function ServerDetail() {
         .catch(() => {}),
     ])
   }, [id])
+
+  useEffect(() => {
+    if (!server || !token) {
+      setCompatibilityObservations([])
+      return
+    }
+    let active = true
+    void apiGet<InventoryResponse>('/telemetry/inventory')
+      .then(result => {
+        if (!active) return
+        const observations = (result.data?.devices || []).flatMap(device => (
+          device.servers
+            .filter(observed => (
+              observed.market_server_id === server.id
+            ))
+            .map(observed => ({
+              device_name: device.name,
+              agent_type: device.agent_type,
+              transport: observed.transport,
+              protocol_version: observed.protocol_version,
+              capabilities: observed.capabilities,
+              running: observed.running,
+              compatibility: observed.compatibility,
+            }))
+        ))
+        setCompatibilityObservations(observations)
+      })
+      .catch(() => {
+        if (active) setCompatibilityObservations([])
+      })
+    return () => {
+      active = false
+    }
+  }, [server, token])
 
   const latestAgentRef = useRef<string>('')
   const reviewInputRef = useRef<HTMLTextAreaElement>(null)
@@ -383,6 +465,58 @@ export default function ServerDetail() {
             执行第三方命令前，请先核对项目主页、依赖来源和所需权限。
           </div>
         </div>
+      )}
+
+      {token && (
+        <section className="border border-gray-200 bg-white p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-gray-900">本地 MCP 协议兼容性</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                仅显示你的 Gateway 已实际协商的协议和能力，不会读取参数、环境变量值或请求内容。
+              </p>
+            </div>
+            <Link to="/local" className="text-sm font-medium text-blue-700 hover:underline">
+              查看全部本地清单
+            </Link>
+          </div>
+          {compatibilityObservations.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-500">
+              当前没有与此市场条目精确匹配的本地 Gateway 观测记录。
+            </p>
+          ) : (
+            <div className="mt-4 divide-y divide-gray-100 border border-gray-200">
+              {compatibilityObservations.map((observation, index) => (
+                <div
+                  key={`${observation.device_name}-${observation.agent_type}-${index}`}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm"
+                >
+                  <div className="min-w-40 flex-1">
+                    <p className="font-medium text-gray-800">
+                      {observation.agent_type} · {observation.device_name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      MCP {observation.protocol_version || '未协商'} · {observation.transport} ·
+                      {observation.running ? ' 运行中' : ' 未运行'}
+                    </p>
+                  </div>
+                  <span
+                    className={`border px-2 py-0.5 text-xs ${compatibilityClass(observation.compatibility.status)}`}
+                    title={observation.compatibility.reason}
+                  >
+                    {compatibilityLabel(observation.compatibility.status)}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    工具 {observation.compatibility.features.tools ? '支持' : '未声明'} ·
+                    资源 {observation.compatibility.features.resources ? '支持' : '未声明'} ·
+                    提示词 {observation.compatibility.features.prompts ? '支持' : '未声明'} ·
+                    任务 {observation.compatibility.features.tasks ? '支持' : '暂不支持'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {/* Security Details */}
