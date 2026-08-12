@@ -1100,6 +1100,72 @@ async def test_reporter_event_batch_identifies_current_uploader(
     }
 
 
+async def test_validation_stage_is_best_effort_and_does_not_modify_telemetry_queue(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    import httpx
+
+    responses = [503, 200]
+    captured: list[dict[str, object]] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+
+    class FakeClient:
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],
+        ) -> FakeResponse:
+            captured.append({"url": url, "json": json, "headers": headers})
+            return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    reporter = TelemetryReporter(
+        "https://hub.example.test",
+        "mcpht_test-token",
+        tmp_path,
+    )
+    try:
+        first_uploaded = await reporter.report_validation_stage(
+            "verify_succeeded",
+            source="verify",
+        )
+        assert first_uploaded is False
+        assert reporter.spool.count() == 0
+        second_uploaded = await reporter.report_validation_stage(
+            "verify_succeeded",
+            source="verify",
+        )
+        assert second_uploaded is True
+        assert reporter.spool.count() == 0
+    finally:
+        reporter.spool.close()
+
+    assert captured == [
+        {
+            "url": "https://hub.example.test/api/v1/telemetry/user-validation/stages",
+            "json": {"stage": "verify_succeeded", "source": "verify"},
+            "headers": {"Authorization": "Bearer mcpht_test-token"},
+        },
+        {
+            "url": "https://hub.example.test/api/v1/telemetry/user-validation/stages",
+            "json": {"stage": "verify_succeeded", "source": "verify"},
+            "headers": {"Authorization": "Bearer mcpht_test-token"},
+        },
+    ]
+
+
 def test_inventory_callers_declare_their_source() -> None:
     root = Path(__file__).parents[1] / "src" / "mcp_hub"
     agent_source = (root / "cli" / "agent.py").read_text(encoding="utf-8")

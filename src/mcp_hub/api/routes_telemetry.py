@@ -13,13 +13,23 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.protocol import assess_server_compatibility
+from mcp_hub.core.user_validation import (
+    VALIDATION_PARTICIPANT_ROLES,
+    VALIDATION_STAGE_SOURCES,
+    VALIDATION_STAGES,
+    ParticipantRole,
+    ValidationStage,
+    ValidationStageSource,
+    validation_stage_id,
+)
 from mcp_hub.core.version_policy import version_command_for_gateway
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import (
@@ -30,6 +40,9 @@ from mcp_hub.db.models import (
     TelemetryInventoryModel,
     UsageStatsModel,
     UserServerModel,
+    UserValidationAssessmentModel,
+    UserValidationEnrollmentModel,
+    UserValidationEventModel,
 )
 from mcp_hub.logging_config import get_logger
 
@@ -67,6 +80,34 @@ class TelemetryContributionConsentUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool
+
+
+class UserValidationEnrollmentUpdate(BaseModel):
+    """Explicit participation in the fixed, privacy-minimized user study."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    participant_role: ParticipantRole = "individual_user"
+
+
+class UserValidationAssessmentUpdate(BaseModel):
+    """Fixed-answer study feedback; free text is intentionally not accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    connection_state_understood: bool
+    verify_without_logs: bool
+    recovery_succeeded: bool
+
+
+class UserValidationStageInput(BaseModel):
+    """One CLI-confirmed validation stage without local configuration details."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: ValidationStage
+    source: ValidationStageSource
 
 
 class TelemetryEventInput(BaseModel):
@@ -224,6 +265,74 @@ def _utc_naive(value: datetime) -> datetime:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+async def _record_validation_stage(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    stage: ValidationStage,
+    occurred_at: datetime,
+) -> bool:
+    """Persist one post-enrollment user milestone without local identifiers."""
+    enrollment = await session.get(UserValidationEnrollmentModel, user_id)
+    if enrollment is None:
+        return False
+    enrolled_at = enrollment.enrolled_at
+    if enrolled_at is not None and occurred_at < enrolled_at:
+        return False
+    event_id = validation_stage_id(user_id, stage)
+    if await session.get(UserValidationEventModel, event_id) is not None:
+        return False
+    session.add(
+        UserValidationEventModel(
+            id=event_id,
+            user_id=user_id,
+            stage=stage,
+            occurred_at=occurred_at,
+        )
+    )
+    return True
+
+
+async def _serialize_user_validation(user_id: str) -> dict[str, Any]:
+    async with async_session_factory() as session:
+        enrollment = await session.get(UserValidationEnrollmentModel, user_id)
+        if enrollment is None:
+            return {
+                "enrolled": False,
+                "participant_role": "individual_user",
+                "stages": [],
+                "assessment": None,
+            }
+        result = await session.execute(
+            select(UserValidationEventModel)
+            .where(UserValidationEventModel.user_id == user_id)
+            .order_by(UserValidationEventModel.occurred_at)
+        )
+        events = list(result.scalars())
+        assessment = await session.get(UserValidationAssessmentModel, user_id)
+    return {
+        "enrolled": True,
+        "participant_role": enrollment.participant_role,
+        "enrolled_at": enrollment.enrolled_at.isoformat() if enrollment.enrolled_at else None,
+        "stages": [
+            {
+                "stage": event.stage,
+                "occurred_at": event.occurred_at.isoformat(),
+            }
+            for event in events
+        ],
+        "assessment": (
+            {
+                "connection_state_understood": assessment.connection_state_understood,
+                "verify_without_logs": assessment.verify_without_logs,
+                "recovery_succeeded": assessment.recovery_succeeded,
+            }
+            if assessment is not None
+            else None
+        ),
+    }
 
 
 def _mark_gateway_seen(device: TelemetryDeviceModel, seen_at: datetime) -> None:
@@ -406,6 +515,13 @@ async def create_telemetry_device(
     )
     async with async_session_factory() as session:
         session.add(device)
+        await session.flush()
+        await _record_validation_stage(
+            session,
+            user_id=user_id,
+            stage="device_created",
+            occurred_at=_utc_now_naive(),
+        )
         await session.commit()
         await session.refresh(device)
 
@@ -451,6 +567,100 @@ async def update_telemetry_contribution_consent(
             consent.enabled = data.enabled
         await session.commit()
     return {"success": True, "data": {"enabled": data.enabled}}
+
+
+@router.get("/telemetry/user-validation")
+async def get_user_validation(
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return the caller's opt-in study progress without device identifiers."""
+    return {"success": True, "data": await _serialize_user_validation(user_id)}
+
+
+@router.put("/telemetry/user-validation/enrollment")
+async def update_user_validation_enrollment(
+    data: UserValidationEnrollmentUpdate,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Enroll or withdraw the caller and delete study-only data on withdrawal."""
+    if data.participant_role not in VALIDATION_PARTICIPANT_ROLES:
+        raise HTTPException(status_code=422, detail="不支持的验证参与者类型")
+    async with async_session_factory() as session:
+        enrollment = await session.get(UserValidationEnrollmentModel, user_id)
+        if data.enabled:
+            if enrollment is None:
+                session.add(
+                    UserValidationEnrollmentModel(
+                        user_id=user_id,
+                        participant_role=data.participant_role,
+                    )
+                )
+            else:
+                enrollment.participant_role = data.participant_role
+        else:
+            await session.execute(
+                delete(UserValidationEventModel).where(
+                    UserValidationEventModel.user_id == user_id
+                )
+            )
+            await session.execute(
+                delete(UserValidationAssessmentModel).where(
+                    UserValidationAssessmentModel.user_id == user_id
+                )
+            )
+            if enrollment is not None:
+                await session.delete(enrollment)
+        await session.commit()
+    return {"success": True, "data": await _serialize_user_validation(user_id)}
+
+
+@router.put("/telemetry/user-validation/assessment")
+async def update_user_validation_assessment(
+    data: UserValidationAssessmentUpdate,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Store three fixed study answers for an enrolled participant."""
+    async with async_session_factory() as session:
+        enrollment = await session.get(UserValidationEnrollmentModel, user_id)
+        if enrollment is None:
+            raise HTTPException(status_code=409, detail="请先加入用户验证")
+        assessment = await session.get(UserValidationAssessmentModel, user_id)
+        if assessment is None:
+            assessment = UserValidationAssessmentModel(
+                user_id=user_id,
+                connection_state_understood=data.connection_state_understood,
+                verify_without_logs=data.verify_without_logs,
+                recovery_succeeded=data.recovery_succeeded,
+            )
+            session.add(assessment)
+        else:
+            assessment.connection_state_understood = data.connection_state_understood
+            assessment.verify_without_logs = data.verify_without_logs
+            assessment.recovery_succeeded = data.recovery_succeeded
+        await session.commit()
+    return {"success": True, "data": await _serialize_user_validation(user_id)}
+
+
+@router.post("/telemetry/user-validation/stages")
+async def record_user_validation_stage(
+    data: UserValidationStageInput,
+    identity: TelemetryIdentity = Depends(get_telemetry_identity),
+) -> dict[str, Any]:
+    """Record one CLI-confirmed study milestone through a device token."""
+    if data.stage not in VALIDATION_STAGES:
+        raise HTTPException(status_code=422, detail="不支持的验证阶段")
+    allowed_stages = VALIDATION_STAGE_SOURCES[data.source]
+    if data.stage not in allowed_stages:
+        raise HTTPException(status_code=422, detail="验证阶段来源不匹配")
+    async with async_session_factory() as session:
+        saved = await _record_validation_stage(
+            session,
+            user_id=identity.user_id,
+            stage=data.stage,
+            occurred_at=_utc_now_naive(),
+        )
+        await session.commit()
+    return {"success": True, "data": {"saved": saved, "stage": data.stage}}
 
 
 @router.get("/telemetry/devices")
@@ -696,6 +906,21 @@ async def ingest_telemetry_events(
                 ):
                     device.first_call_at = first_call_at
 
+            if data.source == "gateway":
+                await _record_validation_stage(
+                    session,
+                    user_id=identity.user_id,
+                    stage="gateway_first_seen",
+                    occurred_at=received_at,
+                )
+            if data.source == "gateway" and tool_call_times:
+                await _record_validation_stage(
+                    session,
+                    user_id=identity.user_id,
+                    stage="first_tool_call",
+                    occurred_at=min(tool_call_times),
+                )
+
             queue_events = [
                 (stored_at, event.queue_depth)
                 for event, stored_at in normalized_events
@@ -756,8 +981,20 @@ async def ingest_telemetry_inventory(
             device.architecture = data.architecture
             if data.source == "setup":
                 device.setup_completed_at = received_at
+                await _record_validation_stage(
+                    session,
+                    user_id=identity.user_id,
+                    stage="setup_completed",
+                    occurred_at=received_at,
+                )
             elif data.source == "gateway":
                 _mark_gateway_seen(device, received_at)
+                await _record_validation_stage(
+                    session,
+                    user_id=identity.user_id,
+                    stage="gateway_first_seen",
+                    occurred_at=received_at,
+                )
             if data.configuration_errors:
                 device.last_error_code = data.configuration_errors[-1].error_code
         await session.execute(

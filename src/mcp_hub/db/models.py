@@ -336,6 +336,57 @@ class TelemetryContributionConsentModel(Base):
     )
 
 
+class UserValidationEnrollmentModel(Base):
+    """Explicit, revocable enrollment for the product validation study."""
+
+    __tablename__ = "user_validation_enrollments"
+
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    participant_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    enrolled_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
+
+
+class UserValidationEventModel(Base):
+    """One fixed study stage, without configuration or request content."""
+
+    __tablename__ = "user_validation_events"
+
+    id: Mapped[str] = mapped_column(String(96), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_user_validation_events_user_stage",
+            "user_id",
+            "stage",
+        ),
+    )
+
+
+class UserValidationAssessmentModel(Base):
+    """Optional fixed-answer feedback required to evaluate user comprehension."""
+
+    __tablename__ = "user_validation_assessments"
+
+    user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    connection_state_understood: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    verify_without_logs: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    recovery_succeeded: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
+
+
 class PresetModel(Base):
     """配置方案 — 用户可发布整套 MCP 配置供他人一键导入。"""
 

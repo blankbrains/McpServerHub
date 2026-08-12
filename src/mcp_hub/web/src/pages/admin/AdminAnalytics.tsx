@@ -1,11 +1,40 @@
 import { useState, useEffect } from 'react'
 import { apiGet } from '../../api/client'
 
+interface UserValidationAnalytics {
+  days: number
+  participants: {
+    total: number
+    by_role: Record<string, number>
+    targets: Record<string, number>
+  }
+  stages: Record<string, number>
+  metrics: {
+    first_call_median_minutes: number | null
+    connection_state_understood: { responses: number; yes: number; rate: number }
+    verify_without_logs: { responses: number; yes: number; rate: number }
+    recovery_succeeded: { responses: number; yes: number; rate: number }
+  }
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  device_created: '创建设备',
+  setup_started: '开始接入',
+  setup_completed: '完成配置',
+  gateway_first_seen: 'Gateway 在线',
+  first_tool_call: '首次工具调用',
+  verify_failed: '验证发现问题',
+  verify_succeeded: '验证通过',
+  disconnect_completed: '安全断开',
+  restore_completed: '恢复完成',
+}
+
 export default function AdminAnalytics() {
   const [days, setDays] = useState(7)
   const [trend, setTrend] = useState<any[]>([])
   const [topServers, setTopServers] = useState<any[]>([])
   const [topUsers, setTopUsers] = useState<any[]>([])
+  const [validation, setValidation] = useState<UserValidationAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -17,10 +46,12 @@ export default function AdminAnalytics() {
       apiGet<any[]>(`/admin/analytics/daily?days=${days}`),
       apiGet<any[]>(`/admin/analytics/top-servers?days=${days}`),
       apiGet<any[]>(`/admin/analytics/top-users?days=${days}`),
-    ]).then(([t, s, u]) => {
+      apiGet<UserValidationAnalytics>(`/admin/analytics/user-validation?days=${days}`),
+    ]).then(([t, s, u, v]) => {
       setTrend(t?.data || [])
       setTopServers(s?.data || [])
       setTopUsers(u?.data || [])
+      setValidation(v?.data || null)
     }).catch(() => {
       setError('加载分析数据失败')
     }).finally(() => setLoading(false))
@@ -83,6 +114,55 @@ export default function AdminAnalytics() {
           </div>
         </div>
       </div>
+
+      <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-gray-900 dark:text-white">用户验证进度</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              按所选时间范围内新加入的自愿参与者汇总，不显示用户、设备或本地配置。
+            </p>
+          </div>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            参与者 {validation?.participants.total ?? 0}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[
+            ['个人 MCP 用户', 'individual_user'],
+            ['MCP Server 开发者', 'server_publisher'],
+            ['小型团队管理员', 'team_admin'],
+          ].map(([label, role]) => (
+            <div key={role} className="border border-gray-100 p-3 text-sm dark:border-gray-700">
+              <p className="text-gray-500 dark:text-gray-400">{label}</p>
+              <p className="mt-1 font-semibold text-gray-900 dark:text-white">
+                {validation?.participants.by_role[role] ?? 0} / {validation?.participants.targets[role] ?? 0}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {[
+            ['首次调用中位时间', validation?.metrics.first_call_median_minutes === null || validation?.metrics.first_call_median_minutes === undefined ? '暂无' : `${validation.metrics.first_call_median_minutes} 分钟`],
+            ['理解接入状态', `${validation?.metrics.connection_state_understood.rate ?? 0}%`],
+            ['无需日志完成验证', `${validation?.metrics.verify_without_logs.rate ?? 0}%`],
+            ['安全恢复符合预期', `${validation?.metrics.recovery_succeeded.rate ?? 0}%`],
+          ].map(([label, value]) => (
+            <div key={label} className="border-l-2 border-blue-500 bg-gray-50 px-3 py-2 dark:bg-gray-900">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {Object.entries(validation?.stages || {}).map(([stage, count]) => (
+            <div key={stage} className="flex items-center justify-between border-b border-gray-100 py-2 text-sm dark:border-gray-700">
+              <span className="text-gray-600 dark:text-gray-300">{STAGE_LABELS[stage] || stage}</span>
+              <span className="font-medium text-gray-900 dark:text-white">{count}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }

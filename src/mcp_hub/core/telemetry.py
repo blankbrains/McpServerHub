@@ -328,6 +328,33 @@ class TelemetryReporter:
         if self._flush_task is None or self._flush_task.done():
             self._flush_task = asyncio.create_task(self.flush())
 
+    async def report_validation_stage(
+        self,
+        stage: Literal[
+            "setup_started",
+            "setup_completed",
+            "verify_failed",
+            "verify_succeeded",
+            "disconnect_completed",
+            "restore_completed",
+        ],
+        *,
+        source: Literal["setup", "verify", "recovery"],
+    ) -> bool:
+        """Best-effort study signal that never changes normal telemetry queues."""
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{self.report_url}/api/v1/telemetry/user-validation/stages",
+                    json={"stage": stage, "source": source},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+            return response.status_code // 100 == 2
+        except Exception:
+            return False
+
     async def flush(self) -> None:
         """上传一批队列数据；失败时保留队列供下次重试。"""
         async with self._flush_lock:

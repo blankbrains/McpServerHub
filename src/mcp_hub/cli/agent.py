@@ -6,7 +6,9 @@ import asyncio
 import json
 import os
 import shutil
+from contextlib import suppress
 from pathlib import Path
+from typing import Literal
 
 import click
 import tomli_w
@@ -17,6 +19,7 @@ from mcp_hub.core.agent_config import (
     create_timestamped_backup,
     get_agent_profile,
     prepare_agent_migration,
+    read_agent_document,
     restore_file_from_backup,
 )
 from mcp_hub.core.agent_recovery import (
@@ -197,6 +200,18 @@ def agent_setup(
     ):
         click.echo("已取消，未修改任何配置。")
         return
+
+    try:
+        reporter = TelemetryReporter(
+            hub_url,
+            telemetry_token,
+            agent_state_dir,
+            source="setup",
+        )
+        asyncio.run(reporter.report_validation_stage("setup_started", source="setup"))
+        reporter.spool.close()
+    except Exception:
+        pass
 
     gateway_existed = gateway_config_path.is_file()
     gateway_backup_path: Path | None = None
@@ -399,6 +414,46 @@ def _run_agent_recovery(
     json_output: bool,
     yes: bool,
 ) -> None:
+    validation_reporter: TelemetryReporter | None = None
+
+    def prepare_validation_reporter(source_path: Path) -> TelemetryReporter | None:
+        try:
+            profile, _source_path, document = read_agent_document(agent_type, source_path)
+            raw_servers = document.get(profile.server_key)
+            if not isinstance(raw_servers, dict):
+                return None
+            gateway_entry = raw_servers.get("mcp-hub")
+            if not isinstance(gateway_entry, dict):
+                return None
+            env = gateway_entry.get("env")
+            if not isinstance(env, dict):
+                return None
+            hub_url = str(env.get(REPORT_URL_ENV) or "").strip()
+            telemetry_token = str(env.get(TELEMETRY_TOKEN_ENV) or "").strip()
+            if not hub_url or not telemetry_token:
+                return None
+            resolved_state_dir = state_dir or get_agent_state_dir(agent_type)
+            return TelemetryReporter(
+                hub_url,
+                telemetry_token,
+                resolved_state_dir,
+                source="legacy",
+            )
+        except Exception:
+            return None
+
+    def report_stage(
+        reporter: TelemetryReporter,
+        stage: Literal["disconnect_completed", "restore_completed"],
+    ) -> None:
+        try:
+            asyncio.run(reporter.report_validation_stage(stage, source="recovery"))
+        except Exception:
+            return
+        finally:
+            with suppress(Exception):
+                reporter.spool.close()
+
     try:
         preview = prepare_agent_recovery(
             agent_type,
@@ -467,6 +522,7 @@ def _run_agent_recovery(
             click.echo("已取消，未修改任何配置。")
             return
 
+    validation_reporter = prepare_validation_reporter(preview.source_path)
     try:
         result = apply_agent_recovery(
             agent_type,
@@ -475,6 +531,14 @@ def _run_agent_recovery(
         )
     except (FileNotFoundError, OSError, ValueError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    if result.changed and validation_reporter is not None:
+        recovery_stage: Literal["disconnect_completed", "restore_completed"] = (
+            "disconnect_completed"
+            if operation == "disconnect"
+            else "restore_completed"
+        )
+        report_stage(validation_reporter, recovery_stage)
 
     if json_output:
         click.echo(
@@ -900,5 +964,37 @@ def agent_verify_command(
         click.echo(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     else:
         _render_verification_report(report)
+
+    try:
+        resolved_hub_url = hub_url
+        resolved_token = telemetry_token
+        if not resolved_hub_url or not resolved_token:
+            profile, _path, document = read_agent_document(agent_type, source_config)
+            raw_servers = document.get(profile.server_key)
+            gateway_entry = raw_servers.get("mcp-hub") if isinstance(raw_servers, dict) else None
+            env = gateway_entry.get("env") if isinstance(gateway_entry, dict) else None
+            if not resolved_hub_url and isinstance(env, dict):
+                resolved_hub_url = str(env.get(REPORT_URL_ENV) or "").strip()
+            if not resolved_token and isinstance(env, dict):
+                resolved_token = str(env.get(TELEMETRY_TOKEN_ENV) or "").strip()
+        if resolved_hub_url and resolved_token:
+            reporter = TelemetryReporter(
+                resolved_hub_url,
+                resolved_token,
+                state_dir or get_agent_state_dir(agent_type),
+                source="verify",
+            )
+            try:
+                asyncio.run(
+                    reporter.report_validation_stage(
+                        "verify_succeeded" if report.ready else "verify_failed",
+                        source="verify",
+                    )
+                )
+            finally:
+                reporter.spool.close()
+    except Exception:
+        pass
+
     if not report.ready:
         context.exit(1)

@@ -19,6 +19,11 @@ def test_application_factory_builds_the_api():
     assert "/api/v1/config/upload" in app.openapi()["paths"]
     assert "/api/v1/telemetry/events" in app.openapi()["paths"]
     assert "/api/v1/telemetry/contribution-consent" in app.openapi()["paths"]
+    assert "/api/v1/telemetry/user-validation" in app.openapi()["paths"]
+    assert "/api/v1/telemetry/user-validation/enrollment" in app.openapi()["paths"]
+    assert "/api/v1/telemetry/user-validation/assessment" in app.openapi()["paths"]
+    assert "/api/v1/telemetry/user-validation/stages" in app.openapi()["paths"]
+    assert "/api/v1/admin/analytics/user-validation" in app.openapi()["paths"]
     assert "/api/v1/client-compatibility" in app.openapi()["paths"]
     assert (
         "/api/v1/publish/mine/{server_id}/compatibility-feedback"

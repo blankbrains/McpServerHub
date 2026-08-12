@@ -78,6 +78,23 @@ interface TelemetryContributionConsent {
   enabled: boolean
 }
 
+type ValidationParticipantRole = 'individual_user' | 'server_publisher' | 'team_admin'
+
+interface UserValidationProgress {
+  enrolled: boolean
+  participant_role: ValidationParticipantRole
+  enrolled_at?: string | null
+  stages: Array<{
+    stage: string
+    occurred_at: string
+  }>
+  assessment: {
+    connection_state_understood: boolean | null
+    verify_without_logs: boolean | null
+    recovery_succeeded: boolean | null
+  } | null
+}
+
 interface TelemetryTool {
   server_id: string
   tool_name: string
@@ -147,6 +164,24 @@ const AGENT_OPTIONS = [
 
 const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
 
+const VALIDATION_ROLE_OPTIONS: Array<{ id: ValidationParticipantRole; label: string }> = [
+  { id: 'individual_user', label: '个人 MCP 用户' },
+  { id: 'server_publisher', label: 'MCP Server 开发者' },
+  { id: 'team_admin', label: '小型团队管理员' },
+]
+
+const VALIDATION_STAGES = [
+  { id: 'device_created', label: '创建设备' },
+  { id: 'setup_started', label: '开始接入' },
+  { id: 'setup_completed', label: '完成接入配置' },
+  { id: 'gateway_first_seen', label: 'Gateway 首次在线' },
+  { id: 'first_tool_call', label: '首次工具调用' },
+  { id: 'verify_failed', label: '验证发现问题' },
+  { id: 'verify_succeeded', label: '验证通过' },
+  { id: 'disconnect_completed', label: '安全断开完成' },
+  { id: 'restore_completed', label: '恢复完成' },
+] as const
+
 function agentLabel(agentType: string): string {
   return AGENT_OPTIONS.find((agent) => agent.id === agentType)?.label || agentType
 }
@@ -201,6 +236,14 @@ export default function TelemetryPanel() {
   const [createdDevice, setCreatedDevice] = useState<CreatedDevice | null>(null)
   const [contributionEnabled, setContributionEnabled] = useState(false)
   const [contributionSaving, setContributionSaving] = useState(false)
+  const [validationProgress, setValidationProgress] = useState<UserValidationProgress | null>(null)
+  const [validationRole, setValidationRole] = useState<ValidationParticipantRole>('individual_user')
+  const [validationSaving, setValidationSaving] = useState(false)
+  const [validationAnswers, setValidationAnswers] = useState({
+    connection_state_understood: null as boolean | null,
+    verify_without_logs: null as boolean | null,
+    recovery_succeeded: null as boolean | null,
+  })
   const [copyState, setCopyState] = useState('')
   const [recoveryCopyState, setRecoveryCopyState] = useState<{
     deviceId: string
@@ -247,6 +290,7 @@ export default function TelemetryPanel() {
           operationsResult,
           lifecycleResult,
           contributionResult,
+          validationResult,
         ] = await Promise.all([
           apiGet<ConnectionStatusData>('/telemetry/connection-status'),
           apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
@@ -260,6 +304,7 @@ export default function TelemetryPanel() {
           apiGet<{ days: number; operations: TelemetryOperation[] }>(`/telemetry/operations?days=${days}${query}`),
           apiGet<{ days: number; events: TelemetryLifecycleEvent[] }>(`/telemetry/lifecycle?days=${days}${query}`),
           apiGet<TelemetryContributionConsent>('/telemetry/contribution-consent'),
+          apiGet<UserValidationProgress>('/telemetry/user-validation'),
         ])
         if (!active) return
         setConnectionStatus(connectionStatusResult.data)
@@ -274,6 +319,18 @@ export default function TelemetryPanel() {
         setOperations(operationsResult.data?.operations || [])
         setLifecycleEvents(lifecycleResult.data?.events || [])
         setContributionEnabled(Boolean(contributionResult.data?.enabled))
+        const progress = validationResult.data || null
+        setValidationProgress(progress)
+        if (progress) {
+          setValidationRole(progress.participant_role)
+          if (progress.assessment) {
+            setValidationAnswers({
+              connection_state_understood: progress.assessment.connection_state_understood,
+              verify_without_logs: progress.assessment.verify_without_logs,
+              recovery_succeeded: progress.assessment.recovery_succeeded,
+            })
+          }
+        }
       } catch {
         if (active) setError('遥测数据加载失败，请稍后重试。')
       } finally {
@@ -343,6 +400,48 @@ export default function TelemetryPanel() {
       setError('匿名兼容性贡献设置更新失败，请稍后重试。')
     } finally {
       setContributionSaving(false)
+    }
+  }
+
+  const updateValidationEnrollment = async (enabled: boolean) => {
+    if (!enabled && !window.confirm('退出后将删除本次用户验证的阶段和问卷数据，继续吗？')) return
+    setValidationSaving(true)
+    setError('')
+    try {
+      const result = await apiPut<UserValidationProgress>(
+        '/telemetry/user-validation/enrollment',
+        {
+          enabled,
+          participant_role: validationRole,
+        },
+      )
+      if (!result.success || !result.data) throw new Error('Validation enrollment update failed')
+      setValidationProgress(result.data)
+    } catch {
+      setError('用户验证参与设置更新失败，请稍后重试。')
+    } finally {
+      setValidationSaving(false)
+    }
+  }
+
+  const saveValidationAssessment = async () => {
+    if (Object.values(validationAnswers).some((answer) => answer === null)) {
+      setError('请为每一项验证结果明确选择“是”或“否”。')
+      return
+    }
+    setValidationSaving(true)
+    setError('')
+    try {
+      const result = await apiPut<UserValidationProgress>(
+        '/telemetry/user-validation/assessment',
+        validationAnswers,
+      )
+      if (!result.success || !result.data) throw new Error('Validation assessment update failed')
+      setValidationProgress(result.data)
+    } catch {
+      setError('用户验证结果保存失败，请稍后重试。')
+    } finally {
+      setValidationSaving(false)
     }
   }
 
@@ -454,6 +553,108 @@ export default function TelemetryPanel() {
             </span>
           </span>
         </label>
+      </div>
+
+      <div className="border border-gray-200 bg-white px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">用户验证</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              自愿参与后，仅记录固定阶段、时间和三项固定答案；不记录配置、命令、请求内容或设备令牌。
+            </p>
+          </div>
+          {validationProgress?.enrolled && (
+            <button
+              type="button"
+              onClick={() => void updateValidationEnrollment(false)}
+              disabled={validationSaving}
+              className="border border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              退出并删除验证数据
+            </button>
+          )}
+        </div>
+
+        {!validationProgress?.enrolled ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <select
+              value={validationRole}
+              onChange={(event) => setValidationRole(event.target.value as ValidationParticipantRole)}
+              aria-label="用户验证参与者类型"
+              className="border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {VALIDATION_ROLE_OPTIONS.map((role) => (
+                <option key={role.id} value={role.id}>{role.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void updateValidationEnrollment(true)}
+              disabled={validationSaving}
+              className="bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {validationSaving ? '处理中...' : '加入用户验证'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <ol className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 xl:grid-cols-4">
+              {VALIDATION_STAGES.map((stage) => {
+                const event = validationProgress.stages.find((item) => item.stage === stage.id)
+                return (
+                  <li key={stage.id} className="border-l-2 border-gray-200 pl-2">
+                    <p className={event ? 'font-medium text-green-700' : 'font-medium text-gray-700'}>
+                      {event ? '已完成' : '等待'} · {stage.label}
+                    </p>
+                    {event && <p className="mt-0.5 text-[11px] text-gray-400">{formatDate(event.occurred_at)}</p>}
+                  </li>
+                )
+              })}
+            </ol>
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-xs font-medium text-gray-800">完成流程后填写结果</p>
+              <div className="mt-2 grid gap-3 text-xs text-gray-700 md:grid-cols-3">
+                {[
+                  ['connection_state_understood', '能判断当前接入状态'],
+                  ['verify_without_logs', '无需查看日志即可使用 verify 定位问题'],
+                  ['recovery_succeeded', '安全断开或恢复结果符合预期'],
+                ].map(([key, label]) => (
+                  <fieldset key={key} className="border border-gray-200 px-3 py-2">
+                    <legend className="px-1 text-xs font-medium text-gray-800">{label}</legend>
+                    <div className="mt-1 flex gap-3">
+                      {[
+                        [true, '是'],
+                        [false, '否'],
+                      ].map(([value, optionLabel]) => (
+                        <label key={String(value)} className="flex items-center gap-1.5">
+                          <input
+                            type="radio"
+                            name={`validation-${key}`}
+                            checked={validationAnswers[key as keyof typeof validationAnswers] === value}
+                            onChange={() => setValidationAnswers((current) => ({
+                              ...current,
+                              [key]: value,
+                            }))}
+                            className="h-4 w-4 accent-blue-600"
+                          />
+                          <span>{optionLabel}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => void saveValidationAssessment()}
+                disabled={validationSaving}
+                className="mt-3 border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {validationSaving ? '保存中...' : '保存验证结果'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="border border-blue-200 bg-blue-50 px-4 py-5">
