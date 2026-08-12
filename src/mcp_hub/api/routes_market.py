@@ -79,7 +79,7 @@ async def get_new_releases() -> dict[str, Any]:
 @router.get("/market/categories")
 async def get_categories() -> dict[str, Any]:
     """获取分类列表。"""
-    from sqlalchemy import func, select
+    from sqlalchemy import func, or_, select
 
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
@@ -108,7 +108,11 @@ async def get_categories() -> dict[str, Any]:
         for cat in categories:
             result = await session.execute(
                 select(func.count(ServerModel.id)).where(
-                    ServerModel.categories.ilike(f"%{cat['id']}%")
+                    ServerModel.categories.ilike(f"%{cat['id']}%"),
+                    or_(
+                        ServerModel.market_visible.is_(True),
+                        ServerModel.market_visible.is_(None),
+                    ),
                 )
             )
             cat["count"] = result.scalar() or 0

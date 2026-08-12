@@ -25,10 +25,15 @@ class Registry:
             repo = ServerRepository(session)
             return await repo.search(q, category, tag, sort, page, page_size, security_level)
 
-    async def get_by_id(self, server_id: str) -> dict[str, Any] | None:
+    async def get_by_id(
+        self,
+        server_id: str,
+        *,
+        include_hidden: bool = False,
+    ) -> dict[str, Any] | None:
         async with async_session_factory() as session:
             repo = ServerRepository(session)
-            return await repo.get_by_id(server_id)
+            return await repo.get_by_id(server_id, include_hidden=include_hidden)
 
     async def get_all(self) -> list[dict[str, Any]]:
         async with async_session_factory() as session:

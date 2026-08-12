@@ -12,6 +12,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from mcp_hub.db.models import (
     FavoriteModel,
+    RegistrySourceEntryModel,
     ReviewModel,
     ServerModel,
     UserModel,
@@ -26,6 +27,10 @@ class ServerRepository:
 
     @staticmethod
     def _server_to_dict(server: ServerModel) -> dict[str, Any]:
+        try:
+            config_template = json.loads(server.config_template) if server.config_template else {}
+        except json.JSONDecodeError:
+            config_template = {}
         return {
             "id": server.id,
             "name": server.name,
@@ -40,6 +45,10 @@ class ServerRepository:
             "install_type": server.install_type or "",
             "install_package": server.install_package or "",
             "install_command": server.install_command or "",
+            "config_template": config_template if isinstance(config_template, dict) else {},
+            "catalog_source": server.catalog_source or "",
+            "catalog_source_id": server.catalog_source_id or "",
+            "catalog_status": server.catalog_status or "active",
             "homepage": server.homepage or "",
             "license": server.license or "MIT",
             "security_level": server.security_level or "unreviewed",
@@ -66,8 +75,9 @@ class ServerRepository:
         security_level: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """搜索 Server。"""
-        query = select(ServerModel)
-        count_query = select(func.count(ServerModel.id))
+        visible = or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None))
+        query = select(ServerModel).where(visible)
+        count_query = select(func.count(ServerModel.id)).where(visible)
 
         conditions: list[ColumnElement[bool]] = []
         if q:
@@ -110,15 +120,58 @@ class ServerRepository:
 
         return [self._server_to_dict(s) for s in servers], total
 
-    async def get_by_id(self, server_id: str) -> dict[str, Any] | None:
-        result = await self.session.execute(select(ServerModel).where(ServerModel.id == server_id))
+    async def get_by_id(
+        self,
+        server_id: str,
+        *,
+        include_hidden: bool = False,
+    ) -> dict[str, Any] | None:
+        query = select(ServerModel).where(ServerModel.id == server_id)
+        if not include_hidden:
+            query = query.where(
+                or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None))
+            )
+        result = await self.session.execute(query)
         server = result.scalar_one_or_none()
-        return self._server_to_dict(server) if server else None
+        if not server:
+            return None
+        data = self._server_to_dict(server)
+        provenance_result = await self.session.execute(
+            select(RegistrySourceEntryModel)
+            .where(RegistrySourceEntryModel.server_id == server.id)
+            .order_by(RegistrySourceEntryModel.last_synced_at.desc())
+            .limit(1)
+        )
+        provenance = provenance_result.scalar_one_or_none()
+        if provenance:
+            data["registry"] = {
+                "source": provenance.source,
+                "upstream_id": provenance.upstream_id,
+                "version": provenance.upstream_version or "",
+                "package_type": provenance.package_type or "",
+                "package_identifier": provenance.package_identifier or "",
+                "repository_url": provenance.repository_url or "",
+                "transport": provenance.transport or "",
+                "status": provenance.lifecycle_status or "active",
+                "published_at": str(provenance.published_at) if provenance.published_at else "",
+                "updated_at": (
+                    str(provenance.upstream_updated_at)
+                    if provenance.upstream_updated_at
+                    else ""
+                ),
+                "last_synced_at": (
+                    str(provenance.last_synced_at) if provenance.last_synced_at else ""
+                ),
+            }
+        return data
 
     async def get_installed(self) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel)
-            .where(ServerModel.status != "not_installed")
+            .where(
+                ServerModel.status != "not_installed",
+                or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)),
+            )
             .order_by(ServerModel.name)
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
@@ -142,14 +195,20 @@ class ServerRepository:
 
     async def get_trending(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
-            select(ServerModel).order_by(ServerModel.download_count.desc()).limit(limit)
+            select(ServerModel)
+            .where(or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)))
+            .order_by(ServerModel.download_count.desc())
+            .limit(limit)
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
     async def get_top_rated(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
             select(ServerModel)
-            .where(ServerModel.review_count > 0)
+            .where(
+                ServerModel.review_count > 0,
+                or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)),
+            )
             .order_by(ServerModel.rating.desc())
             .limit(limit)
         )
@@ -157,7 +216,10 @@ class ServerRepository:
 
     async def get_new_releases(self, limit: int = 20) -> list[dict[str, Any]]:
         result = await self.session.execute(
-            select(ServerModel).order_by(ServerModel.created_at.desc()).limit(limit)
+            select(ServerModel)
+            .where(or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)))
+            .order_by(ServerModel.created_at.desc())
+            .limit(limit)
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
@@ -191,14 +253,21 @@ class ServerRepository:
 
     async def get_all(self) -> list[dict[str, Any]]:
         """获取所有 Server 记录（包含未安装的）。"""
-        result = await self.session.execute(select(ServerModel).order_by(ServerModel.name))
+        result = await self.session.execute(
+            select(ServerModel)
+            .where(or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)))
+            .order_by(ServerModel.name)
+        )
         return [self._server_to_dict(s) for s in result.scalars().all()]
 
     async def get_by_author(self, author: str) -> list[dict[str, Any]]:
         """按作者查询发布的 Server。"""
         result = await self.session.execute(
             select(ServerModel)
-            .where(ServerModel.author == author)
+            .where(
+                ServerModel.author == author,
+                or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None)),
+            )
             .order_by(ServerModel.created_at.desc())
         )
         return [self._server_to_dict(s) for s in result.scalars().all()]

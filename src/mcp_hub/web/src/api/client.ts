@@ -32,6 +32,23 @@ export interface ServerInfo {
   homepage: string
   license: string
   security_level: string
+  catalog_source?: string
+  catalog_source_id?: string
+  catalog_status?: string
+  config_template?: Record<string, string>
+  registry?: {
+    source: string
+    upstream_id: string
+    version: string
+    package_type: string
+    package_identifier: string
+    repository_url: string
+    transport: string
+    status: string
+    published_at: string
+    updated_at: string
+    last_synced_at: string
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<{ success: boolean; data: T; meta?: any }> {

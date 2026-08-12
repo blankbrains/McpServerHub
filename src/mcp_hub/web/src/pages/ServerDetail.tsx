@@ -364,6 +364,20 @@ export default function ServerDetail() {
           ))}
         </div>
 
+        {server.catalog_source === 'official_mcp' && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-l-2 border-cyan-500 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+            <span className="font-medium">Official MCP Registry</span>
+            {server.catalog_status === 'deprecated' && (
+              <span className="border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+                Deprecated upstream
+              </span>
+            )}
+            {server.catalog_source_id && (
+              <code className="text-xs text-cyan-900">{server.catalog_source_id}</code>
+            )}
+          </div>
+        )}
+
         {/* Security + Token row */}
         <div className="flex items-center gap-3 flex-wrap mb-4">
           <span className="text-sm text-gray-500">
@@ -739,8 +753,13 @@ export default function ServerDetail() {
             ))}
           </div>
 
-          {showConfig && configData && (
+      {showConfig && configData && (
             <div className="space-y-3">
+              {server.catalog_source === 'official_mcp' && server.config_template?.url && (
+                <p className="border-l-2 border-cyan-500 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+                  Remote MCP configuration. No local install command is required.
+                </p>
+              )}
               <p className="text-sm text-gray-500">
                 将以下 {(configData.config_format || 'json').toUpperCase()} 合并到
                 <code className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{configData.config_path}</code>

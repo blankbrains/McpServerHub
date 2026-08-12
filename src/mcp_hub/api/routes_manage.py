@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from mcp_hub.api.dependencies import get_current_user, get_process_admin
-from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent, server_config_name
 from mcp_hub.core.gateway_config import split_legacy_command
 from mcp_hub.core.process_manager import get_process_manager
 from mcp_hub.core.registry import Registry
@@ -50,6 +50,7 @@ async def install_server(
         raise ServerNotFoundError(req.server_id)
 
     command = server_data.get("install_command", "")
+    config_template = server_data.get("config_template", {})
     display_name = server_data.get("display_name", req.server_id.split("/")[-1])
 
     # 1. 添加到 user_servers（标记为已追踪、已启用）
@@ -86,7 +87,12 @@ async def install_server(
     # 3. 生成各 Agent 配置片段
     configs: list[dict[str, Any]] = []
     for agent_key in AGENT_CONFIGS:
-        cfg = get_config_for_agent(display_name, command, agent_key)
+        cfg = get_config_for_agent(
+            server_config_name(req.server_id, server_data),
+            command,
+            agent_key,
+            config_template=config_template if isinstance(config_template, dict) else None,
+        )
         configs.append(cfg)
 
     # 4. 记录安装历史
@@ -116,6 +122,7 @@ async def install_server(
             "server_id": req.server_id,
             "detail": "已添加到配置",
             "install_command": command,
+            "config_template": config_template if isinstance(config_template, dict) else {},
             "configs": configs,
         },
         "message": f"✅ {display_name} 已添加到配置，请在本地终端运行安装命令",
@@ -238,7 +245,7 @@ async def uninstall_server(
     """从当前用户配置中移除 Server，不操作 Hub 主机或用户电脑的软件。"""
     registry = Registry()
 
-    server = await registry.get_by_id(server_id)
+    server = await registry.get_by_id(server_id, include_hidden=True)
     if not server:
         raise ServerNotFoundError(server_id)
 
@@ -280,14 +287,15 @@ async def get_server_config(
         raise ServerNotFoundError(server_id)
 
     command = server.get("install_command", "")
-    from mcp_hub.core.config_manager import get_config_for_agent
+    config_template = server.get("config_template", {})
 
     return {
         "success": True,
         "data": get_config_for_agent(
-            server_name=server_id.split("/")[-1],
+            server_name=server_config_name(server_id, server),
             command=command,
             agent=agent,
+            config_template=config_template if isinstance(config_template, dict) else None,
         ),
     }
 
@@ -308,8 +316,12 @@ async def download_all_config(
     server_configs: dict[str, dict[str, object]] = {}
     for s in installed:
         cmd = s.get("install_command", "")
-        name = s["id"].split("/")[-1]
-        server_configs[name] = command_config(cmd)
+        name = server_config_name(s["id"], s)
+        config_template = s.get("config_template", {})
+        if isinstance(config_template, dict) and config_template:
+            server_configs[name] = config_template
+        elif cmd:
+            server_configs[name] = command_config(cmd)
     config: dict[str, Any] = {"mcpServers": server_configs}
 
     import json

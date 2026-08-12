@@ -157,6 +157,7 @@ mcp-hub agent restore --agent codex
 mcp-hub agent status --agent codex
 mcp-hub agent doctor --agent codex
 mcp-hub config sync --agent codex --server <url>
+mcp-hub registry-sync --source official
 
 # 本机 Hub
 mcp-hub quickstart
@@ -167,6 +168,12 @@ mcp-hub start <server-id>
 mcp-hub status
 mcp-hub logs <server-id> -f
 ```
+
+## Official Registry
+
+`mcp-hub registry-sync --source official` synchronizes public catalog metadata from the official MCP Registry. Source provenance is not a Hub security approval and synchronization does not overwrite user tracking, community ratings, local telemetry, or administrator security decisions.
+
+Remote `streamable-http` and SSE entries produce structured MCP configuration instead of a guessed local install command. The Hub does not persist or export request headers, tokens, authentication values, URL template variables, or upstream raw payloads.
 
 运行 `mcp-hub --help` 或 `mcp-hub <command> --help` 查看完整参数。
 

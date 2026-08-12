@@ -33,8 +33,15 @@ class _FakeRegistry:
     def __init__(self) -> None:
         self.update_status = AsyncMock()
         self.increment_download = AsyncMock()
+        self.include_hidden_calls: list[bool] = []
 
-    async def get_by_id(self, server_id: str) -> dict[str, object]:
+    async def get_by_id(
+        self,
+        server_id: str,
+        *,
+        include_hidden: bool = False,
+    ) -> dict[str, object]:
+        self.include_hidden_calls.append(include_hidden)
         return {
             "id": server_id,
             "display_name": "Example",
@@ -110,3 +117,17 @@ async def test_uninstall_only_removes_current_user_tracking(
     session.execute.assert_awaited_once()
     assert session.added
     session.commit.assert_awaited_once()
+    assert registry.include_hidden_calls == [True]
+
+
+async def test_public_server_config_does_not_include_hidden_catalog_entries(
+    monkeypatch,
+) -> None:
+    registry = _FakeRegistry()
+
+    monkeypatch.setattr(routes_manage, "Registry", lambda: registry)
+
+    result = await routes_manage.get_server_config("@example/server")
+
+    assert result["success"] is True
+    assert registry.include_hidden_calls == [False]

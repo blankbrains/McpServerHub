@@ -132,20 +132,30 @@ async def download_config(
         )
         server_ids = [row[0] for row in result.fetchall()]
 
-    from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+    from mcp_hub.core.config_manager import (
+        AGENT_CONFIGS,
+        get_config_for_agent,
+        server_config_name,
+    )
 
     config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
     server_key = config_spec["server_key"]
     selected_servers: dict[str, Any] = {}
     config: dict[str, Any] = {server_key: selected_servers}
     for server_id in server_ids:
-        s = await registry.get_by_id(server_id)
+        s = await registry.get_by_id(server_id, include_hidden=True)
         if not s:
             continue
         cmd = s.get("install_command", "")
-        name = s["id"].split("/")[-1]
-        if cmd:
-            fragment = get_config_for_agent(name, cmd, agent)
+        name = server_config_name(s["id"], s)
+        config_template = s.get("config_template", {})
+        if cmd or config_template:
+            fragment = get_config_for_agent(
+                name,
+                cmd,
+                agent,
+                config_template=config_template if isinstance(config_template, dict) else None,
+            )
             selected_servers[name] = fragment["config_content"][server_key][name]
 
     if config_spec.get("format") == "toml":
@@ -478,7 +488,11 @@ async def build_config(data: dict[str, Any]) -> Response | dict[str, Any]:
     if not server_ids:
         return {"success": False, "error": "server 列表为空"}
 
-    from mcp_hub.core.config_manager import AGENT_CONFIGS, get_config_for_agent
+    from mcp_hub.core.config_manager import (
+        AGENT_CONFIGS,
+        get_config_for_agent,
+        server_config_name,
+    )
 
     registry = Registry()
     config_spec = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
@@ -490,9 +504,17 @@ async def build_config(data: dict[str, Any]) -> Response | dict[str, Any]:
         server = await registry.get_by_id(sid)
         if server:
             cmd = server.get("install_command", "")
-            name = sid.split("/")[-1]
-            if cmd:
-                fragment = get_config_for_agent(name, cmd, agent)
+            name = server_config_name(sid, server)
+            config_template = server.get("config_template", {})
+            if cmd or config_template:
+                fragment = get_config_for_agent(
+                    name,
+                    cmd,
+                    agent,
+                    config_template=(
+                        config_template if isinstance(config_template, dict) else None
+                    ),
+                )
                 server_configs[name] = fragment["config_content"][server_key][name]
 
     if config_spec.get("format") == "toml":
@@ -511,7 +533,7 @@ async def build_config(data: dict[str, Any]) -> Response | dict[str, Any]:
 @router.post("/config/generate")
 async def generate_config(_admin_id: str = Depends(get_admin_user)) -> Response:
     """生成完整的 mcp.json 配置文件，包含所有已安装 Server + Hub 网关。"""
-    from mcp_hub.core.config_manager import get_config_for_agent
+    from mcp_hub.core.config_manager import get_config_for_agent, server_config_name
 
     registry = Registry()
     installed = await registry.get_installed()
@@ -522,9 +544,15 @@ async def generate_config(_admin_id: str = Depends(get_admin_user)) -> Response:
     # 添加所有已安装的 Server
     for s in installed:
         cmd = s.get("install_command", "")
-        name = s["id"].split("/")[-1]
-        if cmd:
-            fragment = get_config_for_agent(name, cmd, "generic")
+        name = server_config_name(s["id"], s)
+        config_template = s.get("config_template", {})
+        if cmd or config_template:
+            fragment = get_config_for_agent(
+                name,
+                cmd,
+                "generic",
+                config_template=config_template if isinstance(config_template, dict) else None,
+            )
             generated_servers[name] = fragment["config_content"]["mcpServers"][name]
 
     return Response(

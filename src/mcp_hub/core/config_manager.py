@@ -52,15 +52,36 @@ def command_config(command: str) -> dict[str, object]:
     return config
 
 
+def server_config_name(server_id: str, server_data: dict[str, Any] | None = None) -> str:
+    """Create a stable, flat MCP client key for sourced catalog entries."""
+    if server_data and server_data.get("catalog_source"):
+        upstream_id = str(server_data.get("catalog_source_id", "") or "")
+        if upstream_id:
+            return upstream_id.replace("/", "--")
+    return server_id.split("/")[-1]
+
+
 def get_config_for_agent(
     server_name: str,
     command: str,
     agent: str = "generic",
+    config_template: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     """生成指定 Agent 的配置片段。"""
     cfg = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["generic"])
-    server_config = command_config(command)
-    if cfg.get("requires_stdio_type"):
+    if config_template:
+        transport = config_template.get("type")
+        url = config_template.get("url")
+        if (
+            transport not in {"streamable-http", "sse"}
+            or not isinstance(url, str)
+            or not url.startswith(("http://", "https://"))
+        ):
+            raise ValueError("Invalid structured MCP Server configuration")
+        server_config: dict[str, object] = {"type": transport, "url": url}
+    else:
+        server_config = command_config(command)
+    if cfg.get("requires_stdio_type") and not config_template:
         server_config = {"type": "stdio", **server_config}
 
     config_content = {cfg["server_key"]: {server_name: server_config}}
@@ -90,7 +111,7 @@ class ConfigManager:
 
         # 确认 Server 存在于注册表中
         registry = Registry()
-        server = await registry.get_by_id(server_id)
+        server = await registry.get_by_id(server_id, include_hidden=True)
         if not server:
             return False
 
@@ -139,11 +160,15 @@ class ConfigManager:
         from mcp_hub.core.registry import Registry
 
         registry = Registry()
-        server = await registry.get_by_id(server_id)
+        server = await registry.get_by_id(server_id, include_hidden=True)
         # 优先从注册表获取命令，其次从已安装列表
         command = ""
+        config_template: dict[str, object] = {}
         if server:
             command = str(server.get("install_command", "") or "")
+            raw_template = server.get("config_template", {})
+            if isinstance(raw_template, dict):
+                config_template = raw_template
         else:
             # 尝试从已安装列表中查找
             installed = await registry.get_installed()
@@ -155,8 +180,13 @@ class ConfigManager:
         # 获取用户设置的环境变量
         env_vars = await self.list_all_config(server_id)
 
-        server_name = server_id.split("/")[-1]
-        base_config = get_config_for_agent(server_name, command, agent)
+        server_name = server_config_name(server_id, server)
+        base_config = get_config_for_agent(
+            server_name,
+            command,
+            agent,
+            config_template=config_template or None,
+        )
 
         # 将环境变量注入配置 content
         config_content = base_config.get("config_content")
@@ -214,10 +244,14 @@ class ConfigManager:
         installed = await registry.get_installed()
         server_configs: dict[str, dict[str, object]] = {}
         for s in installed:
-            name = s["id"].split("/")[-1]
+            name = server_config_name(s["id"], s)
             cmd = str(s.get("install_command", "") or "")
-            if cmd:
-                server_config = command_config(cmd)
+            config_template = s.get("config_template", {})
+            if cmd or config_template:
+                if isinstance(config_template, dict) and config_template:
+                    server_config = dict(config_template)
+                else:
+                    server_config = command_config(cmd)
                 env = await self.list_all_config(s["id"])
                 if env:
                     server_config["env"] = env

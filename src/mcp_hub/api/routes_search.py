@@ -97,7 +97,9 @@ async def advanced_search(
     async with async_session_factory() as session:
         query = select(ServerModel)
         count_query = select(func.count(ServerModel.id))
-        conditions: list[ColumnElement[bool]] = []
+        conditions: list[ColumnElement[bool]] = [
+            or_(ServerModel.market_visible.is_(True), ServerModel.market_visible.is_(None))
+        ]
 
         # 1) 关键词全文检索
         if q:

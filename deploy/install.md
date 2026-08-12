@@ -259,6 +259,16 @@ mcp-hub config sync --agent codex --server http://<Hub地址>:3987
 
 同步只更新 `gateway.json`，写入前会确认并备份，保留本地环境变量、请求头和工作目录。同步完成后需要重启 Agent。
 
+### Official MCP Registry synchronization
+
+```bash
+mcp-hub registry-sync --source official
+```
+
+The command incrementally synchronizes public Registry metadata. An upstream deletion hides only the public catalog entry; it does not delete user tracking, favorites, reviews, telemetry, or history. Official provenance is not a Hub security approval.
+
+For remote `streamable-http` and SSE entries, use the generated structured MCP configuration. The Hub does not guess a local `npx` or `pip` command and does not store or export request headers, tokens, authentication values, URL variables, or raw upstream payloads.
+
 ## 3. 本机 Quickstart
 
 Quickstart 需要前端构建产物。请从源码构建后安装本地包：

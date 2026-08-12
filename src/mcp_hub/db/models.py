@@ -42,6 +42,16 @@ class ServerModel(Base):
     install_package: Mapped[str] = mapped_column(String(255), default="", nullable=True)
     install_command: Mapped[str] = mapped_column(String(500), default="", nullable=True)
     config_template: Mapped[str] = mapped_column(Text, default="{}", nullable=True)
+    catalog_source: Mapped[str] = mapped_column(
+        String(64), default="", nullable=True, index=True
+    )
+    catalog_source_id: Mapped[str] = mapped_column(String(512), default="", nullable=True)
+    catalog_status: Mapped[str] = mapped_column(
+        String(32), default="active", nullable=True, index=True
+    )
+    market_visible: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=True, index=True
+    )
     homepage: Mapped[str] = mapped_column(String(500), default="", nullable=True)
     license: Mapped[str] = mapped_column(String(50), default="MIT", nullable=True)
     security_level: Mapped[str] = mapped_column(
@@ -63,6 +73,49 @@ class ServerModel(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+    )
+
+
+class RegistrySourceStateModel(Base):
+    """Incremental synchronization state for one replaceable catalog source."""
+
+    __tablename__ = "registry_source_states"
+
+    source: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    last_entry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+
+
+class RegistrySourceEntryModel(Base):
+    """Provenance and lifecycle metadata owned by one upstream catalog."""
+
+    __tablename__ = "registry_source_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    upstream_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    server_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    upstream_version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    package_type: Mapped[str] = mapped_column(String(64), default="", nullable=True)
+    package_identifier: Mapped[str] = mapped_column(String(512), default="", nullable=True)
+    package_version: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    repository_url: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    transport: Mapped[str] = mapped_column(String(32), default="", nullable=True)
+    endpoint_url: Mapped[str] = mapped_column(String(1000), default="", nullable=True)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(32), default="active", nullable=True, index=True
+    )
+    lifecycle_message: Mapped[str] = mapped_column(String(500), default="", nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    upstream_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_synced_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("source", "upstream_id", name="uq_registry_source_upstream"),
     )
 
 

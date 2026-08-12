@@ -67,6 +67,11 @@ export default function ServerCard({ server }: ServerCardProps) {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
+        {server.catalog_source === 'official_mcp' && (
+          <span className="border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-xs text-cyan-800">
+            Official Registry
+          </span>
+        )}
         {server.categories?.slice(0, 2).map((cat) => (
           <span key={cat} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">
             {cat}

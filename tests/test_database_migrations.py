@@ -298,3 +298,47 @@ async def test_sqlite_migration_backfills_existing_device_connection_milestones(
     assert str(row.last_event_at).startswith("2026-08-11 08:01:00")
     assert row.last_queue_depth == 0
     assert row.last_error_code == "timeout"
+
+
+async def test_sqlite_migration_adds_registry_source_columns_idempotently(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'registry.db'}")
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "CREATE TABLE servers ("
+                "id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+                "description TEXT DEFAULT '')"
+            )
+        )
+
+    monkeypatch.setattr(database_module, "engine", engine)
+    try:
+        await database_module._run_migrations()
+        await database_module._run_migrations()
+        async with engine.connect() as connection:
+            columns = {
+                column["name"]
+                for column in await connection.run_sync(
+                    lambda sync_connection: inspect(sync_connection).get_columns("servers")
+                )
+            }
+            registry_tables = {
+                table
+                for table in await connection.run_sync(
+                    lambda sync_connection: inspect(sync_connection).get_table_names()
+                )
+                if table in {"registry_source_states", "registry_source_entries"}
+            }
+    finally:
+        await engine.dispose()
+
+    assert {
+        "catalog_source",
+        "catalog_source_id",
+        "catalog_status",
+        "market_visible",
+    } <= columns
+    assert registry_tables == {"registry_source_states", "registry_source_entries"}

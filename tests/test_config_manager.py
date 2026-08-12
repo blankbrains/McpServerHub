@@ -73,6 +73,44 @@ def test_get_config_for_agent_uses_agent_specific_mcp_format(
 
 
 @pytest.mark.parametrize(
+    ("agent", "server_key"),
+    [
+        ("claude-code", "mcpServers"),
+        ("codex", "mcp_servers"),
+        ("vscode-copilot", "servers"),
+    ],
+)
+def test_get_config_for_agent_keeps_remote_mcp_as_structured_configuration(
+    agent: str,
+    server_key: str,
+) -> None:
+    result = get_config_for_agent(
+        server_name="example.test--remote",
+        command="",
+        agent=agent,
+        config_template={
+            "type": "streamable-http",
+            "url": "https://api.example.test/mcp",
+        },
+    )
+
+    assert result["config_content"][server_key]["example.test--remote"] == {
+        "type": "streamable-http",
+        "url": "https://api.example.test/mcp",
+    }
+    assert '"command"' not in result["config_text"]
+
+
+def test_get_config_for_agent_rejects_invalid_remote_configuration() -> None:
+    with pytest.raises(ValueError, match="Invalid structured MCP Server configuration"):
+        get_config_for_agent(
+            server_name="bad",
+            command="",
+            config_template={"type": "streamable-http", "url": "file:///unsafe"},
+        )
+
+
+@pytest.mark.parametrize(
     ("agent", "server_key", "config_format"),
     [
         ("cursor", "mcpServers", "json"),
@@ -88,7 +126,13 @@ async def test_list_config_serializes_environment_variables(
 ) -> None:
     from mcp_hub.core.registry import Registry
 
-    async def get_by_id(_registry: Registry, server_id: str) -> dict[str, str]:
+    async def get_by_id(
+        _registry: Registry,
+        server_id: str,
+        *,
+        include_hidden: bool = False,
+    ) -> dict[str, str]:
+        del include_hidden
         return {
             "id": server_id,
             "install_command": "npx -y @example/mcp-server",
@@ -110,3 +154,37 @@ async def test_list_config_serializes_environment_variables(
 
     assert server_config["env"] == {"EXAMPLE_TOKEN": "redacted-test-value"}
     assert serialized[server_key]["example-server"]["env"] == server_config["env"]
+
+
+async def test_list_config_uses_safe_registry_remote_template(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mcp_hub.core.registry import Registry
+
+    async def get_by_id(
+        _registry: Registry,
+        server_id: str,
+        *,
+        include_hidden: bool = False,
+    ) -> dict[str, object]:
+        del include_hidden
+        return {
+            "id": server_id,
+            "catalog_source": "official_mcp",
+            "catalog_source_id": "example.test/remote",
+            "install_command": "",
+            "config_template": {
+                "type": "streamable-http",
+                "url": "https://api.example.test/mcp",
+            },
+        }
+
+    monkeypatch.setattr(Registry, "get_by_id", get_by_id)
+    manager = ConfigManager(tmp_path)
+    result = await manager.list_config("@mcp-registry/example.test/remote", "generic")
+
+    assert result["config_content"]["mcpServers"]["example.test--remote"] == {
+        "type": "streamable-http",
+        "url": "https://api.example.test/mcp",
+    }

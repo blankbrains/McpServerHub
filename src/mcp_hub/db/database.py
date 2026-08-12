@@ -6,9 +6,9 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import inspect
+from sqlalchemy import Table, inspect
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -70,6 +70,68 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def _run_migrations() -> None:
     """运行数据库迁移：添加缺失的列到已有表。"""
     from sqlalchemy import text
+
+    # Catalog source fields are nullable/default-safe so existing user-created
+    # catalog records remain visible and retain their ownership.
+    try:
+        async with engine.begin() as conn:
+            server_columns = await conn.run_sync(
+                lambda sync_conn: {
+                    column["name"]
+                    for column in inspect(sync_conn).get_columns("servers")
+                }
+            )
+            server_column_sql = {
+                "catalog_source": "VARCHAR(64) DEFAULT ''",
+                "catalog_source_id": "VARCHAR(512) DEFAULT ''",
+                "catalog_status": "VARCHAR(32) DEFAULT 'active'",
+                "market_visible": "BOOLEAN DEFAULT TRUE",
+            }
+            for column_name, column_sql in server_column_sql.items():
+                if column_name not in server_columns:
+                    await conn.execute(
+                        text(f"ALTER TABLE servers ADD COLUMN {column_name} {column_sql}")
+                    )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_servers_catalog_source "
+                    "ON servers(catalog_source)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_servers_catalog_status "
+                    "ON servers(catalog_status)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_servers_market_visible "
+                    "ON servers(market_visible)"
+                )
+            )
+    except Exception:
+        logger.debug("Catalog source server migration failed", exc_info=True)
+
+    # Existing deployments need the source state tables even when registry-sync
+    # runs before the FastAPI startup path calls Base.metadata.create_all().
+    try:
+        from mcp_hub.db.models import RegistrySourceEntryModel, RegistrySourceStateModel
+
+        async with engine.begin() as conn:
+            registry_source_tables = [
+                cast(Table, RegistrySourceStateModel.__table__),
+                cast(Table, RegistrySourceEntryModel.__table__),
+            ]
+            await conn.run_sync(
+                lambda sync_conn: Base.metadata.create_all(
+                    sync_conn,
+                    tables=registry_source_tables,
+                    checkfirst=True,
+                )
+            )
+    except Exception:
+        logger.debug("Registry source table migration failed", exc_info=True)
 
     # 检查并添加 reviews.parent_id 列
     async with engine.connect() as conn:

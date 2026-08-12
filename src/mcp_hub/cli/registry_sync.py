@@ -12,6 +12,27 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console()
 
+
+async def sync_from_official_registry(dry_run: bool) -> dict[str, int | str]:
+    """Synchronize the official MCP Registry through the source-owned adapter."""
+    from mcp_hub.core.registry_sources import (
+        OfficialMcpRegistrySource,
+        RegistrySourceSynchronizer,
+    )
+
+    source = OfficialMcpRegistrySource()
+    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+        if dry_run:
+            entries = await source.fetch_entries(client)
+            return {
+                "source": source.source_name,
+                "entries": len(entries),
+                "created": 0,
+                "updated": 0,
+                "hidden": 0,
+            }
+        return await RegistrySourceSynchronizer(source).sync(client)
+
 # 已知官方 Server（确保优先收录）
 CURATED_SERVERS = [
     "@modelcontextprotocol/server-filesystem",
@@ -379,7 +400,11 @@ async def _register_github_repo(
 
 @click.command("registry-sync")
 @click.option("--dry-run", is_flag=True, help="只预览，不写入数据库")
-@click.option("--source", type=click.Choice(["npm", "pypi", "github", "all"]), default="all")
+@click.option(
+    "--source",
+    type=click.Choice(["official", "npm", "pypi", "github", "all"]),
+    default="official",
+)
 def registry_sync(dry_run: bool, source: str) -> None:
     """从 npm/PyPI/GitHub 同步热门 MCP Server 到本地市场。"""
 
@@ -387,6 +412,15 @@ def registry_sync(dry_run: bool, source: str) -> None:
         console.print("[bold]🔄 正在同步 MCP 注册表 (200+ servers)...[/bold]\n")
 
         total = 0
+        if source in ("official", "all"):
+            result = await sync_from_official_registry(dry_run)
+            total += int(result["entries"])
+            action = "previewed" if dry_run else "synchronized"
+            console.print(
+                f"  [green]Official Registry {action}: {result['entries']}[/green] "
+                f"(created {result['created']}, updated {result['updated']}, "
+                f"hidden {result['hidden']})"
+            )
         async with httpx.AsyncClient(timeout=15) as client:
             if source in ("npm", "all"):
                 n = await sync_from_npm(client, dry_run)
@@ -405,6 +439,9 @@ def registry_sync(dry_run: bool, source: str) -> None:
             console.print("[yellow]  (dry-run 模式，未写入数据库)[/yellow]")
 
         # 显示统计
+        if dry_run:
+            return
+
         from sqlalchemy import func, select
 
         from mcp_hub.db.database import async_session_factory
