@@ -78,9 +78,30 @@ async def test_official_source_follows_cursor_and_uses_incremental_watermark() -
     assert len(requests) == 2
     assert requests[0].url.path == "/v0.1/servers"
     assert requests[0].url.params["version"] == "latest"
+    assert requests[0].url.params["limit"] == "100"
     assert requests[0].url.params["updated_since"] == "2026-08-02T10:00:00Z"
     assert "cursor" not in requests[0].url.params
     assert requests[1].url.params["cursor"] == "page-two"
+
+
+async def test_official_source_rejects_unbounded_pagination() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "servers": [_official_server(f"example.test/{len(requests)}")],
+                "metadata": {"nextCursor": f"page-{len(requests)}"},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(ValueError, match="exceeded 2 pages"):
+            await OfficialMcpRegistrySource(max_pages=2).fetch_entries(client)
+
+    assert len(requests) == 2
 
 
 @pytest.mark.parametrize(

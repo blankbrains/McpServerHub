@@ -17,6 +17,8 @@ _NPM_PACKAGE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _SAFE_TRANSPORTS = {"streamable-http", "sse"}
+_PAGE_SIZE = 100
+_MAX_PAGES = 500
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -173,7 +175,7 @@ class OfficialMcpRegistrySource:
         self,
         base_url: str = "https://registry.modelcontextprotocol.io",
         *,
-        max_pages: int = 100,
+        max_pages: int = _MAX_PAGES,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.max_pages = max_pages
@@ -189,7 +191,10 @@ class OfficialMcpRegistrySource:
         seen_upstream_ids: set[str] = set()
 
         for _page in range(self.max_pages):
-            params: dict[str, str] = {"version": "latest"}
+            params: dict[str, str] = {
+                "version": "latest",
+                "limit": str(_PAGE_SIZE),
+            }
             if cursor:
                 params["cursor"] = cursor
             if updated_since:
