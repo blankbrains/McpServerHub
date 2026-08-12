@@ -59,11 +59,11 @@ def test_readme_documents_stable_github_install_and_first_call() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     github_install = (
         'uv tool install --force '
-        '"git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
+        '"git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"'
     )
 
     assert github_install in readme
-    assert 'python -m pip install "mcp-hub-cli==0.3.0"' not in readme
+    assert 'python -m pip install "mcp-hub-cli==0.3.1"' not in readme
     assert "@main" not in github_install
     assert "main` 只作为测试通道" in readme
     assert "完全重启 Agent" in readme

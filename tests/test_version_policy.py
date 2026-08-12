@@ -19,6 +19,7 @@ def test_version_policy_supports_telemetry_gateway_baseline_and_recommends_relea
     assert MINIMUM_GATEWAY_VERSION == "0.2.0"
     assert assess_version("0.1.9").status == "upgrade_required"
     assert assess_version("0.2.0").status == "upgrade_recommended"
+    assert assess_version("0.3.0").status == "upgrade_recommended"
     assert assess_version(__version__).status == "current"
 
 
@@ -30,7 +31,7 @@ def test_version_policy_handles_invalid_and_newer_versions_conservatively() -> N
 
 
 def test_version_policy_only_accepts_release_tags_for_rollback() -> None:
-    assert is_release_tag("v0.3.0")
+    assert is_release_tag("v0.3.1")
     assert not is_release_tag("0.3.0")
     assert not is_release_tag("main")
     assert not is_release_tag("v0.3")

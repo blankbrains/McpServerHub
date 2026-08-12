@@ -4,7 +4,7 @@
 
 ## 1. 安装 CLI
 
-当前稳定版本 `0.3.0` 尚未发布到 PyPI，请从 GitHub 稳定 Tag 安装。
+当前稳定版本 `0.3.1` 尚未发布到 PyPI，请从 GitHub 稳定 Tag 安装。
 
 ### 安装 uv
 
@@ -23,7 +23,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 安装 mcp-hub
 
 ```bash
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"
 uv tool update-shell
 ```
 
@@ -60,7 +60,7 @@ uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@mai
 关闭并重新打开终端，再安装和检查路径：
 
 ```powershell
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"
 uv tool update-shell
 
 uv tool dir
