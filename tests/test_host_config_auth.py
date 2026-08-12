@@ -14,6 +14,8 @@ def test_host_filesystem_config_routes_require_authentication() -> None:
         ("GET", "/api/v1/local/discover", None),
         ("GET", "/api/v1/local/compare", None),
         ("GET", "/api/v1/local/conflicts", None),
+        ("GET", "/api/v1/my-mcp/overview", None),
+        ("POST", "/api/v1/my-mcp/track", {"server_id": "private-local"}),
         ("GET", "/api/v1/config/diff", None),
         ("POST", "/api/v1/config/backup", {}),
         ("GET", "/api/v1/config/backups", None),

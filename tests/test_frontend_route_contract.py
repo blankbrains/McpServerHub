@@ -40,7 +40,7 @@ def test_my_mcp_workspace_keeps_configuration_and_inventory_reachable() -> None:
     market = (WEB_SRC / "pages" / "Market.tsx").read_text(encoding="utf-8")
     publish = (WEB_SRC / "pages" / "Publish.tsx").read_text(encoding="utf-8")
 
-    assert "已追踪" in workspace
+    assert "状态总览" in workspace
     assert "配置与同步" in workspace
     assert "本地清单" in workspace
     assert "to=\"/compare\"" in market

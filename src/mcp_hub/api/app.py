@@ -24,6 +24,7 @@ from mcp_hub.api.routes_health import router as health_router
 from mcp_hub.api.routes_manage import router as manage_router
 from mcp_hub.api.routes_market import router as market_router
 from mcp_hub.api.routes_monitor import router as monitor_router
+from mcp_hub.api.routes_my_mcp import router as my_mcp_router
 from mcp_hub.api.routes_notifications import router as notifications_router
 from mcp_hub.api.routes_presets import router as presets_router
 from mcp_hub.api.routes_publish import router as publish_router
@@ -155,6 +156,7 @@ def create_app(dev: bool = False) -> FastAPI:
     app.include_router(security_router, prefix="/api/v1")
     app.include_router(token_router, prefix="/api/v1")
     app.include_router(monitor_router, prefix="/api/v1")
+    app.include_router(my_mcp_router, prefix="/api/v1")
     app.include_router(usage_router, prefix="/api/v1")
     app.include_router(telemetry_router, prefix="/api/v1")
     app.include_router(notifications_router, prefix="/api/v1")
