@@ -4,7 +4,7 @@
 
 ## 1. 安装 CLI
 
-当前 `0.2.0` 尚未发布到 PyPI，请从 GitHub 安装。
+当前稳定版本 `0.3.0` 尚未发布到 PyPI，请从 GitHub 稳定 Tag 安装。
 
 ### 安装 uv
 
@@ -23,7 +23,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 安装 mcp-hub
 
 ```bash
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
 uv tool update-shell
 ```
 
@@ -37,6 +37,14 @@ mcp-hub --help
 `mcp-hub` 必须位于 Agent 进程可见的 `PATH` 中，因为接入后 Agent 会通过 `mcp-hub serve` 启动本地 Gateway。
 
 `uv tool install` 只在当前电脑安装 CLI 和本地 Gateway，不会修改远程 Hub、GitHub 仓库或项目源码。命令在哪个工作目录或磁盘中执行，也不会决定工具的安装位置。
+
+稳定安装使用不可变的 Git Tag；如需测试最新 `main`，可显式执行：
+
+```powershell
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+```
+
+该测试通道可能包含尚未发布的变更，不保证可重复或与生产 Hub 兼容。
 
 ### Windows 安装到 D 盘
 
@@ -52,7 +60,7 @@ mcp-hub --help
 关闭并重新打开终端，再安装和检查路径：
 
 ```powershell
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
 uv tool update-shell
 
 uv tool dir
@@ -178,7 +186,9 @@ mcp-hub agent doctor --agent codex
 - `gateway_not_seen` / `gateway_offline`：Agent 尚未加载 Gateway 或 Gateway 已离线；
 - `first_call_missing`：Gateway 在线但还没有真实工具调用；
 - `queue_backlog`：本地或服务端仍看到待上传事件；
-- `version_incompatible`：CLI、Hub 或 Gateway 的主次版本不兼容。
+- `version_incompatible`：CLI、Hub 或 Gateway 低于最低支持版本。
+
+仍在支持范围但不是推荐版本时，`agent verify` 会保持接入验证通过并给出升级建议；使用 `mcp-hub self check` 或监控页设备版本状态确认升级时机。
 
 默认命令只读取配置、检查 SQLite 队列并调用健康/令牌验证接口，不修改 Agent 配置。自动化可读取 `--json` 的稳定 `checks[].code`。只有需要安全修复时才执行：
 
@@ -187,6 +197,19 @@ mcp-hub agent verify --agent codex --fix
 ```
 
 CLI 会先展示修复预览并要求确认。涉及 Agent 配置时会先创建带时间戳备份；自动修复只处理可证明等价的重复入口、已知旧命令、缺失的非敏感路径字段、状态目录和队列立即重试。冲突入口、缺失令牌、OAuth 和无法判断归属的配置不会自动修改。自动化环境必须同时提供 `--fix --yes`，否则 JSON 模式只返回预览并退出。
+
+### CLI 与 Gateway 版本管理
+
+```bash
+mcp-hub self check
+mcp-hub self check --hub-url http://<Hub地址>:3987 --gateway-version 0.2.0
+mcp-hub self upgrade
+mcp-hub self upgrade --channel test
+mcp-hub self rollback
+mcp-hub self rollback --to v0.2.0
+```
+
+`self upgrade` 成功后才会在本地状态目录记录升级历史；`--dry-run` 可用于只查看命令。`self rollback` 只接受 `v<major>.<minor>.<patch>` 稳定 Tag，不能回滚到 `main` 或任意分支。升级、回滚均不修改 Agent 配置和设备令牌，重启 Agent 后新的 Gateway 进程才会生效。
 
 ### 安全断开、备份和恢复
 

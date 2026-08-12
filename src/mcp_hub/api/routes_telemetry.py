@@ -20,6 +20,7 @@ from mcp_hub import __version__
 from mcp_hub.agent_types import DEFAULT_AGENT_TYPE, normalize_agent_type
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.core.protocol import assess_server_compatibility
+from mcp_hub.core.version_policy import version_command_for_gateway
 from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import (
     ServerModel,
@@ -169,11 +170,13 @@ def _hash_token(token: str) -> str:
 
 
 def _serialize_device(device: TelemetryDeviceModel) -> dict[str, Any]:
+    gateway_version = device.gateway_version or ""
     return {
         "id": device.id,
         "name": device.name,
         "agent_type": device.agent_type or DEFAULT_AGENT_TYPE,
-        "gateway_version": device.gateway_version or "",
+        "gateway_version": gateway_version,
+        "version_compatibility": version_command_for_gateway(gateway_version),
         "runtime_version": device.runtime_version or "",
         "platform": device.platform or "",
         "architecture": device.architecture or "",

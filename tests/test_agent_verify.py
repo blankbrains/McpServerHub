@@ -419,7 +419,7 @@ def test_agent_verify_rejects_malformed_token_validation_payload(
 def test_agent_verify_reports_version_incompatibility(monkeypatch, tmp_path) -> None:
     source, state_dir = _write_ready_local_config(tmp_path)
     responses = _online_response()
-    responses[0][1]["version"] = "0.3.0"
+    responses[0][1]["version"] = "0.1.9"
     _mock_online(monkeypatch, responses)
 
     result = _invoke_verify(source, state_dir, "--json")
@@ -429,6 +429,26 @@ def test_agent_verify_reports_version_incompatibility(monkeypatch, tmp_path) -> 
     assert "version_incompatible" in {
         check["code"] for check in payload["checks"]
     }
+
+
+def test_agent_verify_allows_supported_version_and_recommends_upgrade(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source, state_dir = _write_ready_local_config(tmp_path)
+    _mock_online(monkeypatch)
+
+    result = _invoke_verify(source, state_dir, "--json")
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    version_check = next(
+        check
+        for check in payload["checks"]
+        if check["check"] == "version_compatibility"
+    )
+    assert version_check["code"] == "ok"
+    assert "建议升级" in version_check["message"]
 
 
 def test_agent_verify_fix_retries_queue_without_marking_gateway_uploader(

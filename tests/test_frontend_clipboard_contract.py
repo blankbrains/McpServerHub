@@ -55,15 +55,17 @@ def test_web_upload_copy_matches_backend_json_contract() -> None:
     assert "VS Code Copilot mcp.json 使用 servers" in guide
 
 
-def test_readme_documents_current_github_install_and_first_call() -> None:
+def test_readme_documents_stable_github_install_and_first_call() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     github_install = (
         'uv tool install --force '
-        '"git+https://github.com/blankbrains/McpServerHub.git@main"'
+        '"git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
     )
 
     assert github_install in readme
-    assert 'python -m pip install "mcp-hub-cli==0.2.0"' not in readme
+    assert 'python -m pip install "mcp-hub-cli==0.3.0"' not in readme
+    assert "@main" not in github_install
+    assert "main` 只作为测试通道" in readme
     assert "完全重启 Agent" in readme
     assert "触发真实调用并验证" in readme
     assert "未经过本地 Gateway 的直接连接也不会被监控" in readme

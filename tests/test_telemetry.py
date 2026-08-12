@@ -448,6 +448,11 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
         if device["agent_type"] == "claude-code"
     )
     assert claude_device["gateway_version"] == "0.2.0"
+    assert claude_device["version_compatibility"]["status"] == "upgrade_recommended"
+    assert (
+        claude_device["version_compatibility"]["upgrade_command"]
+        == 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
+    )
     assert claude_device["runtime_version"] == "3.10.14"
     assert claude_device["platform"] == "linux"
     assert claude_device["architecture"] == "x86_64"

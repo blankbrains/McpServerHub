@@ -72,6 +72,7 @@ COMMANDS: dict[str, LazyCommand] = {
     "rollback": LazyCommand("mcp_hub.cli.update", "rollback", "回滚 Server 版本。"),
     "search": LazyCommand("mcp_hub.cli.search", "search", "搜索 MCP Server 市场。"),
     "security": LazyCommand("mcp_hub.cli.security", "security", "扫描 Server 安全风险。"),
+    "self": LazyCommand("mcp_hub.cli.self_update", "self_group", "检查、升级或回滚 CLI。"),
     "serve": LazyCommand("mcp_hub.cli.daemon", "serve", "启动本地 MCP Gateway。"),
     "start": LazyCommand("mcp_hub.cli.manage", "start", "启动自托管 Server。"),
     "stats": LazyCommand("mcp_hub.cli.publish", "stats", "查看发布统计。"),

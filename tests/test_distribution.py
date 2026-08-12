@@ -15,7 +15,7 @@ def test_distribution_exposes_only_unique_cli_command() -> None:
     with pyproject_path.open("rb") as file:
         pyproject = tomllib.load(file)
 
-    assert pyproject["project"]["version"] == "0.2.0"
+    assert pyproject["project"]["version"] == "0.3.0"
     assert pyproject["project"]["scripts"] == {
         "mcp-hub": "mcp_hub.cli.app:cli",
     }

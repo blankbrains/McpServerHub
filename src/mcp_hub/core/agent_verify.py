@@ -36,6 +36,7 @@ from mcp_hub.core.telemetry import (
     get_agent_state_dir,
     get_spool_path,
 )
+from mcp_hub.core.version_policy import assess_version
 
 CheckStatus = Literal["ok", "warning", "error", "skipped"]
 _GATEWAY_NAMES = ("mcp-hub", "mcp-hub-gateway")
@@ -705,14 +706,6 @@ async def _request_json(
     return response.status_code, payload if isinstance(payload, dict) else {}
 
 
-def _version_family(value: str) -> tuple[int, int] | None:
-    try:
-        major, minor, *_rest = value.split(".")
-        return int(major), int(minor)
-    except (TypeError, ValueError):
-        return None
-
-
 async def _verify_online(
     context: _LocalContext,
 ) -> tuple[list[VerificationCheck], dict[str, object]]:
@@ -951,16 +944,28 @@ async def _verify_online(
             )
         )
 
-    versions = [
-        ("Hub", hub_version),
-        ("Gateway", data.gateway_version),
+    version_assessments = [
+        (name, assess_version(version))
+        for name, version in (
+            ("Hub", hub_version),
+            ("Gateway", data.gateway_version),
+        )
+        if version
     ]
     incompatible = [
         name
-        for name, version in versions
-        if version
-        and _version_family(version) is not None
-        and _version_family(version) != _version_family(__version__)
+        for name, assessment in version_assessments
+        if assessment.status in {"upgrade_required", "blocked"}
+    ]
+    upgrade_recommended = [
+        name
+        for name, assessment in version_assessments
+        if assessment.status == "upgrade_recommended"
+    ]
+    unknown_versions = [
+        name
+        for name, assessment in version_assessments
+        if assessment.status == "unknown"
     ]
     checks.append(
         VerificationCheck(
@@ -969,9 +974,18 @@ async def _verify_online(
             "error" if incompatible else "ok",
             "version_incompatible" if incompatible else "ok",
             (
-                f"{', '.join(incompatible)} 与当前 CLI {__version__} 不兼容。"
+                f"{', '.join(incompatible)} 低于最低支持版本，请升级到 CLI {__version__}。"
                 if incompatible
-                else f"CLI、Hub 与已知 Gateway 版本兼容（CLI {__version__}）。"
+                else (
+                    f"{', '.join(upgrade_recommended)} 可以继续使用，但建议升级到 {__version__}。"
+                    if upgrade_recommended
+                    else (
+                        f"{', '.join(unknown_versions)} 的版本高于当前 CLI 策略，"
+                        "建议运行 mcp-hub self check 确认兼容性。"
+                        if unknown_versions
+                        else f"CLI、Hub 与已知 Gateway 版本兼容（CLI {__version__}）。"
+                    )
+                )
             ),
         )
     )

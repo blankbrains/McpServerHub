@@ -18,6 +18,7 @@ def test_application_factory_builds_the_api():
     assert isinstance(app, FastAPI)
     assert "/api/v1/config/upload" in app.openapi()["paths"]
     assert "/api/v1/telemetry/events" in app.openapi()["paths"]
+    assert "/api/v1/client-compatibility" in app.openapi()["paths"]
 
 
 def test_static_top_reliability_route_is_not_shadowed(monkeypatch) -> None:
@@ -37,3 +38,20 @@ def test_health_reports_distribution_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["version"] == __version__
+
+
+def test_client_compatibility_is_public_and_returns_safe_policy() -> None:
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/api/v1/client-compatibility",
+        params={"cli_version": "0.2.0", "gateway_version": "0.3.0"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["hub_version"] == __version__
+    assert payload["data"]["cli"]["status"] == "upgrade_recommended"
+    assert payload["data"]["gateway"]["status"] == "current"
+    assert "token" not in str(payload).lower()

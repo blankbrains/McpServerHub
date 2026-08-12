@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"'
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
 const WINDOWS_D_DRIVE_INSTALL_COMMAND = `[Environment]::SetEnvironmentVariable("UV_TOOL_DIR", "D:\\uv\\tools", "User")
 [Environment]::SetEnvironmentVariable("UV_TOOL_BIN_DIR", "D:\\uv\\bin", "User")
 [Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "D:\\uv\\cache", "User")
@@ -32,7 +32,7 @@ function buildSteps(hubUrl: string): GuideStep[] {
       num: 2,
       title: '安装 uv 和 mcp-hub CLI',
       icon: '⬇️',
-      description: '当前 0.2.0 尚未发布到 PyPI，请从 GitHub 安装。这一步只在你的电脑上安装 CLI 和本地 Gateway，不会修改 Hub 服务器、GitHub 仓库或项目代码。运行 uv tool update-shell 后必须关闭并重新打开终端。',
+      description: '当前稳定版为 0.3.0，尚未发布到 PyPI，请从 GitHub Tag 安装。这一步只在你的电脑上安装 CLI 和本地 Gateway，不会修改 Hub 服务器、GitHub 仓库或项目代码。运行 uv tool update-shell 后必须关闭并重新打开终端。',
       code: `${CLI_INSTALL_COMMAND}
 uv tool update-shell
 mcp-hub --version`,
@@ -113,6 +113,16 @@ mcp-hub agent verify --agent codex --json`,
 mcp-hub agent disconnect --agent codex
 mcp-hub agent restore --agent codex`,
       note: '恢复命令会先预览并再次备份当前 Agent 配置，只恢复本次迁移的条目并保留后续新增设置。冲突时停止，不会整文件覆盖。网页撤销设备令牌只停止 Hub 上报，不会修改本地配置。',
+    },
+    {
+      num: 12,
+      title: '检查或升级 CLI 与 Gateway',
+      icon: '🔄',
+      description: '监控页会显示每台设备的 Gateway 版本。稳定通道固定到 Git Tag；main 仅用于测试，不应作为常规安装或升级来源。',
+      code: `mcp-hub self check --hub-url ${hubUrl}
+mcp-hub self upgrade
+mcp-hub self rollback`,
+      note: 'upgrade 和 rollback 不会修改 Agent 配置、设备令牌或本地 Server 配置。升级后需完全重启 Agent，让新的 Gateway 进程使用升级后的 CLI。',
     },
   ]
 }

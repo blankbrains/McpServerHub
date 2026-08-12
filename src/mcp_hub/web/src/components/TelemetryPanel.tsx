@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet, apiPost } from '../api/client'
 import { copyStatus, copyText } from '../utils/clipboard'
-import ConnectionStatusPanel, { type ConnectionStatusData } from './ConnectionStatusPanel'
+import ConnectionStatusPanel, {
+  type ConnectionStatusData,
+  type VersionCompatibility,
+} from './ConnectionStatusPanel'
 import InfoTooltip from './InfoTooltip'
 
 interface TelemetrySummary {
@@ -45,6 +48,7 @@ interface TelemetryDevice {
   name: string
   agent_type: string
   gateway_version: string
+  version_compatibility: VersionCompatibility
   runtime_version: string
   platform: string
   architecture: string
@@ -137,7 +141,7 @@ const AGENT_OPTIONS = [
   { id: 'generic', label: '通用 MCP 客户端' },
 ] as const
 
-const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"'
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"'
 
 function agentLabel(agentType: string): string {
   return AGENT_OPTIONS.find((agent) => agent.id === agentType)?.label || agentType
@@ -344,6 +348,22 @@ export default function TelemetryPanel() {
     setRecoveryCopyState({
       deviceId,
       message: copyStatus(copied, label),
+    })
+  }
+
+  const copyDeviceUpgradeCommand = async (deviceId: string, command: string) => {
+    const copied = await copyText(command)
+    setRecoveryCopyState({
+      deviceId,
+      message: copyStatus(copied, '稳定升级命令已复制'),
+    })
+  }
+
+  const copyDeviceVersionCheckCommand = async (deviceId: string) => {
+    const copied = await copyText('mcp-hub self check')
+    setRecoveryCopyState({
+      deviceId,
+      message: copyStatus(copied, '版本检查命令已复制'),
     })
   }
 
@@ -662,6 +682,24 @@ mcp-hub agent doctor --agent codex`}</pre>
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {['upgrade_recommended', 'upgrade_required', 'blocked'].includes(device.version_compatibility.status) && (
+                      <button
+                        type="button"
+                        onClick={() => void copyDeviceUpgradeCommand(device.id, device.version_compatibility.upgrade_command)}
+                        className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-900 hover:bg-amber-50"
+                      >
+                        {device.version_compatibility.status === 'upgrade_required' ? '复制必须升级命令' : '复制升级命令'}
+                      </button>
+                    )}
+                    {device.version_compatibility.status === 'unknown' && (
+                      <button
+                        type="button"
+                        onClick={() => void copyDeviceVersionCheckCommand(device.id)}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                      >
+                        复制版本检查命令
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => void copyRecoveryCommand(device.id, device.agent_type, 'backups')}

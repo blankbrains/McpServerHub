@@ -32,14 +32,14 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
 
 ## 快速开始
 
-当前版本为 `0.2.0`，**尚未发布到 PyPI**。请从 GitHub 安装，不要执行 `pip install mcp-hub-cli==0.2.0`。
+当前稳定版本为 `0.3.0`，**尚未发布到 PyPI**。请从 GitHub 稳定 Tag 安装，不要执行 PyPI 安装命令。
 
 ### 连接现有 Hub 并监控本地 MCP
 
 1. 安装 CLI：
 
    ```bash
-   uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+   uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
    uv tool update-shell
    mcp-hub --version
    ```
@@ -77,6 +77,16 @@ mcp-hub agent doctor --agent codex
 ```
 
 `agent verify` 会同时检查 Agent 入口、Gateway 配置、命令与 cwd、本地遥测队列、Hub 网络、设备令牌、Gateway 心跳和首次真实工具调用。默认只读；只有显式执行 `--fix` 并确认预览后，才会创建缺失的状态目录、备份并规范可安全判定的重复/旧 Gateway 入口，或立即重试遥测队列。它不会生成新令牌，也不会把网络超时误报为令牌无效。
+
+检查 CLI、Hub 和 Gateway 的版本兼容性：
+
+```bash
+mcp-hub self check --hub-url http://<Hub地址>:3987
+mcp-hub self upgrade
+mcp-hub self rollback
+```
+
+稳定通道使用已发布的 `v0.3.0` Tag；`main` 只作为测试通道。升级和回滚只替换 CLI/Gateway 的安装版本，不修改 Agent 配置、设备令牌或本地 Server 配置；完成后需要重启 Agent。
 
 查看接入备份或恢复原直连配置：
 
@@ -176,7 +186,7 @@ mcp-hub logs <server-id> -f
 
 ## 开发状态
 
-当前版本：`0.2.0`
+当前版本：`0.3.0`
 
 - 中心 Hub + 本地 Gateway 是推荐用户架构。
 - 自托管进程管理保留，但默认关闭。

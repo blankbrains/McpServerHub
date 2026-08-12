@@ -4,10 +4,10 @@
 
 ## 安装 CLI
 
-当前 `0.2.0` 尚未发布到 PyPI。不要执行 `pip install mcp-hub-cli==0.2.0`，使用：
+当前稳定版本 `0.3.0` 尚未发布到 PyPI。不要执行 PyPI 安装命令，使用稳定 Tag：
 
 ```bash
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.0"
 uv tool update-shell
 mcp-hub --version
 ```
@@ -15,6 +15,12 @@ mcp-hub --version
 如果 `uv` 未安装，先让用户确认后按照 uv 官方安装方式安装。安装完成后可能需要重开终端。
 
 安装命令只影响用户电脑上的 CLI 和本地 Gateway，不会修改远程 Hub、GitHub 仓库或项目源码。不要把“在 D 盘目录执行命令”解释为“安装到 D 盘”；uv 的工具位置由环境变量决定。
+
+`main` 只允许作为显式测试通道，不是默认安装来源：
+
+```bash
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@main"
+```
 
 用户明确要求 Windows 安装到 D 盘时，应先展示并获得确认，再设置：
 
@@ -67,6 +73,16 @@ mcp-hub agent setup \
 ```bash
 mcp-hub agent verify --agent <agent>
 ```
+
+检查或升级 CLI/Gateway 版本时使用独立的 `self` 命名空间：
+
+```bash
+mcp-hub self check --hub-url <Hub URL>
+mcp-hub self upgrade
+mcp-hub self rollback
+```
+
+这些命令不修改 Agent 配置、设备令牌或本地 Server 配置；升级或回滚后必须重启 Agent。
 
 自动化读取结果时使用 `--json`，根据 `checks[].code` 区分网络、令牌、撤销、Gateway 心跳、首次调用和队列问题。默认验证只读。只有用户明确同意预览后才可执行 `--fix`；非交互执行必须使用 `--fix --yes`。任何 Agent 配置写入都必须先生成备份，不得自动创建新设备令牌或修复无法确认归属的配置。
 

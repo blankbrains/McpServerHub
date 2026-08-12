@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { copyStatus, copyText } from '../utils/clipboard'
 
+export interface VersionCompatibility {
+  status: 'current' | 'upgrade_recommended' | 'upgrade_required' | 'blocked' | 'unknown'
+  message: string
+  current_version: string
+  recommended_version: string
+  upgrade_command: string
+}
+
 export interface ConnectionStatusDevice {
   id: string
   name: string
@@ -20,6 +28,7 @@ export interface ConnectionStatusDevice {
   next_action: string
   next_action_code: string
   gateway_version: string
+  version_compatibility: VersionCompatibility
   runtime_version: string
   platform: string
   architecture: string
@@ -70,6 +79,22 @@ const STATE_STYLES: Record<ConnectionStatusDevice['state'], string> = {
   revoked: 'border-gray-300 bg-gray-100 text-gray-600',
 }
 
+const VERSION_STATUS_STYLES: Record<VersionCompatibility['status'], string> = {
+  current: 'border-green-300 bg-green-50 text-green-800',
+  upgrade_recommended: 'border-amber-300 bg-amber-50 text-amber-800',
+  upgrade_required: 'border-red-300 bg-red-50 text-red-800',
+  blocked: 'border-red-300 bg-red-50 text-red-800',
+  unknown: 'border-gray-300 bg-gray-50 text-gray-700',
+}
+
+const VERSION_STATUS_LABELS: Record<VersionCompatibility['status'], string> = {
+  current: '版本正常',
+  upgrade_recommended: '建议升级',
+  upgrade_required: '必须升级',
+  blocked: '版本已阻断',
+  unknown: '版本待确认',
+}
+
 function formatDate(value: string | null): string {
   if (!value) return '尚无'
   const parsed = new Date(value)
@@ -89,6 +114,16 @@ export default function ConnectionStatusPanel({
   const copyVerifyCommand = async (agentType: string) => {
     const copied = await copyText(`mcp-hub agent verify --agent ${agentType}`)
     setCopyMessage(copyStatus(copied, '验证命令已复制'))
+  }
+
+  const copyUpgradeCommand = async (command: string) => {
+    const copied = await copyText(command)
+    setCopyMessage(copyStatus(copied, '稳定升级命令已复制'))
+  }
+
+  const copyVersionCheckCommand = async () => {
+    const copied = await copyText('mcp-hub self check')
+    setCopyMessage(copyStatus(copied, '版本检查命令已复制'))
   }
 
   return (
@@ -155,6 +190,39 @@ export default function ConnectionStatusPanel({
                     {(device.gateway_version || device.platform) && (
                       <p className="mt-1 text-xs text-gray-400">
                         Gateway {device.gateway_version || '-'} · {device.platform || 'unknown'} {device.architecture} · Python {device.runtime_version || '-'}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span
+                        className={`rounded-md border px-2 py-0.5 font-medium ${VERSION_STATUS_STYLES[device.version_compatibility.status]}`}
+                      >
+                        {VERSION_STATUS_LABELS[device.version_compatibility.status]}
+                      </span>
+                      <span className="text-gray-500">
+                        推荐 Gateway {device.version_compatibility.recommended_version || '-'}
+                      </span>
+                      {['upgrade_recommended', 'upgrade_required', 'blocked'].includes(device.version_compatibility.status) && (
+                        <button
+                          type="button"
+                          onClick={() => void copyUpgradeCommand(device.version_compatibility.upgrade_command)}
+                          className="font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          复制稳定升级命令
+                        </button>
+                      )}
+                      {device.version_compatibility.status === 'unknown' && (
+                        <button
+                          type="button"
+                          onClick={() => void copyVersionCheckCommand()}
+                          className="font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          复制版本检查命令
+                        </button>
+                      )}
+                    </div>
+                    {device.version_compatibility.status !== 'current' && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        {device.version_compatibility.message}
                       </p>
                     )}
                   </div>

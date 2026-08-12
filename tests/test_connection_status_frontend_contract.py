@@ -24,6 +24,11 @@ def test_monitoring_page_includes_connection_status_panel() -> None:
     assert "首次调用" in connection_panel
     assert "待上传队列" in connection_panel
     assert "mcp-hub agent verify --agent" in connection_panel
+    assert "version_compatibility" in connection_panel
+    assert "复制稳定升级命令" in connection_panel
+    assert "复制版本检查命令" in connection_panel
+    assert "mcp-hub self check" in connection_panel
+    assert "device.version_compatibility.message" in connection_panel
 
 
 def test_device_management_distinguishes_recovery_from_token_revocation() -> None:
@@ -37,3 +42,6 @@ def test_device_management_distinguishes_recovery_from_token_revocation() -> Non
     assert "恢复 Agent 配置" in telemetry_panel
     assert "撤销令牌不会恢复本地直连配置" in telemetry_panel
     assert "网页只能撤销 Hub 设备令牌，不能读取或修改你电脑上的 Agent 配置" in telemetry_panel
+    assert "version_compatibility" in telemetry_panel
+    assert "复制升级命令" in telemetry_panel
+    assert "复制版本检查命令" in telemetry_panel

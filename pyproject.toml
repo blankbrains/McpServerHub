@@ -1,6 +1,6 @@
 [project]
 name = "mcp-hub-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Discover, configure, proxy, monitor, and publish MCP Servers with a local Gateway"
 authors = [{ name = "McpServerHub", email = "mcp-hub@example.com" }]
 license = { text = "MIT" }
