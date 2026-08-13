@@ -98,6 +98,30 @@ export async function apiPut<T>(path: string, body?: any): Promise<{ success: bo
   return res.json()
 }
 
+export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) throw new ApiRequestError(res.status)
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+  const filename = encodedName
+    ? decodeURIComponent(encodedName)
+    : plainName || fallbackFilename
+  const url = URL.createObjectURL(await res.blob())
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 export async function searchServers(params: {
   q?: string
   category?: string

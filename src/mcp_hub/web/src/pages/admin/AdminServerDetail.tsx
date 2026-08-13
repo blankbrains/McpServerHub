@@ -64,6 +64,9 @@ export default function AdminServerDetail() {
         <p className="text-sm text-gray-500">{server.description}</p>
         <div className="flex flex-wrap gap-2 mt-2 items-center">
           <span className={`text-xs px-2 py-0.5 rounded-full ${server.security_level === 'blocked' ? 'bg-red-100 text-red-700' : server.security_level === 'verified' ? 'bg-green-100 text-green-700' : server.security_level === 'reviewed' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>安全: {server.security_level}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${server.market_visible ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+            市场：{server.market_visible ? '可见' : '已隐藏'}
+          </span>
           {/* 管理操作 */}
           <button onClick={async () => {
             if (!window.confirm(server.security_level === 'blocked' ? '确定恢复此 Server？' : '确定下架此 Server？')) return

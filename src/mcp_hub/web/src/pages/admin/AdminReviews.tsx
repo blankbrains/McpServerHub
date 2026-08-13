@@ -39,7 +39,11 @@ export default function AdminReviews() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🛡️ 评价审核</h1>
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">OPERATIONS / MODERATION</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">🛡️ 内容审核</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">审核用户评价；Server 下架、安全等级和市场可见性在 Server 详情中处理。</p>
+      </header>
       {msg && <div className={`p-2 rounded-lg text-sm ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>}
       {error ? (
         <div className="text-center py-12 text-red-600">
@@ -71,7 +75,21 @@ export default function AdminReviews() {
           </tbody>
         </table>
         </div>
-        <div className="text-xs text-gray-400">共 {total} 条 · 第 {page}/{Math.max(1, Math.ceil(total / 20))} 页</div>
+        <div className="flex items-center justify-between text-xs text-gray-400">
+          <span>共 {total} 条 · 第 {page}/{Math.max(1, Math.ceil(total / 20))} 页</span>
+          {total > 20 && (
+            <div className="flex gap-2">
+              <button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}
+                className="border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300">
+                上一页
+              </button>
+              <button type="button" disabled={page >= Math.ceil(total / 20)} onClick={() => setPage(value => value + 1)}
+                className="border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300">
+                下一页
+              </button>
+            </div>
+          )}
+        </div>
       </>
       )}
     </div>

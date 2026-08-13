@@ -2,20 +2,40 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import delete
 from starlette.routing import Match
 
 from mcp_hub.api.routes_admin import (
+    _csv_cell,
+    admin_categories,
+    admin_overview,
     admin_servers,
+    admin_set_security,
+    admin_toggle_server,
     admin_top_servers,
     admin_top_users,
+    admin_update_role,
+    admin_user_detail,
     admin_users,
 )
 from mcp_hub.api.routes_admin import (
     router as admin_router,
 )
 from mcp_hub.db.database import async_session_factory, engine
-from mcp_hub.db.models import Base, ServerModel, UsageStatsModel, UserModel, UserServerModel
+from mcp_hub.db.models import (
+    Base,
+    ServerModel,
+    TelemetryDeviceModel,
+    TelemetryEventModel,
+    TelemetryInventoryModel,
+    UsageStatsModel,
+    UserModel,
+    UserServerModel,
+)
+
+_NOW = datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def _prepare_admin_filter_data() -> None:
@@ -42,6 +62,7 @@ async def _prepare_admin_filter_data() -> None:
                     name="verified",
                     security_level="verified",
                     install_command="npx verified",
+                    categories='["developer-tools"]',
                 ),
                 ServerModel(
                     id="@admin-filter/blocked",
@@ -112,6 +133,25 @@ async def test_admin_servers_filters_security_and_sorts_by_calls() -> None:
     ids = [server["server_id"] for server in calls["data"]]
     assert ids.index("@admin-filter/blocked") < ids.index("@admin-filter/verified")
 
+    installs = await admin_servers(
+        sort="installs",
+        page=1,
+        page_size=20,
+        admin_user="test-admin",
+    )
+    install_ids = [server["server_id"] for server in installs["data"]]
+    assert install_ids.index("@admin-filter/verified") < install_ids.index("@admin-filter/blocked")
+
+
+async def test_admin_categories_use_market_category_ids() -> None:
+    await _prepare_admin_filter_data()
+
+    result = await admin_categories(admin_user="test-admin")
+    categories = {category["id"]: category for category in result["data"]}
+
+    assert "developer" not in categories
+    assert categories["developer-tools"]["count"] >= 1
+
 
 async def test_admin_analytics_respects_metric_selection() -> None:
     await _prepare_admin_filter_data()
@@ -148,6 +188,168 @@ async def test_admin_analytics_rejects_unknown_metrics() -> None:
     assert (
         await admin_top_users(metric="unknown", admin_user="test-admin")
     ) == {"success": False, "error": "metric 必须是 calls 或 tokens"}
+
+
+async def test_admin_lists_reject_unknown_sort_values() -> None:
+    assert await admin_users(sort="unknown", admin_user="test-admin") == {
+        "success": False,
+        "error": "sort 必须是 calls、installs 或 created",
+    }
+    assert await admin_servers(sort="unknown", admin_user="test-admin") == {
+        "success": False,
+        "error": "sort 必须是 installs、calls 或 rating",
+    }
+
+
+def test_admin_csv_cells_escape_spreadsheet_formulas() -> None:
+    assert _csv_cell("=HYPERLINK(\"https://example.test\")").startswith("'=")
+    assert _csv_cell("+SUM(1,1)").startswith("'+")
+    assert _csv_cell("normal") == "normal"
+    assert _csv_cell(None) == ""
+
+
+async def test_admin_blocking_server_removes_it_from_market() -> None:
+    await _prepare_admin_filter_data()
+
+    blocked = await admin_toggle_server(
+        server_id="@admin-filter/verified",
+        data={"action": "block"},
+        admin_user="test-admin",
+    )
+    assert blocked["success"] is True
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/verified")
+        assert server is not None
+        assert server.security_level == "blocked"
+        assert server.market_visible is False
+
+    restored = await admin_toggle_server(
+        server_id="@admin-filter/verified",
+        data={"action": "unblock"},
+        admin_user="test-admin",
+    )
+    assert restored["success"] is True
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/verified")
+        assert server is not None
+        assert server.security_level == "reviewed"
+        assert server.market_visible is True
+
+
+async def test_admin_security_update_rejects_missing_server() -> None:
+    result = await admin_set_security(
+        server_id="@admin-filter/missing",
+        data={"level": "reviewed"},
+        admin_user="test-admin",
+    )
+    assert result == {"success": False, "error": "Server 不存在"}
+
+
+async def test_admin_security_block_hides_server_from_market() -> None:
+    await _prepare_admin_filter_data()
+
+    result = await admin_set_security(
+        server_id="@admin-filter/verified",
+        data={"level": "blocked"},
+        admin_user="test-admin",
+    )
+    assert result["success"] is True
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/verified")
+        assert server is not None
+        assert server.security_level == "blocked"
+        assert server.market_visible is False
+
+
+async def test_admin_cannot_demote_self_or_last_admin() -> None:
+    await _prepare_admin_filter_data()
+
+    self_change = await admin_update_role(
+        user_id="admin-filter-admin",
+        data={"role": "user"},
+        admin_user="admin-filter-admin",
+    )
+    assert self_change == {"success": False, "error": "不能降级当前登录的管理员账号"}
+
+    last_admin_change = await admin_update_role(
+        user_id="admin-filter-admin",
+        data={"role": "user"},
+        admin_user="test-admin",
+    )
+    assert last_admin_change == {"success": False, "error": "平台至少需要保留一名管理员"}
+
+
+async def test_admin_telemetry_is_authoritative_and_user_detail_includes_devices() -> None:
+    await _prepare_admin_filter_data()
+    user_id = "admin-filter-user"
+    server_id = "@admin-filter/verified"
+    event_id = "admin-filter-telemetry-event"
+    device_id = "admin-filter-device"
+
+    async with async_session_factory() as session:
+        await session.execute(
+            delete(TelemetryInventoryModel).where(
+                TelemetryInventoryModel.device_id == device_id
+            )
+        )
+        await session.execute(
+            delete(TelemetryEventModel).where(TelemetryEventModel.id == event_id)
+        )
+        await session.execute(
+            delete(TelemetryDeviceModel).where(TelemetryDeviceModel.id == device_id)
+        )
+        session.add(
+            TelemetryDeviceModel(
+                id=device_id,
+                user_id=user_id,
+                name="Codex Laptop",
+                agent_type="codex",
+                token_hash="admin-filter-device-token".ljust(64, "x"),
+                gateway_first_seen_at=_NOW,
+                gateway_last_seen_at=_NOW,
+                first_call_at=_NOW,
+            )
+        )
+        session.add(
+            TelemetryEventModel(
+                id=event_id,
+                user_id=user_id,
+                device_id=device_id,
+                event_type="tool_call",
+                server_id=server_id,
+                tool_name="run",
+                status="ok",
+                input_tokens=12,
+                output_tokens=8,
+                occurred_at=_NOW,
+            )
+        )
+        session.add(
+            TelemetryInventoryModel(
+                user_id=user_id,
+                device_id=device_id,
+                server_name=server_id,
+                config_hash="b" * 64,
+                discovered_at=_NOW,
+                last_seen_at=_NOW,
+            )
+        )
+        await session.commit()
+
+    overview = await admin_overview(admin_user="test-admin")
+    assert overview["data"]["stats"]["total_calls"] == 4
+    assert overview["data"]["stats"]["total_tokens"] == 120
+    assert overview["data"]["stats"]["total_devices"] >= 1
+    assert overview["data"]["stats"]["online_devices"] >= 1
+
+    detail = await admin_user_detail(user_id=user_id, admin_user="test-admin")
+    assert detail["data"]["stats"]["device_count"] == 1
+    assert detail["data"]["stats"]["online_device_count"] == 1
+    assert detail["data"]["devices"][0]["name"] == "Codex Laptop"
+    assert detail["data"]["devices"][0]["server_count"] == 1
 
 
 def _first_matching_admin_route(path: str) -> str:

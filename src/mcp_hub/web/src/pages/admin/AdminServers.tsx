@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { apiGet } from '../../api/client'
+import { useNavigate } from 'react-router-dom'
+import { apiDownload, apiGet } from '../../api/client'
+
+interface AdminCategory {
+  id: string
+  name: string
+  icon: string
+  count: number
+}
 
 export default function AdminServers() {
+  const navigate = useNavigate()
   const [servers, setServers] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
   const [q, setQ] = useState('')
   const [sort, setSort] = useState('installs')
+  const [category, setCategory] = useState('')
   const [securityLevel, setSecurityLevel] = useState('')
+  const [categories, setCategories] = useState<AdminCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
   const load = async () => {
     setLoading(true)
     setError('')
@@ -21,6 +33,7 @@ export default function AdminServers() {
         page: String(page),
         page_size: '20',
       })
+      if (category) params.set('category', category)
       if (securityLevel) params.set('security_level', securityLevel)
       const result = await apiGet<any[]>(`/admin/servers?${params}`)
       setServers(result.data || [])
@@ -33,20 +46,71 @@ export default function AdminServers() {
       setLoading(false)
     }
   }
-  useEffect(() => { load() }, [page, sort, q, securityLevel])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setQ(query)
+      setPage(1)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  useEffect(() => {
+    let cancelled = false
+    apiGet<AdminCategory[]>('/admin/categories')
+      .then(result => {
+        if (!cancelled) setCategories(result.data || [])
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([])
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => { void load() }, [page, sort, q, category, securityLevel])
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
   const secLabels: Record<string, string> = { verified: '🟢', reviewed: '🟡', unreviewed: '🟠', blocked: '🔴' }
 
   return (
-    <div className="max-w-6xl space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📦 Server 管理</h1>
+    <div className="max-w-6xl space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">OPERATIONS / CATALOG</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">📦 Server 与市场</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看平台收录、市场可见性、安全等级和真实调用情况。</p>
+        </div>
+        <button
+          type="button"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true)
+            setError('')
+            try {
+              await apiDownload('/admin/export/servers', 'mcp-hub-servers.csv')
+            } catch {
+              setError('Server 数据导出失败，请稍后重试')
+            } finally {
+              setExporting(false)
+            }
+          }}
+          className="border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          {exporting ? '正在导出...' : '导出 CSV'}
+        </button>
+      </header>
       <div className="flex gap-2 flex-wrap">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="搜索 Server..."
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索 Server..."
           className="flex-1 min-w-[150px] px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-        <select value={sort} onChange={e => setSort(e.target.value)}
+        <select value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="installs">按追踪数</option><option value="calls">按调用量</option><option value="rating">按评分</option>
+        </select>
+        <select value={category} onChange={e => { setCategory(e.target.value); setPage(1) }}
+          className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+          <option value="">全部分类</option>
+          {categories.map(item => (
+            <option key={item.id} value={item.id}>{item.icon} {item.name}（{item.count}）</option>
+          ))}
         </select>
         <select value={securityLevel} onChange={e => { setSecurityLevel(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
@@ -65,18 +129,32 @@ export default function AdminServers() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
-              <th className="px-4 py-2">Server</th><th className="px-4 py-2">分类</th><th className="px-4 py-2 text-right">追踪</th>
+              <th className="px-4 py-2">Server</th><th className="px-4 py-2">分类</th><th className="px-4 py-2">市场</th><th className="px-4 py-2 text-right">追踪</th>
               <th className="px-4 py-2 text-right">7日调用</th><th className="px-4 py-2 text-right">7日估算 Token</th>
               <th className="px-4 py-2 text-right">评分</th><th className="px-4 py-2">安全</th>
             </tr></thead>
             <tbody>
               {servers.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">没有符合筛选条件的 Server</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">没有符合筛选条件的 Server</td></tr>
               ) : servers.map(s => (
-                <tr key={s.server_id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                  onClick={() => window.location.href = `/admin/servers/${encodeURIComponent(s.server_id)}`}>
+                <tr
+                  key={s.server_id}
+                  tabIndex={0}
+                  aria-label={`查看 Server ${s.name || s.server_id}`}
+                  className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
+                  onClick={() => navigate(`/admin/servers/${encodeURIComponent(s.server_id)}`)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      navigate(`/admin/servers/${encodeURIComponent(s.server_id)}`)
+                    }
+                  }}
+                >
                   <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-gray-200">{s.name || s.server_id}</td>
                   <td className="px-4 py-2.5"><div className="flex gap-1">{s.categories?.slice(0, 2).map((c: string) => <span key={c} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">{c}</span>)}</div></td>
+                  <td className={`px-4 py-2.5 text-xs ${s.market_visible ? 'text-green-600' : 'text-gray-400'}`}>
+                    {s.market_visible ? '可见' : '已隐藏'}
+                  </td>
                   <td className="px-4 py-2.5 text-right">{s.install_count}</td>
                   <td className="px-4 py-2.5 text-right">{s.calls_7d >= 1000 ? `${(s.calls_7d/1000).toFixed(1)}K` : s.calls_7d}</td>
                   <td className="px-4 py-2.5 text-right">{s.tokens_7d >= 1000 ? `${(s.tokens_7d/1000).toFixed(1)}K` : s.tokens_7d}</td>

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import Response
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text, union_all
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import Subquery
 
 from mcp_hub.api.dependencies import get_admin_user
 from mcp_hub.core.user_validation import (
@@ -21,6 +24,9 @@ from mcp_hub.db.models import (
     NotificationModel,
     ReviewModel,
     ServerModel,
+    TelemetryDeviceModel,
+    TelemetryEventModel,
+    TelemetryInventoryModel,
     UsageStatsModel,
     UserModel,
     UserServerModel,
@@ -28,35 +34,76 @@ from mcp_hub.db.models import (
     UserValidationEnrollmentModel,
     UserValidationEventModel,
 )
-from mcp_hub.logging_config import get_logger
 
 router = APIRouter(tags=["admin"])
-logger = get_logger(__name__)
 
 
-def _time_filter(days: int) -> ColumnElement[bool]:
-    """Return a database-portable UTC window for usage events."""
-    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-    return UsageStatsModel.created_at >= since
+def _activity_since(days: int) -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+
+def _activity_subquery() -> Subquery:
+    """Unify current Gateway telemetry with legacy usage rows without double counting.
+
+    Modern Gateway events also create a compatibility ``usage_stats`` row with
+    ``source_event_id``. Those rows are excluded here because the telemetry
+    event is the authoritative record. Older rows without that link remain
+    visible until they age out.
+    """
+    return union_all(
+        select(
+            TelemetryEventModel.user_id.label("user_id"),
+            TelemetryEventModel.server_id.label("server_id"),
+            TelemetryEventModel.tool_name.label("tool_name"),
+            TelemetryEventModel.status.label("status"),
+            TelemetryEventModel.duration_ms.label("duration_ms"),
+            (
+                func.coalesce(TelemetryEventModel.input_tokens, 0)
+                + func.coalesce(TelemetryEventModel.output_tokens, 0)
+            ).label("token_count"),
+            TelemetryEventModel.occurred_at.label("occurred_at"),
+        ).where(TelemetryEventModel.event_type == "tool_call"),
+        select(
+            UsageStatsModel.user_id.label("user_id"),
+            UsageStatsModel.server_id.label("server_id"),
+            UsageStatsModel.tool_name.label("tool_name"),
+            UsageStatsModel.status.label("status"),
+            UsageStatsModel.duration_ms.label("duration_ms"),
+            func.coalesce(UsageStatsModel.token_count, 0).label("token_count"),
+            UsageStatsModel.created_at.label("occurred_at"),
+        ).where(UsageStatsModel.source_event_id.is_(None)),
+    ).subquery("activity")
+
+
+def _activity_time_filter(activity: Subquery, days: int) -> ColumnElement[bool]:
+    """Return a UTC window against the unified activity relation."""
+    return activity.c.occurred_at >= _activity_since(days)
+
+
+def _gateway_online_cutoff() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
+
+
+def _csv_cell(value: Any) -> str:
+    """Prevent spreadsheet formula execution when exported CSV is opened."""
+    text_value = "" if value is None else str(value)
+    if text_value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{text_value}"
+    return text_value
 
 
 # ── 审计日志 ──────────────────────────────────────────────
 
 
-async def _audit(user_id: str, action: str, detail: str = "") -> None:
-    try:
-        async with async_session_factory() as session:
-            session.add(
-                NotificationModel(
-                    user_id=user_id,
-                    type="audit",
-                    title=action,
-                    message=detail,
-                )
-            )
-            await session.commit()
-    except Exception as e:
-        logger.warning("admin.audit_failed", error=str(e))
+def _audit_record(user_id: str, action: str, detail: str = "") -> NotificationModel:
+    return NotificationModel(
+        user_id=user_id,
+        type="audit",
+        title=action,
+        message=detail,
+        is_read=True,
+        status="resolved",
+    )
 
 
 # ── 1. 平台概览 ───────────────────────────────────────────
@@ -68,8 +115,9 @@ async def admin_overview(
 ) -> dict[str, Any]:
 
     async with async_session_factory() as session:
-        days7 = _time_filter(7)
-        days30 = _time_filter(30)
+        activity = _activity_subquery()
+        activity_7d = _activity_time_filter(activity, 7)
+        activity_30d = _activity_time_filter(activity, 30)
 
         # 基础统计
         total_users = (
@@ -82,31 +130,52 @@ async def admin_overview(
             await session.execute(select(func.count()).select_from(UserServerModel))
         ).scalar() or 0
         total_calls = (
-            await session.execute(select(func.count()).select_from(UsageStatsModel))
+            await session.execute(select(func.count()).select_from(activity))
         ).scalar() or 0
         total_tokens = (
-            await session.execute(
-                select(func.sum(UsageStatsModel.token_count)).select_from(UsageStatsModel)
-            )
+            await session.execute(select(func.sum(activity.c.token_count)).select_from(activity))
         ).scalar() or 0
         active_users_7d = (
             await session.execute(
-                select(func.count(func.distinct(UsageStatsModel.user_id)))
-                .select_from(UsageStatsModel)
-                .where(days7)
+                select(func.count(func.distinct(activity.c.user_id)))
+                .select_from(activity)
+                .where(activity_7d)
+            )
+        ).scalar() or 0
+
+        device_total = (
+            await session.execute(select(func.count()).select_from(TelemetryDeviceModel))
+        ).scalar() or 0
+        online_devices = (
+            await session.execute(
+                select(func.count())
+                .select_from(TelemetryDeviceModel)
+                .where(
+                    TelemetryDeviceModel.revoked_at.is_(None),
+                    TelemetryDeviceModel.gateway_last_seen_at >= _gateway_online_cutoff(),
+                )
+            )
+        ).scalar() or 0
+        connected_devices = (
+            await session.execute(
+                select(func.count())
+                .select_from(TelemetryDeviceModel)
+                .where(
+                    TelemetryDeviceModel.gateway_first_seen_at.is_not(None),
+                )
             )
         ).scalar() or 0
 
         # 每日趋势
-        date_func = func.date(UsageStatsModel.created_at)
+        date_func = func.date(activity.c.occurred_at)
         trend_result = await session.execute(
             select(
                 date_func.label("day"),
                 func.count().label("calls"),
-                func.sum(UsageStatsModel.token_count).label("tokens"),
+                func.sum(activity.c.token_count).label("tokens"),
             )
-            .select_from(UsageStatsModel)
-            .where(days30)
+            .select_from(activity)
+            .where(activity_30d)
             .group_by(text("day"))
             .order_by(text("day"))
         )
@@ -115,14 +184,27 @@ async def admin_overview(
             for r in trend_result.fetchall()
         ]
 
-        # Top 10 Server
-        top_servers_result = await session.execute(
+        # Top 10 活跃 Server：按统一活动口径的 7 日调用量排序。
+        # 安装数单独通过子查询补充，避免把“安装最多”误称为“活跃最多”。
+        install_counts = (
             select(
                 UserServerModel.server_id,
-                func.count(UserServerModel.server_id).label("installs"),
+                func.count().label("installs"),
             )
             .group_by(UserServerModel.server_id)
-            .order_by(text("installs DESC"))
+            .subquery("install_counts")
+        )
+        top_servers_result = await session.execute(
+            select(
+                activity.c.server_id,
+                func.count().label("calls_7d"),
+                func.coalesce(install_counts.c.installs, 0).label("installs"),
+            )
+            .select_from(activity)
+            .outerjoin(install_counts, activity.c.server_id == install_counts.c.server_id)
+            .where(activity_7d)
+            .group_by(activity.c.server_id, install_counts.c.installs)
+            .order_by(text("calls_7d DESC"))
             .limit(10)
         )
         top_servers = []
@@ -130,33 +212,25 @@ async def admin_overview(
             sid = server_row[0]
             srv = await session.execute(select(ServerModel.name).where(ServerModel.id == sid))
             srv_name = srv.scalar() or sid
-            calls_7d = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == sid)
-                    .where(days7)
-                )
-            ).scalar() or 0
             top_servers.append(
                 {
                     "id": sid,
                     "name": srv_name,
-                    "installs": server_row[1],
-                    "calls_7d": calls_7d,
+                    "installs": server_row[2] or 0,
+                    "calls_7d": server_row[1] or 0,
                 }
             )
 
         # Top 10 用户
         top_users_result = await session.execute(
             select(
-                UsageStatsModel.user_id,
+                activity.c.user_id,
                 func.count().label("calls"),
-                func.sum(UsageStatsModel.token_count).label("tokens"),
+                func.sum(activity.c.token_count).label("tokens"),
             )
-            .select_from(UsageStatsModel)
-            .where(days7)
-            .group_by(UsageStatsModel.user_id)
+            .select_from(activity)
+            .where(activity_7d)
+            .group_by(activity.c.user_id)
             .order_by(text("calls DESC"))
             .limit(10)
         )
@@ -181,10 +255,13 @@ async def admin_overview(
                 "total_users": total_users,
                 "total_servers": total_servers,
                 "total_installs": total_installs,
-                "total_calls": total_calls,
-                "total_tokens": total_tokens,
-                "active_users_7d": active_users_7d,
-            },
+            "total_calls": total_calls,
+            "total_tokens": total_tokens,
+            "active_users_7d": active_users_7d,
+            "total_devices": int(device_total),
+            "online_devices": int(online_devices),
+            "connected_devices": int(connected_devices),
+        },
             "daily_trend": daily_trend,
             "top_servers": top_servers,
             "top_users": top_users,
@@ -198,29 +275,32 @@ async def admin_overview(
 @router.get("/admin/users")
 async def admin_users(
     admin_user: str = Depends(get_admin_user),
-    q: str = "",
-    role: str = "",
-    sort: str = "calls",
-    page: int = 1,
-    page_size: int = Query(20, le=100),
+    q: Annotated[str, Query(max_length=200)] = "",
+    role: Annotated[str, Query(max_length=20)] = "",
+    sort: Annotated[str, Query(max_length=20)] = "calls",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         if role not in ("", "user", "admin"):
             return {"success": False, "error": "role 必须是 user 或 admin"}
-        days7 = _time_filter(7)
+        if sort not in {"calls", "installs", "created"}:
+            return {"success": False, "error": "sort 必须是 calls、installs 或 created"}
+        activity = _activity_subquery()
+        activity_7d = _activity_time_filter(activity, 7)
 
         # 子查询：7 日调用统计
         stats_sub = (
             select(
-                UsageStatsModel.user_id,
+                activity.c.user_id,
                 func.count().label("calls_7d"),
-                func.sum(UsageStatsModel.token_count).label("tokens_7d"),
-                func.max(UsageStatsModel.created_at).label("last_active"),
+                func.sum(activity.c.token_count).label("tokens_7d"),
+                func.max(activity.c.occurred_at).label("last_active"),
             )
-            .select_from(UsageStatsModel)
-            .where(days7)
-            .group_by(UsageStatsModel.user_id)
+            .select_from(activity)
+            .where(activity_7d)
+            .group_by(activity.c.user_id)
         ).alias("stats")
 
         # 总数
@@ -243,12 +323,29 @@ async def admin_users(
                 UserModel.created_at,
                 UserModel.last_login,
                 func.count(func.distinct(UserServerModel.server_id)).label("server_count"),
+                func.count(func.distinct(TelemetryDeviceModel.id)).label("device_count"),
+                func.count(
+                    func.distinct(
+                        case(
+                            (
+                                TelemetryDeviceModel.revoked_at.is_(None)
+                                & (
+                                    TelemetryDeviceModel.gateway_last_seen_at
+                                    >= _gateway_online_cutoff()
+                                ),
+                                TelemetryDeviceModel.id,
+                            ),
+                            else_=None,
+                        )
+                    )
+                ).label("online_device_count"),
                 func.coalesce(stats_sub.c.calls_7d, 0).label("calls_7d"),
                 func.coalesce(stats_sub.c.tokens_7d, 0).label("tokens_7d"),
                 func.coalesce(stats_sub.c.last_active, UserModel.last_login).label("last_active"),
             )
             .select_from(UserModel)
             .outerjoin(UserServerModel, UserModel.id == UserServerModel.user_id)
+            .outerjoin(TelemetryDeviceModel, UserModel.id == TelemetryDeviceModel.user_id)
             .outerjoin(stats_sub, UserModel.id == stats_sub.c.user_id)
         )
         if q:
@@ -258,7 +355,15 @@ async def admin_users(
         if role:
             main_stmt = main_stmt.where(UserModel.role == role)
         main_stmt = main_stmt.group_by(
-            UserModel.id, stats_sub.c.calls_7d, stats_sub.c.tokens_7d, stats_sub.c.last_active
+            UserModel.id,
+            UserModel.display_name,
+            UserModel.avatar_url,
+            UserModel.role,
+            UserModel.created_at,
+            UserModel.last_login,
+            stats_sub.c.calls_7d,
+            stats_sub.c.tokens_7d,
+            stats_sub.c.last_active,
         )
 
         # 排序
@@ -284,9 +389,11 @@ async def admin_users(
                     "created_at": str(r[4]) if r[4] else "",
                     "last_login": str(r[5]) if r[5] else "",
                     "server_count": r[6] or 0,
-                    "calls_7d": r[7] or 0,
-                    "tokens_7d": r[8] or 0,
-                    "last_active": str(r[9]) if r[9] else "",
+                    "device_count": r[7] or 0,
+                    "online_device_count": r[8] or 0,
+                    "calls_7d": r[9] or 0,
+                    "tokens_7d": r[10] or 0,
+                    "last_active": str(r[11]) if r[11] else "",
                 }
             )
 
@@ -307,8 +414,9 @@ async def admin_user_detail(
 ) -> dict[str, Any]:
 
     async with async_session_factory() as session:
-        days7 = _time_filter(7)
-        days30 = _time_filter(30)
+        activity = _activity_subquery()
+        activity_7d = _activity_time_filter(activity, 7)
+        activity_30d = _activity_time_filter(activity, 30)
 
         # 用户基本信息
         usr_result = await session.execute(select(UserModel).where(UserModel.id == user_id))
@@ -337,15 +445,15 @@ async def admin_user_detail(
         total_calls = (
             await session.execute(
                 select(func.count())
-                .select_from(UsageStatsModel)
-                .where(UsageStatsModel.user_id == user_id)
+                .select_from(activity)
+                .where(activity.c.user_id == user_id)
             )
         ).scalar() or 0
         total_tokens = (
             await session.execute(
-                select(func.sum(UsageStatsModel.token_count))
-                .select_from(UsageStatsModel)
-                .where(UsageStatsModel.user_id == user_id)
+                select(func.sum(activity.c.token_count))
+                .select_from(activity)
+                .where(activity.c.user_id == user_id)
             )
         ).scalar() or 0
         fav_count = (
@@ -355,6 +463,55 @@ async def admin_user_detail(
                 .where(FavoriteModel.user_id == user_id)
             )
         ).scalar() or 0
+
+        device_result = await session.execute(
+            select(TelemetryDeviceModel)
+            .where(TelemetryDeviceModel.user_id == user_id)
+            .order_by(TelemetryDeviceModel.created_at.desc())
+        )
+        device_rows = list(device_result.scalars())
+        inventory_counts = await session.execute(
+            select(
+                TelemetryInventoryModel.device_id,
+                func.count().label("server_count"),
+            )
+            .where(
+                TelemetryInventoryModel.user_id == user_id,
+                TelemetryInventoryModel.active == True,  # noqa: E712
+            )
+            .group_by(TelemetryInventoryModel.device_id)
+        )
+        inventory_by_device = {
+            row.device_id: int(row.server_count or 0)
+            for row in inventory_counts.fetchall()
+        }
+        online_cutoff = _gateway_online_cutoff()
+        devices = [
+            {
+                "id": device.id,
+                "name": device.name,
+                "agent_type": device.agent_type,
+                "gateway_version": device.gateway_version or "",
+                "platform": device.platform or "",
+                "online": bool(
+                    device.revoked_at is None
+                    and device.gateway_last_seen_at is not None
+                    and device.gateway_last_seen_at >= online_cutoff
+                ),
+                "connected": device.gateway_first_seen_at is not None,
+                "revoked": device.revoked_at is not None,
+                "last_seen_at": (
+                    device.gateway_last_seen_at.isoformat()
+                    if device.gateway_last_seen_at
+                    else None
+                ),
+                "first_call_at": (
+                    device.first_call_at.isoformat() if device.first_call_at else None
+                ),
+                "server_count": inventory_by_device.get(device.id, 0),
+            }
+            for device in device_rows
+        ]
 
         # Server 列表
         srv_result = await session.execute(
@@ -368,17 +525,23 @@ async def admin_user_detail(
             srv_calls = (
                 await session.execute(
                     select(func.count())
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == sid, UsageStatsModel.user_id == user_id)
-                    .where(days7)
+                    .select_from(activity)
+                    .where(
+                        activity.c.server_id == sid,
+                        activity.c.user_id == user_id,
+                        activity_7d,
+                    )
                 )
             ).scalar() or 0
             srv_tokens = (
                 await session.execute(
-                    select(func.sum(UsageStatsModel.token_count))
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == sid, UsageStatsModel.user_id == user_id)
-                    .where(days7)
+                    select(func.sum(activity.c.token_count))
+                    .select_from(activity)
+                    .where(
+                        activity.c.server_id == sid,
+                        activity.c.user_id == user_id,
+                        activity_7d,
+                    )
                 )
             ).scalar() or 0
             servers.append(
@@ -392,12 +555,11 @@ async def admin_user_detail(
             )
 
         # 每日趋势
-        date_func = func.date(UsageStatsModel.created_at)
+        date_func = func.date(activity.c.occurred_at)
         trend_result = await session.execute(
-            select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.user_id == user_id)
-            .where(days30)
+            select(date_func.label("day"), func.count(), func.sum(activity.c.token_count))
+            .select_from(activity)
+            .where(activity.c.user_id == user_id, activity_30d)
             .group_by(text("day"))
             .order_by(text("day"))
         )
@@ -408,11 +570,10 @@ async def admin_user_detail(
 
         # Top 5 工具
         tools_result = await session.execute(
-            select(UsageStatsModel.tool_name, func.count().label("cnt"))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.user_id == user_id)
-            .where(days30)
-            .group_by(UsageStatsModel.tool_name)
+            select(activity.c.tool_name, func.count().label("cnt"))
+            .select_from(activity)
+            .where(activity.c.user_id == user_id, activity_30d)
+            .group_by(activity.c.tool_name)
             .order_by(text("cnt DESC"))
             .limit(5)
         )
@@ -429,7 +590,11 @@ async def admin_user_detail(
                 "total_calls": total_calls,
                 "total_tokens": total_tokens,
                 "favorite_count": fav_count,
+                "device_count": len(devices),
+                "online_device_count": sum(1 for device in devices if device["online"]),
+                "connected_device_count": sum(1 for device in devices if device["connected"]),
             },
+            "devices": devices,
             "servers": servers,
             "daily_trend": daily_trend,
             "top_tools": top_tools,
@@ -471,17 +636,17 @@ async def admin_user_servers(
 @router.get("/admin/users/{user_id}/usage/daily")
 async def admin_user_daily(
     user_id: str,
-    days: int = 30,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
-        time_f = _time_filter(days)
-        date_func = func.date(UsageStatsModel.created_at)
+        activity = _activity_subquery()
+        time_f = _activity_time_filter(activity, days)
+        date_func = func.date(activity.c.occurred_at)
         result = await session.execute(
-            select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.user_id == user_id)
-            .where(time_f)
+            select(date_func.label("day"), func.count(), func.sum(activity.c.token_count))
+            .select_from(activity)
+            .where(activity.c.user_id == user_id, time_f)
             .group_by(text("day"))
             .order_by(text("day"))
         )
@@ -505,15 +670,28 @@ async def admin_update_role(
         return {"success": False, "error": "角色只能是 user 或 admin"}
 
     async with async_session_factory() as session:
-        result = await session.execute(select(UserModel).where(UserModel.id == user_id))
-        if not result.scalar_one_or_none():
-            return {"success": False, "error": "用户不存在"}
-        await session.execute(
-            text("UPDATE users SET role = :role WHERE id = :uid"), {"role": role, "uid": user_id}
+        admin_result = await session.execute(
+            select(UserModel)
+            .where(UserModel.role == "admin")
+            .order_by(UserModel.id)
+            .with_for_update()
         )
+        administrators = list(admin_result.scalars())
+        target_user = next((user for user in administrators if user.id == user_id), None)
+        if target_user is None:
+            target_user = await session.scalar(
+                select(UserModel).where(UserModel.id == user_id).with_for_update()
+            )
+        if not target_user:
+            return {"success": False, "error": "用户不存在"}
+        if user_id == admin_user and role != "admin":
+            return {"success": False, "error": "不能降级当前登录的管理员账号"}
+        if target_user.role == "admin" and role == "user" and len(administrators) <= 1:
+            return {"success": False, "error": "平台至少需要保留一名管理员"}
+        target_user.role = role
+        session.add(_audit_record(admin_user, f"修改用户角色: {user_id} → {role}"))
         await session.commit()
 
-    await _audit(admin_user, f"修改用户角色: {user_id} → {role}")
     return {"success": True, "message": f"已将 {user_id} 的角色修改为 {role}"}
 
 
@@ -523,25 +701,37 @@ async def admin_update_role(
 @router.get("/admin/servers")
 async def admin_servers(
     admin_user: str = Depends(get_admin_user),
-    q: str = "",
-    category: str = "",
-    security_level: str = "",
-    sort: str = "installs",
-    page: int = 1,
-    page_size: int = Query(20, le=100),
+    q: Annotated[str, Query(max_length=200)] = "",
+    category: Annotated[str, Query(max_length=100)] = "",
+    security_level: Annotated[str, Query(max_length=20)] = "",
+    sort: Annotated[str, Query(max_length=20)] = "installs",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         if security_level not in ("", "verified", "reviewed", "unreviewed", "blocked"):
             return {"success": False, "error": "无效的安全等级"}
-        days7 = _time_filter(7)
+        if sort not in {"installs", "calls", "rating"}:
+            return {"success": False, "error": "sort 必须是 installs、calls 或 rating"}
+        activity = _activity_subquery()
+        activity_7d = _activity_time_filter(activity, 7)
+        install_counts = (
+            select(
+                UserServerModel.server_id.label("server_id"),
+                func.count().label("install_count"),
+            )
+            .group_by(UserServerModel.server_id)
+            .subquery("install_counts")
+        )
         calls_subquery = (
             select(
-                UsageStatsModel.server_id.label("server_id"),
+                activity.c.server_id.label("server_id"),
                 func.count().label("calls_7d"),
             )
-            .where(days7)
-            .group_by(UsageStatsModel.server_id)
+            .select_from(activity)
+            .where(activity_7d)
+            .group_by(activity.c.server_id)
             .subquery()
         )
 
@@ -556,8 +746,10 @@ async def admin_servers(
             count_stmt = count_stmt.where(ServerModel.security_level == security_level)
         total = (await session.execute(count_stmt)).scalar() or 0
 
-        stmt = select(ServerModel).outerjoin(
-            calls_subquery, calls_subquery.c.server_id == ServerModel.id
+        stmt = (
+            select(ServerModel)
+            .outerjoin(calls_subquery, calls_subquery.c.server_id == ServerModel.id)
+            .outerjoin(install_counts, install_counts.c.server_id == ServerModel.id)
         )
         if q:
             stmt = stmt.where((ServerModel.id.ilike(f"%{q}%")) | (ServerModel.name.ilike(f"%{q}%")))
@@ -571,7 +763,7 @@ async def admin_servers(
         elif sort == "calls":
             stmt = stmt.order_by(func.coalesce(calls_subquery.c.calls_7d, 0).desc())
         else:
-            stmt = stmt.order_by(ServerModel.download_count.desc())
+            stmt = stmt.order_by(func.coalesce(install_counts.c.install_count, 0).desc())
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         result = await session.execute(stmt)
@@ -589,17 +781,15 @@ async def admin_servers(
             calls_7d = (
                 await session.execute(
                     select(func.count())
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == s.id)
-                    .where(days7)
+                    .select_from(activity)
+                    .where(activity.c.server_id == s.id, activity_7d)
                 )
             ).scalar() or 0
             tokens_7d = (
                 await session.execute(
-                    select(func.sum(UsageStatsModel.token_count))
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == s.id)
-                    .where(days7)
+                    select(func.sum(activity.c.token_count))
+                    .select_from(activity)
+                    .where(activity.c.server_id == s.id, activity_7d)
                 )
             ).scalar() or 0
             import json
@@ -618,6 +808,7 @@ async def admin_servers(
                     "tokens_7d": tokens_7d or 0,
                     "rating": s.rating or 0,
                     "security_level": s.security_level or "unreviewed",
+                    "market_visible": s.market_visible is not False,
                     "download_count": s.download_count or 0,
                 }
             )
@@ -642,8 +833,9 @@ async def admin_server_detail(
         if not s:
             return {"success": False, "error": "Server 不存在"}
 
-        days7 = _time_filter(7)
-        days30 = _time_filter(30)
+        activity = _activity_subquery()
+        activity_7d = _activity_time_filter(activity, 7)
+        activity_30d = _activity_time_filter(activity, 30)
 
         install_count = (
             await session.execute(
@@ -655,17 +847,15 @@ async def admin_server_detail(
         calls_7d = (
             await session.execute(
                 select(func.count())
-                .select_from(UsageStatsModel)
-                .where(UsageStatsModel.server_id == server_id)
-                .where(days7)
+                .select_from(activity)
+                .where(activity.c.server_id == server_id, activity_7d)
             )
         ).scalar() or 0
         tokens_7d = (
             await session.execute(
-                select(func.sum(UsageStatsModel.token_count))
-                .select_from(UsageStatsModel)
-                .where(UsageStatsModel.server_id == server_id)
-                .where(days7)
+                select(func.sum(activity.c.token_count))
+                .select_from(activity)
+                .where(activity.c.server_id == server_id, activity_7d)
             )
         ).scalar() or 0
 
@@ -687,9 +877,12 @@ async def admin_server_detail(
             uc = (
                 await session.execute(
                     select(func.count())
-                    .select_from(UsageStatsModel)
-                    .where(UsageStatsModel.server_id == server_id, UsageStatsModel.user_id == uid)
-                    .where(days7)
+                    .select_from(activity)
+                    .where(
+                        activity.c.server_id == server_id,
+                        activity.c.user_id == uid,
+                        activity_7d,
+                    )
                 )
             ).scalar() or 0
             install_users.append(
@@ -697,12 +890,11 @@ async def admin_server_detail(
             )
 
         # 趋势
-        date_func = func.date(UsageStatsModel.created_at)
+        date_func = func.date(activity.c.occurred_at)
         trend_result = await session.execute(
-            select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.server_id == server_id)
-            .where(days30)
+            select(date_func.label("day"), func.count(), func.sum(activity.c.token_count))
+            .select_from(activity)
+            .where(activity.c.server_id == server_id, activity_30d)
             .group_by(text("day"))
             .order_by(text("day"))
         )
@@ -713,11 +905,10 @@ async def admin_server_detail(
 
         # Top 5 工具
         tools_result = await session.execute(
-            select(UsageStatsModel.tool_name, func.count().label("cnt"))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.server_id == server_id)
-            .where(days30)
-            .group_by(UsageStatsModel.tool_name)
+            select(activity.c.tool_name, func.count().label("cnt"))
+            .select_from(activity)
+            .where(activity.c.server_id == server_id, activity_30d)
+            .group_by(activity.c.tool_name)
             .order_by(text("cnt DESC"))
             .limit(5)
         )
@@ -735,6 +926,7 @@ async def admin_server_detail(
                 "categories": cats,
                 "rating": s.rating or 0,
                 "security_level": s.security_level or "unreviewed",
+                "market_visible": s.market_visible is not False,
                 "download_count": s.download_count or 0,
                 "version": s.current_version or "",
                 "homepage": s.homepage or "",
@@ -779,17 +971,17 @@ async def admin_server_users(
 @router.get("/admin/servers/{server_id:path}/usage/daily")
 async def admin_server_daily(
     server_id: str,
-    days: int = 30,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
-        time_f = _time_filter(days)
-        date_func = func.date(UsageStatsModel.created_at)
+        activity = _activity_subquery()
+        time_f = _activity_time_filter(activity, days)
+        date_func = func.date(activity.c.occurred_at)
         result = await session.execute(
-            select(date_func.label("day"), func.count(), func.sum(UsageStatsModel.token_count))
-            .select_from(UsageStatsModel)
-            .where(UsageStatsModel.server_id == server_id)
-            .where(time_f)
+            select(date_func.label("day"), func.count(), func.sum(activity.c.token_count))
+            .select_from(activity)
+            .where(activity.c.server_id == server_id, time_f)
             .group_by(text("day"))
             .order_by(text("day"))
         )
@@ -809,21 +1001,22 @@ router.get("/admin/servers/{server_id:path}")(admin_server_detail)
 
 @router.get("/admin/analytics/daily")
 async def admin_analytics_daily(
-    days: int = 30,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
-        time_f = _time_filter(days)
-        date_func = func.date(UsageStatsModel.created_at)
+        activity = _activity_subquery()
+        time_f = _activity_time_filter(activity, days)
+        date_func = func.date(activity.c.occurred_at)
         result = await session.execute(
             select(
                 date_func.label("day"),
                 func.count().label("calls"),
-                func.sum(UsageStatsModel.token_count).label("tokens"),
-                func.count(func.distinct(UsageStatsModel.user_id)).label("users"),
-                func.count(func.distinct(UsageStatsModel.server_id)).label("servers"),
+                func.sum(activity.c.token_count).label("tokens"),
+                func.count(func.distinct(activity.c.user_id)).label("users"),
+                func.count(func.distinct(activity.c.server_id)).label("servers"),
             )
-            .select_from(UsageStatsModel)
+            .select_from(activity)
             .where(time_f)
             .group_by(text("day"))
             .order_by(text("day"))
@@ -843,7 +1036,7 @@ async def admin_analytics_daily(
 
 @router.get("/admin/analytics/user-validation")
 async def admin_user_validation_analytics(
-    days: int = Query(30, ge=1, le=365),
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     """Return aggregate opt-in study progress without participant identities."""
@@ -955,13 +1148,12 @@ async def admin_user_validation_analytics(
 
 @router.get("/admin/analytics/top-servers")
 async def admin_top_servers(
-    metric: str = "calls",
-    days: int = 7,
-    limit: int = 10,
+    metric: Annotated[str, Query(max_length=20)] = "calls",
+    days: Annotated[int, Query(ge=1, le=365)] = 7,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
-        time_f = _time_filter(days)
         if metric not in {"calls", "tokens", "installs"}:
             return {"success": False, "error": "metric 必须是 calls、tokens 或 installs"}
 
@@ -981,20 +1173,22 @@ async def admin_top_servers(
             for row in result.fetchall():
                 ranked_rows.append((row[0], 0, 0, int(row[1] or 0)))
         else:
+            activity = _activity_subquery()
+            time_f = _activity_time_filter(activity, days)
             order_col: ColumnElement[Any] = (
-                func.sum(UsageStatsModel.token_count)
+                func.sum(activity.c.token_count)
                 if metric == "tokens"
                 else func.count()
             )
             result = await session.execute(
                 select(
-                    UsageStatsModel.server_id,
+                    activity.c.server_id,
                     func.count().label("calls"),
-                    func.sum(UsageStatsModel.token_count).label("tokens"),
+                    func.sum(activity.c.token_count).label("tokens"),
                 )
-                .select_from(UsageStatsModel)
+                .select_from(activity)
                 .where(time_f)
-                .group_by(UsageStatsModel.server_id)
+                .group_by(activity.c.server_id)
                 .order_by(order_col.desc())
                 .limit(limit)
             )
@@ -1020,30 +1214,31 @@ async def admin_top_servers(
 
 @router.get("/admin/analytics/top-users")
 async def admin_top_users(
-    metric: str = "calls",
-    days: int = 7,
-    limit: int = 10,
+    metric: Annotated[str, Query(max_length=20)] = "calls",
+    days: Annotated[int, Query(ge=1, le=365)] = 7,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
-        time_f = _time_filter(days)
         if metric not in {"calls", "tokens"}:
             return {"success": False, "error": "metric 必须是 calls 或 tokens"}
+        activity = _activity_subquery()
+        time_f = _activity_time_filter(activity, days)
         order_col: ColumnElement[Any] = (
-            func.sum(UsageStatsModel.token_count)
+            func.sum(activity.c.token_count)
             if metric == "tokens"
             else func.count()
         )
 
         result = await session.execute(
             select(
-                UsageStatsModel.user_id,
+                activity.c.user_id,
                 func.count().label("calls"),
-                func.sum(UsageStatsModel.token_count).label("tokens"),
+                func.sum(activity.c.token_count).label("tokens"),
             )
-            .select_from(UsageStatsModel)
+            .select_from(activity)
             .where(time_f)
-            .group_by(UsageStatsModel.user_id)
+            .group_by(activity.c.user_id)
             .order_by(order_col.desc())
             .limit(limit)
         )
@@ -1067,8 +1262,8 @@ async def admin_top_users(
 
 @router.get("/admin/reviews")
 async def admin_reviews(
-    page: int = 1,
-    page_size: int = Query(20, le=100),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
@@ -1116,11 +1311,15 @@ async def admin_delete_review(
         if not review:
             return {"success": False, "error": "评价不存在"}
         await session.delete(review)
+        session.add(
+            _audit_record(
+                admin_user,
+                f"删除评价 #{review_id}",
+                f"server={review.server_id} user={review.user_id}",
+            )
+        )
         await session.commit()
 
-    await _audit(
-        admin_user, f"删除评价 #{review_id}", f"server={review.server_id} user={review.user_id}"
-    )
     return {"success": True, "message": "评价已删除"}
 
 
@@ -1129,9 +1328,9 @@ async def admin_delete_review(
 
 @router.get("/admin/audit")
 async def admin_audit_log(
-    action_type: str = "",
-    page: int = 1,
-    page_size: int = Query(50, le=100),
+    action_type: Annotated[str, Query(max_length=100)] = "",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
     admin_user: str = Depends(get_admin_user),
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
@@ -1189,17 +1388,23 @@ async def admin_toggle_server(
 
         if action == "block":
             server.security_level = "blocked"
+            server.market_visible = False
             msg = f"已下架 {server_id}"
         elif action == "unblock":
             server.security_level = "reviewed"
+            server.market_visible = True
             msg = f"已恢复 {server_id}"
         else:
             return {"success": False, "error": "action 必须是 block 或 unblock"}
+        session.add(
+            _audit_record(
+                admin_user,
+                f"{'下架' if action == 'block' else '恢复'} Server",
+                f"server={server_id}",
+            )
+        )
         await session.commit()
 
-    await _audit(
-        admin_user, f"{'下架' if action == 'block' else '恢复'} Server", f"server={server_id}"
-    )
     return {"success": True, "message": msg}
 
 
@@ -1214,12 +1419,18 @@ async def admin_set_security(
     if level not in ("verified", "reviewed", "unreviewed", "blocked"):
         return {"success": False, "error": "无效的安全等级"}
     async with async_session_factory() as session:
-        await session.execute(
-            text("UPDATE servers SET security_level = :lv WHERE id = :sid"),
-            {"lv": level, "sid": server_id},
+        server = await session.scalar(
+            select(ServerModel).where(ServerModel.id == server_id).with_for_update()
+        )
+        if server is None:
+            return {"success": False, "error": "Server 不存在"}
+        server.security_level = level
+        if level == "blocked":
+            server.market_visible = False
+        session.add(
+            _audit_record(admin_user, f"调整安全等级: {server_id} → {level}")
         )
         await session.commit()
-    await _audit(admin_user, f"调整安全等级: {server_id} → {level}")
     return {"success": True, "message": f"已将 {server_id} 安全等级设为 {level}"}
 
 
@@ -1237,18 +1448,22 @@ async def admin_export_users(
         )
         rows = result.fetchall()
 
-    import csv
-    import io
-
     output = io.StringIO()
     w = csv.writer(output)
     w.writerow(["user_id", "display_name", "role", "created_at"])
     for r in rows:
-        w.writerow([r[0], r[1], r[2], str(r[3]) if r[3] else ""])
+        w.writerow(
+            [
+                _csv_cell(r[0]),
+                _csv_cell(r[1]),
+                _csv_cell(r[2]),
+                _csv_cell(r[3]),
+            ]
+        )
 
     return Response(
-        content=output.getvalue(),
-        media_type="text/csv",
+        content=f"\ufeff{output.getvalue()}",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=users.csv"},
     )
 
@@ -1270,18 +1485,15 @@ async def admin_export_servers(
         )
         rows = result.fetchall()
 
-    import csv
-    import io
-
     output = io.StringIO()
     w = csv.writer(output)
     w.writerow(["server_id", "name", "rating", "downloads", "security"])
     for r in rows:
-        w.writerow([r[0], r[1], r[2], r[3], r[4]])
+        w.writerow([_csv_cell(value) for value in r])
 
     return Response(
-        content=output.getvalue(),
-        media_type="text/csv",
+        content=f"\ufeff{output.getvalue()}",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=servers.csv"},
     )
 
@@ -1298,7 +1510,7 @@ async def admin_categories(
         {"id": "ai", "name": "AI & 机器学习", "icon": "🤖"},
         {"id": "browser", "name": "浏览器 & Web", "icon": "🌐"},
         {"id": "database", "name": "数据库", "icon": "🗄️"},
-        {"id": "developer", "name": "开发者工具", "icon": "🛠️"},
+        {"id": "developer-tools", "name": "开发者工具", "icon": "🛠️"},
         {"id": "filesystem", "name": "文件系统", "icon": "📁"},
         {"id": "communication", "name": "通信 & 消息", "icon": "💬"},
         {"id": "cloud", "name": "云服务 & DevOps", "icon": "☁️"},

@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
-import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet } from '../api/client'
+import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet, getMe } from '../api/client'
 import { NOTIFICATION_COUNT_EVENT } from '../utils/notifications'
 import McpWorkspaceNav from './McpWorkspaceNav'
 import TelemetryWorkspaceNav from './TelemetryWorkspaceNav'
@@ -38,6 +38,7 @@ function matchesRoute(pathname: string, prefixes: readonly string[]): boolean {
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const [auth, setAuthState] = useState<AuthState>({ token: null, userId: null })
+  const [isAdmin, setIsAdmin] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [unreadNotif, setUnreadNotif] = useState(0)
   // Dark mode
@@ -119,6 +120,22 @@ export default function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handler)
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!auth.token) {
+      setIsAdmin(false)
+      return () => { cancelled = true }
+    }
+    getMe()
+      .then(result => {
+        if (!cancelled) setIsAdmin((result.data?.role || result.role) === 'admin')
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false)
+      })
+    return () => { cancelled = true }
+  }, [auth.token])
+
   const handleLogin = () => {
     const popup = window.open('/api/v1/auth/login', 'github-oauth', 'width=600,height=700')
     if (!popup) { alert('请允许弹出窗口以完成登录'); return }
@@ -196,6 +213,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="flex-shrink-0 border-t border-gray-100 py-1 dark:border-gray-700">
+        {isAdmin && (
+          <Link to="/admin"
+            className="mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            title={sidebarCollapsed ? '管理后台' : undefined}>
+            <span aria-hidden="true">🛡️</span>
+            {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">管理后台</span>}
+          </Link>
+        )}
         <Link to="/guide"
           className="mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           title={sidebarCollapsed ? '指南' : undefined}>

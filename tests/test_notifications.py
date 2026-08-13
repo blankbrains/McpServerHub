@@ -7,7 +7,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
-from mcp_hub.api.routes_notifications import delete_notification, list_notifications, router
+from mcp_hub.api.routes_notifications import (
+    delete_notification,
+    list_notifications,
+    mark_all_read,
+    router,
+    unread_count,
+)
 from mcp_hub.db.database import async_session_factory, engine
 from mcp_hub.db.models import Base, NotificationModel
 
@@ -81,6 +87,42 @@ async def test_dismissing_an_active_alert_keeps_it_hidden_until_reconciled() -> 
         page_size=50,
     )
     assert response["data"]["items"] == []
+
+
+async def test_audit_records_stay_out_of_user_notifications() -> None:
+    _alice_notification, _bob_notification = await _prepare_notifications()
+    async with async_session_factory() as session:
+        audit = NotificationModel(
+            user_id="alice",
+            type="audit",
+            title="修改用户角色",
+            is_read=False,
+            status="active",
+        )
+        session.add(audit)
+        await session.commit()
+        audit_id = audit.id
+
+    listed = await list_notifications(
+        user_id="alice",
+        unread_only=False,
+        status="all",
+        page=1,
+        page_size=50,
+    )
+    assert [item["type"] for item in listed["data"]["items"]] == ["system"]
+
+    count = await unread_count(user_id="alice")
+    assert count["data"]["count"] == 1
+
+    await mark_all_read(user_id="alice")
+    async with async_session_factory() as session:
+        persisted_audit = await session.get(NotificationModel, audit_id)
+        assert persisted_audit is not None
+        assert persisted_audit.is_read is False
+
+    with pytest.raises(HTTPException, match="通知不存在"):
+        await delete_notification(audit_id, user_id="alice")
 
 
 def test_delete_notification_requires_authentication() -> None:

@@ -11,7 +11,7 @@ def test_frontend_exposes_opt_in_progress_and_explicit_assessment_answers() -> N
     telemetry_panel = (WEB_SRC / "components" / "TelemetryPanel.tsx").read_text(
         encoding="utf-8"
     )
-    analytics = (WEB_SRC / "pages" / "admin" / "AdminAnalytics.tsx").read_text(
+    validation = (WEB_SRC / "pages" / "admin" / "AdminValidation.tsx").read_text(
         encoding="utf-8"
     )
 
@@ -22,5 +22,5 @@ def test_frontend_exposes_opt_in_progress_and_explicit_assessment_answers() -> N
     assert "请为每一项验证结果明确选择" in telemetry_panel
     assert "type=\"radio\"" in telemetry_panel
     assert "connection_state_understood: null as boolean | null" in telemetry_panel
-    assert "/admin/analytics/user-validation" in analytics
-    assert "不显示用户、设备或本地配置" in analytics
+    assert "/admin/analytics/user-validation" in validation
+    assert "不展示用户身份或本地配置" in validation

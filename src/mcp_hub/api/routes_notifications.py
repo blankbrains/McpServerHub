@@ -42,7 +42,10 @@ async def list_notifications(
     """获取当前用户的通知列表（未读优先）。"""
     await evaluate_user_alerts_safely(user_id)
     async with async_session_factory() as session:
-        stmt = select(NotificationModel).where(NotificationModel.user_id == user_id)
+        stmt = select(NotificationModel).where(
+            NotificationModel.user_id == user_id,
+            NotificationModel.type != "audit",
+        )
         if unread_only:
             stmt = stmt.where(NotificationModel.is_read == False)  # noqa: E712
         if status != "all":
@@ -50,7 +53,8 @@ async def list_notifications(
 
         # 总数（使用 SQL COUNT，避免全量加载）
         total_stmt = select(func.count()).select_from(NotificationModel).where(
-            NotificationModel.user_id == user_id
+            NotificationModel.user_id == user_id,
+            NotificationModel.type != "audit",
         )
         if unread_only:
             total_stmt = total_stmt.where(NotificationModel.is_read == False)  # noqa: E712
@@ -62,6 +66,7 @@ async def list_notifications(
             .select_from(NotificationModel)
             .where(
                 NotificationModel.user_id == user_id,
+                NotificationModel.type != "audit",
                 NotificationModel.is_read == False,  # noqa: E712
                 NotificationModel.status == "active",
             )
@@ -188,7 +193,11 @@ async def mark_read(
     async with async_session_factory() as session:
         await session.execute(
             update(NotificationModel)
-            .where(NotificationModel.id == notif_id, NotificationModel.user_id == user_id)
+            .where(
+                NotificationModel.id == notif_id,
+                NotificationModel.user_id == user_id,
+                NotificationModel.type != "audit",
+            )
             .values(is_read=True)
         )
         await session.commit()
@@ -203,7 +212,11 @@ async def mark_all_read(
     async with async_session_factory() as session:
         await session.execute(
             update(NotificationModel)
-            .where(NotificationModel.user_id == user_id, NotificationModel.is_read == False)  # noqa: E712
+            .where(
+                NotificationModel.user_id == user_id,
+                NotificationModel.type != "audit",
+                NotificationModel.is_read == False,  # noqa: E712
+            )
             .values(is_read=True)
         )
         await session.commit()
@@ -221,6 +234,7 @@ async def delete_notification(
             select(NotificationModel).where(
                 NotificationModel.id == notif_id,
                 NotificationModel.user_id == user_id,
+                NotificationModel.type != "audit",
             )
         )
         if notification is None:
@@ -250,6 +264,7 @@ async def unread_count(
             await session.scalar(
                 select(func.count(NotificationModel.id)).where(
                     NotificationModel.user_id == user_id,
+                    NotificationModel.type != "audit",
                     NotificationModel.is_read == False,  # noqa: E712
                     NotificationModel.status == "active",
                 )

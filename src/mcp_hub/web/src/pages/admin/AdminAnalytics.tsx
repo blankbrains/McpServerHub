@@ -1,168 +1,190 @@
-import { useState, useEffect } from 'react'
+import { Children, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { apiGet } from '../../api/client'
 
-interface UserValidationAnalytics {
-  days: number
-  participants: {
-    total: number
-    by_role: Record<string, number>
-    targets: Record<string, number>
-  }
-  stages: Record<string, number>
-  metrics: {
-    first_call_median_minutes: number | null
-    connection_state_understood: { responses: number; yes: number; rate: number }
-    verify_without_logs: { responses: number; yes: number; rate: number }
-    recovery_succeeded: { responses: number; yes: number; rate: number }
-  }
+interface TrendPoint {
+  date: string
+  calls: number
+  tokens: number
+  active_users: number
+  active_servers: number
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  device_created: '创建设备',
-  setup_started: '开始接入',
-  setup_completed: '完成配置',
-  gateway_first_seen: 'Gateway 在线',
-  first_tool_call: '首次工具调用',
-  verify_failed: '验证发现问题',
-  verify_succeeded: '验证通过',
-  disconnect_completed: '安全断开',
-  restore_completed: '恢复完成',
+interface Ranking {
+  server_id?: string
+  user_id?: string
+  name?: string
+  display_name?: string
+  calls: number
+  tokens: number
+  installs?: number
+}
+
+function fmtNum(value: number | undefined): string {
+  const n = Number(value || 0)
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
 }
 
 export default function AdminAnalytics() {
-  const [days, setDays] = useState(7)
-  const [trend, setTrend] = useState<any[]>([])
-  const [topServers, setTopServers] = useState<any[]>([])
-  const [topUsers, setTopUsers] = useState<any[]>([])
-  const [validation, setValidation] = useState<UserValidationAnalytics | null>(null)
+  const [days, setDays] = useState(30)
+  const [metric, setMetric] = useState<'calls' | 'tokens'>('calls')
+  const [trend, setTrend] = useState<TrendPoint[]>([])
+  const [topServers, setTopServers] = useState<Ranking[]>([])
+  const [topUsers, setTopUsers] = useState<Ranking[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    setError(null)
+    setError('')
     Promise.all([
-      apiGet<any[]>(`/admin/analytics/daily?days=${days}`),
-      apiGet<any[]>(`/admin/analytics/top-servers?days=${days}`),
-      apiGet<any[]>(`/admin/analytics/top-users?days=${days}`),
-      apiGet<UserValidationAnalytics>(`/admin/analytics/user-validation?days=${days}`),
-    ]).then(([t, s, u, v]) => {
-      setTrend(t?.data || [])
-      setTopServers(s?.data || [])
-      setTopUsers(u?.data || [])
-      setValidation(v?.data || null)
-    }).catch(() => {
-      setError('加载分析数据失败')
-    }).finally(() => setLoading(false))
-  }, [days, reloadKey])
+      apiGet<TrendPoint[]>(`/admin/analytics/daily?days=${days}`),
+      apiGet<Ranking[]>(`/admin/analytics/top-servers?days=${days}&metric=${metric}`),
+      apiGet<Ranking[]>(`/admin/analytics/top-users?days=${days}&metric=${metric}`),
+    ])
+      .then(([trendResult, serverResult, userResult]) => {
+        if (cancelled) return
+        setTrend(trendResult.data || [])
+        setTopServers(serverResult.data || [])
+        setTopUsers(userResult.data || [])
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTrend([])
+          setTopServers([])
+          setTopUsers([])
+          setError('平台分析数据加载失败，请稍后重试')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [days, metric, reloadKey])
 
-  const maxCalls = Math.max(...trend.map((d: any) => d.calls), 1)
-
-  if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
-
-  if (error) return (
-    <div className="text-center py-16">
-      <p className="text-red-500 mb-4">{error}</p>
-      <button onClick={() => setReloadKey(value => value + 1)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">重试</button>
-    </div>
-  )
+  const maxValue = Math.max(...trend.map(point => metric === 'tokens' ? point.tokens : point.calls), 1)
+  const totalCalls = trend.reduce((sum, point) => sum + point.calls, 0)
+  const totalTokens = trend.reduce((sum, point) => sum + point.tokens, 0)
+  const peakUsers = Math.max(...trend.map(point => point.active_users), 0)
+  const peakServers = Math.max(...trend.map(point => point.active_servers), 0)
 
   return (
-    <div className="max-w-6xl space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📈 使用分析</h1>
-        <div className="flex gap-1">
-          {[7, 14, 30].map(d => (
-            <button key={d} onClick={() => setDays(d)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${days === d ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300'}`}>{d} 天</button>
-          ))}
+    <div className="max-w-6xl space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">OPERATIONS / TELEMETRY</p>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">📈 平台分析</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看所有账户的聚合 Gateway 遥测，不展示请求正文、响应正文或设备令牌。</p>
         </div>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-        <h2 className="font-semibold text-gray-900 dark:text-white mb-3">每日调用 + 估算 Token 趋势</h2>
-        <div className="flex items-end gap-1 h-44">
-          {trend.map((d: any) => (
-            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full" title={`${d.date}: ${d.calls} 调用, ${d.tokens} 估算 Token, ${d.active_users} 用户`}>
-              <div className="w-full bg-blue-500 dark:bg-blue-400 rounded-t-sm" style={{ height: `${Math.max((d.calls / maxCalls) * 100, 2)}%`, opacity: 0.4 + (d.tokens / Math.max(...trend.map((x: any) => x.tokens), 1)) * 0.6 }} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border p-5">
-          <h3 className="font-semibold mb-3 text-gray-900 dark:text-white">🏆 Top Server</h3>
-          <div className="space-y-1.5">
-            {topServers.map((s: any, i: number) => (
-              <div key={s.server_id} className="flex justify-between text-sm py-1">
-                <span className="text-gray-700 dark:text-gray-300">{i + 1}. {s.name || s.server_id}</span>
-                <span className="text-xs text-gray-400">📞 {s.calls} · 🔤 {s.tokens >= 1000 ? `${(s.tokens/1000).toFixed(1)}K` : s.tokens}</span>
-              </div>
+        <div className="flex flex-wrap gap-2">
+          <div className="flex border border-gray-300 dark:border-gray-600" role="group" aria-label="平台分析时间范围">
+            {[7, 30, 90].map(value => (
+              <button key={value} type="button" onClick={() => setDays(value)} className={`px-3 py-2 text-xs ${days === value ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+                {value} 天
+              </button>
             ))}
           </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border p-5">
-          <h3 className="font-semibold mb-3 text-gray-900 dark:text-white">👥 Top 用户</h3>
-          <div className="space-y-1.5">
-            {topUsers.map((u: any, i: number) => (
-              <div key={u.user_id} className="flex justify-between text-sm py-1">
-                <span className="text-gray-700 dark:text-gray-300">{i + 1}. {u.display_name || u.user_id}</span>
-                <span className="text-xs text-gray-400">📞 {u.calls} · 🔤 {u.tokens >= 1000 ? `${(u.tokens/1000).toFixed(1)}K` : u.tokens}</span>
-              </div>
+          <div className="flex border border-gray-300 dark:border-gray-600" role="group" aria-label="平台分析指标">
+            {(['calls', 'tokens'] as const).map(value => (
+              <button key={value} type="button" onClick={() => setMetric(value)} className={`px-3 py-2 text-xs ${metric === value ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+                {value === 'calls' ? '调用' : 'Token'}
+              </button>
             ))}
           </div>
+          <button type="button" onClick={() => setReloadKey(value => value + 1)} className="border border-gray-300 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
+            刷新
+          </button>
         </div>
-      </div>
+      </header>
 
-      <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-semibold text-gray-900 dark:text-white">用户验证进度</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              按所选时间范围内新加入的自愿参与者汇总，不显示用户、设备或本地配置。
-            </p>
-          </div>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            参与者 {validation?.participants.total ?? 0}
-          </span>
+      {error ? (
+        <div className="py-16 text-center text-red-600">
+          <p>{error}</p>
+          <button type="button" onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:underline">重试</button>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {[
-            ['个人 MCP 用户', 'individual_user'],
-            ['MCP Server 开发者', 'server_publisher'],
-            ['小型团队管理员', 'team_admin'],
-          ].map(([label, role]) => (
-            <div key={role} className="border border-gray-100 p-3 text-sm dark:border-gray-700">
-              <p className="text-gray-500 dark:text-gray-400">{label}</p>
-              <p className="mt-1 font-semibold text-gray-900 dark:text-white">
-                {validation?.participants.by_role[role] ?? 0} / {validation?.participants.targets[role] ?? 0}
-              </p>
+      ) : loading ? (
+        <div className="py-16 text-center text-sm text-gray-400">正在加载平台遥测...</div>
+      ) : (
+        <>
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="时间范围调用" value={fmtNum(totalCalls)} hint={`${days} 天内全部账号的真实工具调用`} />
+            <Metric label="时间范围 Token" value={fmtNum(totalTokens)} hint="Gateway 本地估算的 Token 总量" />
+            <Metric label="峰值活跃用户" value={fmtNum(peakUsers)} hint="单日产生调用的用户峰值" />
+            <Metric label="峰值活跃 Server" value={fmtNum(peakServers)} hint="单日产生调用的 Server 峰值" />
+          </section>
+
+          <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white">每日聚合趋势</h2>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">当前显示：{metric === 'calls' ? '调用次数' : '估算 Token'}。</p>
+              </div>
+              <span className="text-xs text-gray-400">数据口径：telemetry_events</span>
             </div>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {[
-            ['首次调用中位时间', validation?.metrics.first_call_median_minutes === null || validation?.metrics.first_call_median_minutes === undefined ? '暂无' : `${validation.metrics.first_call_median_minutes} 分钟`],
-            ['理解接入状态', `${validation?.metrics.connection_state_understood.rate ?? 0}%`],
-            ['无需日志完成验证', `${validation?.metrics.verify_without_logs.rate ?? 0}%`],
-            ['安全恢复符合预期', `${validation?.metrics.recovery_succeeded.rate ?? 0}%`],
-          ].map(([label, value]) => (
-            <div key={label} className="border-l-2 border-blue-500 bg-gray-50 px-3 py-2 dark:bg-gray-900">
-              <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-              <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(validation?.stages || {}).map(([stage, count]) => (
-            <div key={stage} className="flex items-center justify-between border-b border-gray-100 py-2 text-sm dark:border-gray-700">
-              <span className="text-gray-600 dark:text-gray-300">{STAGE_LABELS[stage] || stage}</span>
-              <span className="font-medium text-gray-900 dark:text-white">{count}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+            {trend.length > 0 ? (
+              <>
+                <div className="mt-5 flex h-48 items-end gap-1">
+                  {trend.map(point => {
+                    const value = metric === 'tokens' ? point.tokens : point.calls
+                    return (
+                      <div key={point.date} className="group flex h-full flex-1 items-end" title={`${point.date}: ${fmtNum(value)} ${metric === 'tokens' ? 'Token' : '调用'}`}>
+                        <div className="w-full rounded-t-sm bg-blue-500 transition-opacity group-hover:opacity-70 dark:bg-blue-400" style={{ height: `${Math.max((value / maxValue) * 100, 3)}%` }} />
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+                  <span>{trend[0]?.date}</span>
+                  <span>{trend[trend.length - 1]?.date}</span>
+                </div>
+              </>
+            ) : <div className="py-12 text-center text-sm text-gray-400">暂无平台遥测数据</div>}
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <RankingPanel title="🏆 活跃 Server" empty="暂无 Server 活跃数据">
+              {topServers.map((item, index) => (
+                <div key={item.server_id} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+                  <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {item.name || item.server_id}</span>
+                  <span className="shrink-0 text-xs text-gray-400">📞 {fmtNum(item.calls)} · 🔤 {fmtNum(item.tokens)}</span>
+                </div>
+              ))}
+            </RankingPanel>
+            <RankingPanel title="👥 活跃用户" empty="暂无用户活跃数据">
+              {topUsers.map((item, index) => (
+                <div key={item.user_id} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+                  <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {item.display_name || item.user_id}</span>
+                  <span className="shrink-0 text-xs text-gray-400">📞 {fmtNum(item.calls)} · 🔤 {fmtNum(item.tokens)}</span>
+                </div>
+              ))}
+            </RankingPanel>
+          </section>
+        </>
+      )}
     </div>
+  )
+}
+
+function Metric({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+      <p className="mt-1 text-sm font-medium text-gray-700 dark:text-gray-200">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-gray-400">{hint}</p>
+    </div>
+  )
+}
+
+function RankingPanel({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  const hasItems = Children.count(children) > 0
+  return (
+    <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+      <h2 className="font-semibold text-gray-900 dark:text-white">{title}</h2>
+      <div className="mt-2">{hasItems ? children : <p className="py-6 text-sm text-gray-400">{empty}</p>}</div>
+    </section>
   )
 }

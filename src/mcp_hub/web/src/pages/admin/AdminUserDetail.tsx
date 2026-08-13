@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { apiGet, apiPatch } from '../../api/client'
+import { apiGet, apiPatch, getAuthState } from '../../api/client'
 
 export default function AdminUserDetail() {
   const { userId } = useParams<{ userId: string }>()
+  const currentUserId = getAuthState().userId
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -49,12 +50,16 @@ export default function AdminUserDetail() {
     </div>
   )
 
-  const { profile, stats, servers, daily_trend, top_tools } = data
+  const { profile, stats, devices = [], servers, daily_trend, top_tools } = data
   const maxCalls = Math.max(...daily_trend.map((d: any) => d.calls), 1)
 
   return (
-    <div className="max-w-4xl space-y-5">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">👤 用户详情</h1>
+    <div className="max-w-5xl space-y-5">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">OPERATIONS / USER DETAIL</p>
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">👤 用户详情</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看账号使用情况、设备接入和 Gateway 运行状态。</p>
+      </header>
       {msg && <div className={`p-2 rounded-lg text-sm ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>}
 
       {/* Profile */}
@@ -68,6 +73,8 @@ export default function AdminUserDetail() {
               <span className={`text-xs px-2 py-0.5 rounded-full ${profile.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>{profile.role === 'admin' ? '🛡️ 管理员' : '👤 用户'}</span>
               {profile.role !== 'admin' ? (
                 <button onClick={() => changeRole('admin')} disabled={savingRole} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50">提升为管理员</button>
+              ) : profile.id === currentUserId ? (
+                <span className="text-xs text-gray-400">当前登录账号不可自我降级</span>
               ) : (
                 <button onClick={() => changeRole('user')} disabled={savingRole} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">降级为用户</button>
               )}
@@ -77,14 +84,57 @@ export default function AdminUserDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[['追踪 Server', stats.server_count], ['总调用', stats.total_calls >= 1000 ? `${(stats.total_calls/1000).toFixed(1)}K` : stats.total_calls], ['总估算 Token', stats.total_tokens >= 1000 ? `${(stats.total_tokens/1000).toFixed(1)}K` : stats.total_tokens], ['收藏', stats.favorite_count]].map(([l, v]) => (
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        {[
+          ['追踪 Server', stats.server_count],
+          ['总调用', stats.total_calls >= 1000 ? `${(stats.total_calls / 1000).toFixed(1)}K` : stats.total_calls],
+          ['总估算 Token', stats.total_tokens >= 1000 ? `${(stats.total_tokens / 1000).toFixed(1)}K` : stats.total_tokens],
+          ['收藏', stats.favorite_count],
+          ['设备', stats.device_count],
+          ['在线 Gateway', stats.online_device_count],
+        ].map(([l, v]) => (
           <div key={l as string} className="bg-white dark:bg-gray-800 rounded-xl border p-3 text-center">
             <p className="text-xl font-bold text-gray-900 dark:text-white">{v}</p>
             <p className="text-xs text-gray-500">{l}</p>
           </div>
         ))}
       </div>
+
+      <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-gray-900 dark:text-white">🖥️ 本地 Agent 设备</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">设备令牌归属于该账号；管理员只能查看接入状态，不能读取用户电脑配置或令牌。</p>
+          </div>
+          <span className="text-xs text-gray-400">{stats.online_device_count || 0} 台在线 / {devices.length} 台总计</span>
+        </div>
+        {devices.length === 0 ? (
+          <p className="py-8 text-sm text-gray-400">该用户尚未创建设备。</p>
+        ) : (
+          <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-700">
+            {devices.map((device: any) => (
+              <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${device.online ? 'bg-green-500' : device.revoked ? 'bg-red-500' : 'bg-gray-300'}`} />
+                    <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{device.name}</p>
+                    <span className="text-xs text-gray-400">{device.agent_type}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Gateway {device.gateway_version || '-'} · {device.platform || 'unknown'} · {device.server_count || 0} 个 Server
+                  </p>
+                </div>
+                <div className="text-right text-xs text-gray-400">
+                  <p className={device.online ? 'font-medium text-green-600' : device.revoked ? 'text-red-500' : 'text-gray-500'}>
+                    {device.revoked ? '已撤销' : device.online ? '在线' : device.connected ? '已接入，当前离线' : '未完成接入'}
+                  </p>
+                  <p className="mt-1">最后心跳：{device.last_seen_at ? device.last_seen_at.slice(0, 16) : '尚无'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Trend */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
