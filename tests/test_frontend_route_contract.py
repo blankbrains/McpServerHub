@@ -56,16 +56,13 @@ def test_workspace_navigation_keeps_related_pages_reachable_without_overloading_
     assert "状态总览" in workspace
     assert "配置与同步" not in workspace
     assert "本地清单" not in workspace
-    for label in (
-        "设备与接入",
-        "本地清单",
-        "运行监控",
-        "调用分析",
-        "告警",
-        "报告",
-        "用户验证",
-    ):
+    for label in ("设备与接入", "本地清单", "运行监控", "调用分析", "用户验证"):
         assert label in telemetry_workspace
+    assert "const deviceItems" in telemetry_workspace
+    assert "const monitorItems" in telemetry_workspace
+    assert "items === deviceItems ? '设备功能' : '监控功能'" in telemetry_workspace
+    assert "label: '告警'" not in telemetry_workspace
+    assert "label: '报告'" not in telemetry_workspace
     assert "to=\"/compare\"" in market
     assert "to=\"/builder\"" in publish
 
