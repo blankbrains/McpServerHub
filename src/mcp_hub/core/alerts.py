@@ -256,6 +256,9 @@ async def _sync_alert(
                 )
             )
             return
+        if alert.status == "suppressed":
+            alert.last_seen_at = now
+            return
         if alert.status != "active":
             alert.occurrence_count = int(alert.occurrence_count or 0) + 1
             alert.first_seen_at = now
@@ -270,7 +273,7 @@ async def _sync_alert(
         alert.observed_value = observed_value
         return
 
-    if alert is not None and alert.status == "active":
+    if alert is not None and alert.status in {"active", "suppressed"}:
         alert.status = "resolved"
         alert.resolved_at = now
         alert.last_seen_at = now
@@ -606,7 +609,10 @@ async def evaluate_user_alerts(
                         alert.last_seen_at = evaluated_at
                         alert.is_read = True
                         suppressed_count += 1
-                elif alert.alert_key not in observed_keys and alert.status == "active":
+                elif alert.alert_key not in observed_keys and alert.status in {
+                    "active",
+                    "suppressed",
+                }:
                     alert.status = "resolved"
                     alert.resolved_at = evaluated_at
                     alert.last_seen_at = evaluated_at

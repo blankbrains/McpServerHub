@@ -92,7 +92,7 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<NotifItem[]>([])
   const [rules, setRules] = useState<AlertRule[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [status, setStatus] = useState<AlertStatus>('all')
+  const [status, setStatus] = useState<AlertStatus>('active')
   const [loading, setLoading] = useState(true)
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -110,7 +110,7 @@ export default function NotificationsPage() {
     setLoading(true)
     try {
       const response = await apiGet<NotificationResponse>(
-        `/notifications?page_size=50&status=${nextStatus}`,
+        `/notifications?page_size=50&status=${nextStatus}&unread_only=${nextStatus === 'active'}`,
       )
       setItems(response.data.items)
       setUnreadCount(response.data.unread_count)
@@ -164,6 +164,9 @@ export default function NotificationsPage() {
     }
     try {
       await apiPost(`/notifications/${notification.id}/read`)
+      if (status === 'active') {
+        setItems(previous => previous.filter(item => item.id !== notification.id))
+      }
     } catch {
       setItems(previousItems)
       setUnreadCount(previousCount)
@@ -267,7 +270,7 @@ export default function NotificationsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">Operations</p>
             <h1 className="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">通知中心</h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              仅保留需要处理的 Gateway、Server 和本地配置变化。
+              默认仅显示尚未处理的活动告警。
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -375,7 +378,10 @@ export default function NotificationsPage() {
                   {notification.link && (
                     <Link
                       to={notification.link}
-                      onClick={event => event.stopPropagation()}
+                      onClick={event => {
+                        event.stopPropagation()
+                        void markRead(notification)
+                      }}
                       className="text-sm font-medium text-gray-700 underline-offset-4 hover:text-gray-950 hover:underline dark:text-gray-300 dark:hover:text-white"
                     >
                       查看
@@ -385,10 +391,14 @@ export default function NotificationsPage() {
                     type="button"
                     onClick={event => void deleteNotification(notification, event)}
                     disabled={deletingIds.has(notification.id)}
-                    aria-label={`删除通知：${notification.title}`}
+                    aria-label={`${notification.type === 'alert' && notification.status === 'active' ? '忽略' : '删除'}通知：${notification.title}`}
                     className="text-sm text-gray-400 underline-offset-4 hover:text-rose-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-rose-300"
                   >
-                    {deletingIds.has(notification.id) ? '删除中' : '删除'}
+                    {deletingIds.has(notification.id)
+                      ? '处理中'
+                      : notification.type === 'alert' && notification.status === 'active'
+                      ? '忽略'
+                      : '删除'}
                   </button>
                 </div>
               </article>

@@ -152,6 +152,60 @@ async def test_tool_error_alert_requires_five_calls_deduplicates_and_recovers() 
     assert alerts[0].resolved_at is not None
 
 
+async def test_dismissed_alert_stays_suppressed_until_the_condition_recovers() -> None:
+    user_id = "alert-dismissed-user"
+    await _prepare_alert_data(user_id)
+    async with async_session_factory() as session:
+        session.add(_device(user_id, "one"))
+        session.add_all(
+            [
+                _tool_event(user_id, index, occurred_at=_NOW - timedelta(minutes=index))
+                for index in range(5)
+            ]
+        )
+        await session.commit()
+
+    await evaluate_user_alerts(user_id, now=_NOW)
+    alerts = await _alerts_for(user_id, "tool_error_rate")
+    assert len(alerts) == 1
+    alerts[0].status = "suppressed"
+    alerts[0].is_read = True
+    async with async_session_factory() as session:
+        alert = await session.scalar(
+            select(NotificationModel).where(
+                NotificationModel.user_id == user_id,
+                NotificationModel.alert_rule == "tool_error_rate",
+            )
+        )
+        assert alert is not None
+        alert.status = "suppressed"
+        alert.is_read = True
+        await session.commit()
+
+    await evaluate_user_alerts(user_id, now=_NOW + timedelta(minutes=1))
+    alerts = await _alerts_for(user_id, "tool_error_rate")
+    assert alerts[0].status == "suppressed"
+    assert alerts[0].is_read is True
+
+    async with async_session_factory() as session:
+        session.add_all(
+            [
+                _tool_event(
+                    user_id,
+                    10 + index,
+                    status="ok",
+                    occurred_at=_NOW + timedelta(minutes=index + 2),
+                )
+                for index in range(15)
+            ]
+        )
+        await session.commit()
+
+    await evaluate_user_alerts(user_id, now=_NOW + timedelta(minutes=20))
+    alerts = await _alerts_for(user_id, "tool_error_rate")
+    assert alerts[0].status == "resolved"
+
+
 async def test_legacy_usage_errors_and_user_settings_are_isolated() -> None:
     alice = "alert-legacy-alice"
     bob = "alert-legacy-bob"

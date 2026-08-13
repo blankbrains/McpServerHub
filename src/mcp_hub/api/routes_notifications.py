@@ -34,8 +34,8 @@ class AlertPreferenceUpdate(BaseModel):
 @router.get("/notifications")
 async def list_notifications(
     user_id: str = Depends(get_current_user),
-    unread_only: bool = Query(False),
-    status: Literal["all", "active", "resolved", "suppressed"] = Query("all"),
+    unread_only: bool = Query(True),
+    status: Literal["all", "active", "resolved", "suppressed"] = Query("active"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ) -> dict[str, Any]:
@@ -215,7 +215,7 @@ async def delete_notification(
     notif_id: int,
     user_id: str = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """删除当前用户的一条通知。"""
+    """删除普通通知，或忽略当前活动告警直到其恢复。"""
     async with async_session_factory() as session:
         notification = await session.scalar(
             select(NotificationModel).where(
@@ -225,6 +225,15 @@ async def delete_notification(
         )
         if notification is None:
             raise HTTPException(status_code=404, detail="通知不存在")
+        if notification.type == "alert" and notification.status == "active":
+            notification.status = "suppressed"
+            notification.is_read = True
+            await session.commit()
+            return {
+                "success": True,
+                "data": {"dismissed": True},
+                "message": "告警已忽略，恢复后才会再次提醒",
+            }
         await session.delete(notification)
         await session.commit()
     return {"success": True, "message": "通知已删除"}
