@@ -7,6 +7,7 @@ import {
   apiPost,
   getAuthState,
 } from '../api/client'
+import { publishNotificationCount } from '../utils/notifications'
 
 type AlertStatus = 'all' | 'active' | 'resolved' | 'suppressed'
 
@@ -114,6 +115,7 @@ export default function NotificationsPage() {
       )
       setItems(response.data.items)
       setUnreadCount(response.data.unread_count)
+      publishNotificationCount(response.data.unread_count)
     } catch {
       setError('加载通知失败，请检查网络后重试。')
     } finally {
@@ -156,12 +158,14 @@ export default function NotificationsPage() {
     if (notification.is_read) return
     const previousItems = items
     const previousCount = unreadCount
+    const nextCount = notification.status === 'active'
+      ? Math.max(0, previousCount - 1)
+      : previousCount
     setItems(previous => previous.map(item => (
       item.id === notification.id ? { ...item, is_read: true } : item
     )))
-    if (notification.status === 'active') {
-      setUnreadCount(count => Math.max(0, count - 1))
-    }
+    setUnreadCount(nextCount)
+    publishNotificationCount(nextCount)
     try {
       await apiPost(`/notifications/${notification.id}/read`)
       if (status === 'active') {
@@ -170,6 +174,7 @@ export default function NotificationsPage() {
     } catch {
       setItems(previousItems)
       setUnreadCount(previousCount)
+      publishNotificationCount(previousCount)
       setError('标记已读失败。')
     }
   }
@@ -179,11 +184,14 @@ export default function NotificationsPage() {
     const previousCount = unreadCount
     setItems(previous => previous.map(item => ({ ...item, is_read: true })))
     setUnreadCount(0)
+    publishNotificationCount(0)
     try {
       await apiPost('/notifications/read-all')
+      if (status === 'active') setItems([])
     } catch {
       setItems(previousItems)
       setUnreadCount(previousCount)
+      publishNotificationCount(previousCount)
       setError('标记已读失败。')
     }
   }
@@ -193,16 +201,26 @@ export default function NotificationsPage() {
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.stopPropagation()
-    if (!window.confirm(`确定删除通知“${notification.title}”？此操作无法撤销。`)) return
+    const actionLabel = notification.type === 'alert' && notification.status === 'active'
+      ? '忽略告警'
+      : '删除通知'
+    if (!window.confirm(`确定${actionLabel}“${notification.title}”？`)) return
     setDeletingIds(previous => new Set(previous).add(notification.id))
     setError('')
+    const previousItems = items
+    const previousCount = unreadCount
     try {
       await apiDelete(`/notifications/${notification.id}`)
       setItems(previous => previous.filter(item => item.id !== notification.id))
       if (!notification.is_read && notification.status === 'active') {
-        setUnreadCount(previous => Math.max(0, previous - 1))
+        const nextCount = Math.max(0, previousCount - 1)
+        setUnreadCount(nextCount)
+        publishNotificationCount(nextCount)
       }
     } catch {
+      setItems(previousItems)
+      setUnreadCount(previousCount)
+      publishNotificationCount(previousCount)
       setError('删除通知失败，请稍后重试。')
     } finally {
       setDeletingIds(previous => {

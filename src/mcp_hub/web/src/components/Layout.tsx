@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
 import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet } from '../api/client'
+import { NOTIFICATION_COUNT_EVENT } from '../utils/notifications'
 import McpWorkspaceNav from './McpWorkspaceNav'
 import TelemetryWorkspaceNav from './TelemetryWorkspaceNav'
 
@@ -101,6 +102,15 @@ export default function Layout({ children }: { children: ReactNode }) {
     const t = setInterval(poll, 30000)
     return () => clearInterval(t)
   }, [auth.token])
+
+  useEffect(() => {
+    const updateCount = (event: Event) => {
+      const count = (event as CustomEvent<{ count?: number }>).detail?.count
+      if (typeof count === 'number') setUnreadNotif(Math.max(0, count))
+    }
+    window.addEventListener(NOTIFICATION_COUNT_EVENT, updateCount)
+    return () => window.removeEventListener(NOTIFICATION_COUNT_EVENT, updateCount)
+  }, [])
 
   useEffect(() => {
     setAuthState(getAuthState())

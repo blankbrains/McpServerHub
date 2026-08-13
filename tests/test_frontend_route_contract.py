@@ -104,3 +104,19 @@ def test_desktop_sidebar_keeps_auxiliary_actions_at_viewport_bottom() -> None:
 
     assert 'className="min-h-0 flex-1 overflow-y-auto py-1"' in layout
     assert 'className="flex-shrink-0 border-t border-gray-100 py-1' in layout
+
+
+def test_notification_actions_publish_unread_count_to_sidebar() -> None:
+    layout = (WEB_SRC / "components" / "Layout.tsx").read_text(encoding="utf-8")
+    notifications = (WEB_SRC / "pages" / "NotificationsPage.tsx").read_text(
+        encoding="utf-8"
+    )
+    utility = (WEB_SRC / "utils" / "notifications.ts").read_text(encoding="utf-8")
+
+    assert "NOTIFICATION_COUNT_EVENT" in utility
+    assert "window.dispatchEvent" in utility
+    assert "window.addEventListener(NOTIFICATION_COUNT_EVENT" in layout
+    assert '<Link to="/alerts"' in layout
+    assert "通知{unreadNotif > 0 ? ` (${unreadNotif})` : ''}" in layout
+    assert "publishNotificationCount(response.data.unread_count)" in notifications
+    assert "publishNotificationCount(0)" in notifications
