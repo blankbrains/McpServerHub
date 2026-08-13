@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Market from './pages/Market'
@@ -16,6 +16,8 @@ import ProfilePage from './pages/ProfilePage'
 import ComparePage from './pages/ComparePage'
 import NotificationsPage from './pages/NotificationsPage'
 import PresetMarket from './pages/PresetMarket'
+import ReportsPage from './pages/ReportsPage'
+import TelemetryPanel from './components/TelemetryPanel'
 import AdminLayout from './pages/admin/AdminLayout'
 import AdminOverview from './pages/admin/AdminOverview'
 import AdminUsers from './pages/admin/AdminUsers'
@@ -41,11 +43,17 @@ function HubRoutes() {
         <Route path="/publish" element={<Publish />} />
         <Route path="/publish/mine" element={<Publish />} />
         <Route path="/monitor" element={<MonitorDashboard />} />
-        <Route path="/local" element={<LocalDiscovery />} />
+        <Route path="/devices" element={<TelemetryPanel view="devices" />} />
+        <Route path="/inventory" element={<LocalDiscovery />} />
+        <Route path="/local" element={<Navigate to="/inventory" replace />} />
+        <Route path="/analytics" element={<TelemetryPanel view="analytics" />} />
+        <Route path="/validation" element={<TelemetryPanel view="validation" />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/guide" element={<Guide />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/compare" element={<ComparePage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/alerts" element={<NotificationsPage />} />
+        <Route path="/notifications" element={<Navigate to="/alerts" replace />} />
         <Route path="/presets" element={<PresetMarket />} />
       </Routes>
     </Layout>

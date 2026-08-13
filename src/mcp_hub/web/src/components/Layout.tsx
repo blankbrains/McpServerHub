@@ -2,12 +2,17 @@ import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
 import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet } from '../api/client'
 import McpWorkspaceNav from './McpWorkspaceNav'
+import TelemetryWorkspaceNav from './TelemetryWorkspaceNav'
 
 const navItems = [
   { path: '/', label: '概览', icon: '📊', matches: ['/'] },
   { path: '/market', label: '发现 MCP', icon: '🔎', matches: ['/market', '/servers', '/compare'] },
-  { path: '/my-servers', label: '我的 MCP', icon: '📦', matches: ['/my-servers', '/my-config', '/config', '/local'] },
-  { path: '/monitor', label: '监控', icon: '📈', matches: ['/monitor'] },
+  { path: '/my-servers', label: '我的 MCP', icon: '📦', matches: ['/my-servers'] },
+  { path: '/my-config', label: '配置', icon: '⚙️', matches: ['/my-config', '/config'] },
+  { path: '/devices', label: '设备', icon: '🖥️', matches: ['/devices', '/inventory', '/local'] },
+  { path: '/monitor', label: '监控', icon: '📈', matches: ['/monitor', '/analytics', '/validation'] },
+  { path: '/alerts', label: '告警', icon: '🔔', matches: ['/alerts', '/notifications'] },
+  { path: '/reports', label: '报告', icon: '📄', matches: ['/reports'] },
   { path: '/publish', label: '发布', icon: '📤', matches: ['/publish', '/builder'] },
 ] as const
 
@@ -15,8 +20,9 @@ const navItems = [
 const breadcrumbLabels: Record<string, string> = {
   '': '概览', guide: '指南', market: '发现 MCP', 'my-servers': '我的 MCP',
   'my-config': '配置与同步', compare: 'Server 对比', presets: '方案市场', builder: '项目脚手架',
-  monitor: '监控', local: '本地清单', publish: '发布', profile: '个人中心',
-  notifications: '通知', config: '配置中心', login: '登录',
+  monitor: '运行监控', devices: '设备与接入', inventory: '本地清单', local: '本地清单',
+  analytics: '调用分析', validation: '用户验证', alerts: '告警', reports: '报告',
+  publish: '发布', profile: '个人中心', notifications: '告警', config: '配置与同步', login: '登录',
   servers: 'Server 详情', admin: '管理后台',
 }
 
@@ -186,7 +192,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <span aria-hidden="true">📖</span>
           {!sidebarCollapsed && <span className="whitespace-nowrap text-xs">指南</span>}
         </Link>
-        <Link to="/notifications"
+        <Link to="/alerts"
           className="relative mx-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           title={sidebarCollapsed ? '通知' : undefined}>
           <span className="relative" aria-hidden="true">🔔
@@ -286,6 +292,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
           <main id="main-content" className="px-4 md:px-6 py-4 md:py-8">
             <McpWorkspaceNav />
+            <TelemetryWorkspaceNav />
             {children}
           </main>
         </div>

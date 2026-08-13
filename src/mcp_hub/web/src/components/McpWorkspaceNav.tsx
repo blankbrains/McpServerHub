@@ -2,8 +2,6 @@ import { Link, useLocation } from 'react-router-dom'
 
 const workspaceItems = [
   { path: '/my-servers', label: '状态总览', icon: '📦', matches: ['/my-servers'] },
-  { path: '/my-config', label: '配置与同步', icon: '⚙️', matches: ['/my-config', '/config'] },
-  { path: '/local', label: '本地清单', icon: '🔍', matches: ['/local'] },
 ] as const
 
 function matchesRoute(pathname: string, prefixes: readonly string[]): boolean {

@@ -212,7 +212,9 @@ function formatUptime(value: number): string {
   return days > 0 ? `${days} 天 ${hours} 小时` : `${hours} 小时`
 }
 
-export default function TelemetryPanel() {
+type TelemetryView = 'devices' | 'analytics' | 'validation'
+
+export default function TelemetryPanel({ view }: { view: TelemetryView }) {
   const [summary, setSummary] = useState<TelemetrySummary | null>(null)
   const [servers, setServers] = useState<TelemetryServer[]>([])
   const [devices, setDevices] = useState<TelemetryDevice[]>([])
@@ -277,11 +279,44 @@ export default function TelemetryPanel() {
       setLoading(true)
       setError('')
       try {
+        if (view === 'devices') {
+          const [connectionStatusResult, devicesResult, agentsResult] = await Promise.all([
+            apiGet<ConnectionStatusData>('/telemetry/connection-status'),
+            apiGet<TelemetryDevice[]>('/telemetry/devices'),
+            apiGet<{ days: number; agents: TelemetryAgentSummary[] }>('/telemetry/agents?days=7'),
+          ])
+          if (!active) return
+          setConnectionStatus(connectionStatusResult.data)
+          setDevices(devicesResult.data || [])
+          setAgents(agentsResult.data?.agents || [])
+          return
+        }
+
+        if (view === 'validation') {
+          const [contributionResult, validationResult] = await Promise.all([
+            apiGet<TelemetryContributionConsent>('/telemetry/contribution-consent'),
+            apiGet<UserValidationProgress>('/telemetry/user-validation'),
+          ])
+          if (!active) return
+          setContributionEnabled(Boolean(contributionResult.data?.enabled))
+          const progress = validationResult.data || null
+          setValidationProgress(progress)
+          if (progress) {
+            setValidationRole(progress.participant_role)
+            if (progress.assessment) {
+              setValidationAnswers({
+                connection_state_understood: progress.assessment.connection_state_understood,
+                verify_without_logs: progress.assessment.verify_without_logs,
+                recovery_succeeded: progress.assessment.recovery_succeeded,
+              })
+            }
+          }
+          return
+        }
+
         const [
-          connectionStatusResult,
           summaryResult,
           serversResult,
-          devicesResult,
           agentsResult,
           toolsResult,
           timeseriesResult,
@@ -289,13 +324,9 @@ export default function TelemetryPanel() {
           errorsResult,
           operationsResult,
           lifecycleResult,
-          contributionResult,
-          validationResult,
         ] = await Promise.all([
-          apiGet<ConnectionStatusData>('/telemetry/connection-status'),
           apiGet<TelemetrySummary>(`/telemetry/summary?days=${days}${query}`),
           apiGet<{ days: number; servers: TelemetryServer[] }>(`/telemetry/servers?days=${days}${query}`),
-          apiGet<TelemetryDevice[]>('/telemetry/devices'),
           apiGet<{ days: number; agents: TelemetryAgentSummary[] }>(`/telemetry/agents?days=${days}`),
           apiGet<{ days: number; tools: TelemetryTool[] }>(`/telemetry/tools?days=${days}${query}`),
           apiGet<{ days: number; points: TelemetryPoint[] }>(`/telemetry/timeseries?days=${days}${query}`),
@@ -303,14 +334,10 @@ export default function TelemetryPanel() {
           apiGet<{ days: number; errors: TelemetryError[] }>(`/telemetry/errors?days=${days}${query}`),
           apiGet<{ days: number; operations: TelemetryOperation[] }>(`/telemetry/operations?days=${days}${query}`),
           apiGet<{ days: number; events: TelemetryLifecycleEvent[] }>(`/telemetry/lifecycle?days=${days}${query}`),
-          apiGet<TelemetryContributionConsent>('/telemetry/contribution-consent'),
-          apiGet<UserValidationProgress>('/telemetry/user-validation'),
         ])
         if (!active) return
-        setConnectionStatus(connectionStatusResult.data)
         setSummary(summaryResult.data)
         setServers(serversResult.data?.servers || [])
-        setDevices(devicesResult.data || [])
         setAgents(agentsResult.data?.agents || [])
         setTools(toolsResult.data?.tools || [])
         setPoints(timeseriesResult.data?.points || [])
@@ -318,19 +345,6 @@ export default function TelemetryPanel() {
         setErrors(errorsResult.data?.errors || [])
         setOperations(operationsResult.data?.operations || [])
         setLifecycleEvents(lifecycleResult.data?.events || [])
-        setContributionEnabled(Boolean(contributionResult.data?.enabled))
-        const progress = validationResult.data || null
-        setValidationProgress(progress)
-        if (progress) {
-          setValidationRole(progress.participant_role)
-          if (progress.assessment) {
-            setValidationAnswers({
-              connection_state_understood: progress.assessment.connection_state_understood,
-              verify_without_logs: progress.assessment.verify_without_logs,
-              recovery_succeeded: progress.assessment.recovery_succeeded,
-            })
-          }
-        }
       } catch {
         if (active) setError('遥测数据加载失败，请稍后重试。')
       } finally {
@@ -342,7 +356,7 @@ export default function TelemetryPanel() {
     return () => {
       active = false
     }
-  }, [days, refreshVersion, selectedAgent])
+  }, [days, refreshVersion, selectedAgent, view])
 
   const refresh = () => {
     setRefreshVersion((version) => version + 1)
@@ -501,23 +515,31 @@ export default function TelemetryPanel() {
     <section className="space-y-4" aria-labelledby="telemetry-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 id="telemetry-heading" className="text-xl font-bold text-gray-900">本地 MCP 监控</h2>
+          <h2 id="telemetry-heading" className="text-xl font-bold text-gray-900">
+            {view === 'devices' ? '设备与接入' : view === 'validation' ? '用户验证' : '调用分析'}
+          </h2>
           <p className="mt-1 text-sm text-gray-500">
-            来自已授权本地 <InfoTooltip description="Gateway 是部署在本地 Agent 与 MCP Server 之间的转发程序，用于在不上传请求内容的前提下采集调用指标。">Gateway</InfoTooltip> 的真实调用、延迟、错误与 <InfoTooltip description="Token 是模型处理文本时使用的计量单位。这里是根据调用载荷估算的数量，不会上传原始提示词或响应内容。">估算载荷 Token</InfoTooltip>。
+            {view === 'devices'
+              ? '管理已授权的本地 Agent 设备，并完成 Gateway 接入和恢复操作。'
+              : view === 'validation'
+              ? '管理自愿参与的用户验证进度与结果，不记录本地配置或调用内容。'
+              : <>查看来自已授权本地 <InfoTooltip description="Gateway 是部署在本地 Agent 与 MCP Server 之间的转发程序，用于在不上传请求内容的前提下采集调用指标。">Gateway</InfoTooltip> 的真实调用、延迟、错误与 <InfoTooltip description="Token 是模型处理文本时使用的计量单位。这里是根据调用载荷估算的数量，不会上传原始提示词或响应内容。">估算载荷 Token</InfoTooltip>。</>}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={days}
-            onChange={(event) => setDays(Number(event.target.value))}
-            aria-label="监控时间范围"
-            className="border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value={1}>最近 24 小时</option>
-            <option value={7}>最近 7 天</option>
-            <option value={30}>最近 30 天</option>
-            <option value={90}>最近 90 天</option>
-          </select>
+          {view === 'analytics' && (
+            <select
+              value={days}
+              onChange={(event) => setDays(Number(event.target.value))}
+              aria-label="监控时间范围"
+              className="border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={1}>最近 24 小时</option>
+              <option value={7}>最近 7 天</option>
+              <option value={30}>最近 30 天</option>
+              <option value={90}>最近 90 天</option>
+            </select>
+          )}
           <button
             type="button"
             onClick={refresh}
@@ -535,9 +557,9 @@ export default function TelemetryPanel() {
         </div>
       )}
 
-      <ConnectionStatusPanel data={connectionStatus} loading={loading} />
+      {view === 'devices' && <ConnectionStatusPanel data={connectionStatus} loading={loading} />}
 
-      <div className="border border-gray-200 bg-white px-4 py-3">
+      {view === 'validation' && <div className="border border-gray-200 bg-white px-4 py-3">
         <label className="flex cursor-pointer items-start gap-3">
           <input
             type="checkbox"
@@ -553,9 +575,9 @@ export default function TelemetryPanel() {
             </span>
           </span>
         </label>
-      </div>
+      </div>}
 
-      <div className="border border-gray-200 bg-white px-4 py-4">
+      {view === 'validation' && <div className="border border-gray-200 bg-white px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">用户验证</h3>
@@ -655,9 +677,9 @@ export default function TelemetryPanel() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="border border-blue-200 bg-blue-50 px-4 py-5">
+      {view === 'devices' && <div className="border border-blue-200 bg-blue-50 px-4 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="font-semibold text-gray-900">首次接入：按顺序完成</h3>
@@ -710,9 +732,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             </ul>
           </div>
         </details>
-      </div>
+      </div>}
 
-      {loading && !summary ? (
+      {view === 'analytics' && (loading && !summary ? (
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">正在加载遥测数据...</div>
       ) : (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
@@ -732,9 +754,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             </div>
           ))}
         </div>
-      )}
+      ))}
 
-      <div className="border border-gray-200 bg-white p-4">
+      {view === 'analytics' && <div className="border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="font-semibold text-gray-900">调用趋势</h3>
           <p className="text-xs text-gray-500">调用、错误与平均延迟按天聚合</p>
@@ -769,9 +791,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="按 Agent 筛选遥测数据">
+      {view === 'analytics' && <div className="flex flex-wrap gap-2" role="group" aria-label="按 Agent 筛选遥测数据">
         <button
           type="button"
           onClick={() => setSelectedAgent('')}
@@ -803,15 +825,17 @@ mcp-hub agent doctor --agent codex`}</pre>
             </button>
           )
         })}
-      </div>
+      </div>}
 
-      {agents.length > 0 && (
+      {view === 'analytics' && agents.length > 0 && (
         <p className="text-xs text-gray-500">
           每个 Agent 使用独立设备令牌和本地队列。事件归属由服务端根据令牌绑定，客户端上报的身份不会被采信。
         </p>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      {(view === 'analytics' || view === 'devices') && (
+      <div className={view === 'devices' ? '' : 'grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]'}>
+        {view === 'analytics' && (
         <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-4 py-3">
             <h3 className="font-semibold text-gray-900">Server 调用情况</h3>
@@ -845,7 +869,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             </div>
           )}
         </div>
+        )}
 
+        {view === 'devices' && (
         <div id="telemetry-device-management" className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="font-semibold text-gray-900"><InfoTooltip description="设备是某个本地 Agent 的独立遥测身份。它的令牌只可用于上报指标，不能作为网页登录凭证。">本地 Agent 设备</InfoTooltip></h3>
           <p className="mt-1 text-xs text-gray-500">
@@ -987,9 +1013,11 @@ mcp-hub agent doctor --agent codex`}</pre>
             ))}
           </ul>
         </div>
+        )}
       </div>
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      {view === 'analytics' && <div className="grid gap-4 xl:grid-cols-2">
         <div className="overflow-hidden border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-4 py-3">
             <h3 className="font-semibold text-gray-900">工具调用</h3>
@@ -1056,9 +1084,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
-      <div className="border border-gray-200 bg-white">
+      {view === 'analytics' && <div className="border border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h3 className="font-semibold text-gray-900">错误分类</h3>
           <span className="text-xs text-gray-500">不上传错误正文</span>
@@ -1077,9 +1105,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             ))}
           </ul>
         )}
-      </div>
+      </div>}
 
-      <div className="border border-gray-200 bg-white">
+      {view === 'analytics' && <div className="border border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h3 className="font-semibold text-gray-900">Server 生命周期</h3>
           <span className="text-xs text-gray-500">启动、停止、初始化失败与意外退出</span>
@@ -1101,9 +1129,9 @@ mcp-hub agent doctor --agent codex`}</pre>
             ))}
           </ul>
         )}
-      </div>
+      </div>}
 
-      <div className="border border-gray-200 bg-white">
+      {view === 'analytics' && <div className="border border-gray-200 bg-white">
         <div className="border-b border-gray-200 px-4 py-3">
           <h3 className="font-semibold text-gray-900">MCP 协议操作</h3>
         </div>
@@ -1122,7 +1150,7 @@ mcp-hub agent doctor --agent codex`}</pre>
             ))}
           </div>
         )}
-      </div>
+      </div>}
     </section>
   )
 }

@@ -164,14 +164,14 @@ export default function Dashboard() {
               label="7 天调用"
               value={fmtNum(telemetry?.total_calls || 0)}
               description="本地 Gateway 在过去 7 天真实上报的工具调用次数。"
-              to="/monitor"
+              to="/analytics"
               tone="blue"
             />
             <Stat
               label="7 天估算 Token"
               value={fmtNum(telemetry?.total_tokens || 0)}
               description="根据 MCP 请求和响应载荷估算，不等同于模型供应商账单。"
-              to="/monitor"
+              to="/analytics"
               tone="amber"
             />
           </section>
@@ -207,7 +207,7 @@ export default function Dashboard() {
               ) : (
                 <EmptyState
                   title="尚无本地状态"
-                  description="先从市场添加 Server，再在监控页创建设备并运行一键接入命令。"
+                  description="先从市场添加 Server，再在设备页创建设备并运行一键接入命令。"
                   to="/market"
                   action="浏览市场"
                 />
@@ -223,8 +223,8 @@ export default function Dashboard() {
                 <MetricRow label="P95 延迟" value={`${telemetry?.p95_duration_ms || 0} ms`} />
                 <MetricRow label="待传队列" value={telemetry?.current_queue_depth || 0} />
               </div>
-              <Link to="/monitor" className="block rounded-md bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white hover:bg-gray-800">
-                打开监控详情
+              <Link to="/devices" className="block rounded-md bg-gray-900 px-3 py-2 text-center text-sm font-medium text-white hover:bg-gray-800">
+                管理设备与接入
               </Link>
             </aside>
           </section>

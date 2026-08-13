@@ -21,30 +21,70 @@ def test_literal_navigation_targets_are_registered_routes() -> None:
     assert missing == [], f"Literal navigation targets without a registered route: {missing}"
 
 
-def test_primary_navigation_is_limited_to_core_product_workflows() -> None:
+def test_primary_navigation_separates_core_product_workflows() -> None:
     layout = (WEB_SRC / "components" / "Layout.tsx").read_text(encoding="utf-8")
     nav_block = re.search(r"const navItems = \[(.*?)\] as const", layout, re.DOTALL)
 
     assert nav_block is not None
     nav_source = nav_block.group(1)
-    for label in ("概览", "发现 MCP", "我的 MCP", "监控", "发布"):
+    for label in (
+        "概览",
+        "发现 MCP",
+        "我的 MCP",
+        "配置",
+        "设备",
+        "监控",
+        "告警",
+        "报告",
+        "发布",
+    ):
         assert f"label: '{label}'" in nav_source
-    for redundant_label in ("指南", "配置", "对比", "方案", "构建", "发现", "个人中心"):
+    for redundant_label in ("指南", "对比", "方案", "构建", "个人中心"):
         assert f"label: '{redundant_label}'" not in nav_source
 
 
-def test_my_mcp_workspace_keeps_configuration_and_inventory_reachable() -> None:
+def test_workspace_navigation_keeps_related_pages_reachable_without_overloading_my_mcp() -> None:
     workspace = (WEB_SRC / "components" / "McpWorkspaceNav.tsx").read_text(
         encoding="utf-8"
     )
+    telemetry_workspace = (
+        WEB_SRC / "components" / "TelemetryWorkspaceNav.tsx"
+    ).read_text(encoding="utf-8")
     market = (WEB_SRC / "pages" / "Market.tsx").read_text(encoding="utf-8")
     publish = (WEB_SRC / "pages" / "Publish.tsx").read_text(encoding="utf-8")
 
     assert "状态总览" in workspace
-    assert "配置与同步" in workspace
-    assert "本地清单" in workspace
+    assert "配置与同步" not in workspace
+    assert "本地清单" not in workspace
+    for label in (
+        "设备与接入",
+        "本地清单",
+        "运行监控",
+        "调用分析",
+        "告警",
+        "报告",
+        "用户验证",
+    ):
+        assert label in telemetry_workspace
     assert "to=\"/compare\"" in market
     assert "to=\"/builder\"" in publish
+
+
+def test_split_workflow_routes_keep_legacy_urls_available() -> None:
+    app_source = (WEB_SRC / "App.tsx").read_text(encoding="utf-8")
+
+    for route in (
+        "/devices",
+        "/inventory",
+        "/analytics",
+        "/alerts",
+        "/reports",
+        "/validation",
+        "/config",
+        "/local",
+        "/notifications",
+    ):
+        assert f'path="{route}"' in app_source
 
 
 def test_desktop_sidebar_keeps_auxiliary_actions_at_viewport_bottom() -> None:

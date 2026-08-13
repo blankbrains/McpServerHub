@@ -358,7 +358,7 @@ export default function ConfigPage() {
           请在监控页为当前 Agent 创建设备后使用“复制一键接入命令”。命令会先备份原配置，再迁移 stdio、Streamable HTTP 和 SSE Server。
         </p>
         <div className="flex gap-2">
-          <button onClick={() => navigate('/monitor')}
+          <button onClick={() => navigate('/devices')}
             className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
             创建设备并接入
           </button>
@@ -388,7 +388,7 @@ export default function ConfigPage() {
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
           复制自检命令
           </button>
-          <button onClick={() => navigate('/local')}
+          <button onClick={() => navigate('/inventory')}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors disabled:opacity-50">
           查看设备清单
           </button>
