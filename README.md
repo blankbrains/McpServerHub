@@ -1,15 +1,26 @@
 <div align="center">
 
-# <img src="https://raw.githubusercontent.com/blankbrains/McpServerHub/main/logo.svg" width="40" height="40" style="vertical-align:middle" alt="M"> MCP Server Hub
+# <img src="logo.svg" width="44" height="44" style="vertical-align:middle" alt="MCP Server Hub Logo"> MCP Server Hub
 
-**发现、配置、代理、监控和发布 MCP Server**
+**MCP Server 的发现、配置、接入、监控与发布平台**
 
+发现 · 配置 · Gateway · 监控 · 告警 · 发布
+
+[![Version](https://img.shields.io/badge/version-0.3.2-3b82f6?style=flat-square)](https://github.com/blankbrains/McpServerHub/releases/tag/v0.3.2)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-00a393?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![PostgreSQL 16+](https://img.shields.io/badge/PostgreSQL-16%2B-316192?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
+[![CI](https://img.shields.io/github/actions/workflow/status/blankbrains/McpServerHub/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/blankbrains/McpServerHub/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](https://opensource.org/licenses/MIT)
 
+<br>
+
+[产品模块](#modules) · [核心能力](#features) · [快速开始](#quick-start) · [CLI](#cli) · [部署](#deployment) · [开发](#development) · [文档](#documentation)
+
 </div>
+
+---
 
 MCP Server Hub 是一个面向 MCP Server 的发现、配置、Gateway 接入、运行监控和发布平台。它由两部分组成：
 
@@ -24,30 +35,38 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
                          +-> 中心 Hub：设备、调用、延迟、错误、资源和估算 Token
 ```
 
-浏览器不会扫描用户电脑。只有经过本地 Gateway 的调用才会产生个人监控数据；Agent 直接连接 MCP Server 时，Hub 无法观察该调用。
+> 🔒 **隐私边界**
+>
+> 浏览器不会扫描用户电脑。只有经过本地 Gateway 的调用才会产生个人监控数据；Agent 直接连接 MCP Server 时，Hub 无法观察该调用。
 
-## 当前版本
+---
+
+## 🏷️ 当前版本
 
 - 当前稳定版本：`0.3.2`
 - 稳定安装入口：GitHub Tag `v0.3.2`
 - PyPI 发布状态：暂缓，**不要使用 PyPI 安装命令**
 - `main` 只作为测试通道，不保证与生产环境兼容
 
-## 产品模块
+---
+
+<a id="modules"></a>
+
+## 🧭 产品模块
 
 网页左侧按工作目标拆分为以下入口：
 
 | 模块 | 用途 |
 |------|------|
-| 概览 | 查看账户状态、近期运行摘要和市场推荐 |
-| 发现 MCP | 搜索、筛选、对比、收藏和查看 MCP Server |
-| 我的 MCP | 管理个人追踪列表、状态、收藏和配置冲突 |
-| 配置 | 上传、检查、追踪和导出 Agent 配置 |
-| 设备 | 管理本地 Agent 设备令牌和 Gateway 接入 |
-| 监控 | 查看本地 Server 运行状态和监控摘要 |
-| 告警 | 查看、处理和调整 Gateway、Server 与配置告警 |
-| 报告 | 导出当前账户的聚合遥测报告 |
-| 发布 | 创建、编辑、审核和发布 MCP Server |
+| 🏠 **概览** | 查看账户状态、近期运行摘要和市场推荐 |
+| 🔎 **发现 MCP** | 搜索、筛选、对比、收藏和查看 MCP Server |
+| 📦 **我的 MCP** | 管理个人追踪列表、状态、收藏和配置冲突 |
+| ⚙️ **配置** | 上传、检查、追踪和导出 Agent 配置 |
+| 💻 **设备** | 管理本地 Agent 设备令牌和 Gateway 接入 |
+| 📊 **监控** | 查看本地 Server 运行状态和监控摘要 |
+| 🔔 **告警** | 查看、处理和调整 Gateway、Server 与配置告警 |
+| 📄 **报告** | 导出当前账户的聚合遥测报告 |
+| 🚀 **发布** | 创建、编辑、审核和发布 MCP Server |
 
 设备模块内部包含：
 
@@ -60,11 +79,15 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
 - 调用分析
 - 用户验证
 
-告警在左侧独立入口中保留。左下角的“通知”入口也会保留，并显示当前未读数量；处理通知后数量会立即同步。
+> 🔔 告警在左侧独立入口中保留。左下角的“通知”入口也会保留，并显示当前未读数量；处理通知后数量会立即同步。
 
-## 核心能力
+---
 
-### 市场与社区
+<a id="features"></a>
+
+## ✨ 核心能力
+
+### 🏪 市场与社区
 
 - 搜索、筛选、排序和查看 MCP Server。
 - 查看安全状态、版本、许可证、来源和兼容性。
@@ -72,7 +95,7 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
 - 收藏、评分、评价和查看热门/高评分条目。
 - 发布和维护自己的 MCP Server。
 
-### 个人配置与追踪
+### 📦 个人配置与追踪
 
 - 保存当前账户的 MCP Server 追踪关系。
 - 从市场条目或本地配置加入追踪列表。
@@ -80,7 +103,7 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
 - 查看市场状态、Gateway 状态、运行状态、真实调用状态、配置一致性和安全状态。
 - 管理配置草稿、方案市场和多 Agent 配置导出。
 
-### 本地 Gateway
+### 🔌 本地 Gateway
 
 - 支持迁移可安全代理的 stdio、Streamable HTTP 和 SSE Server。
 - 保留 Server 的 `args`、`env`、请求头和工作目录。
@@ -88,7 +111,7 @@ AI Agent -> 本地 mcp-hub Gateway -> 本地或远程 MCP Server
 - 支持断开、恢复、诊断、版本检查和队列重试。
 - 本地 Agent 令牌只用于遥测上报，不能作为网页登录凭证。
 
-### 监控与报告
+### 📊 监控与报告
 
 Gateway 可上报以下聚合指标：
 
@@ -102,7 +125,7 @@ Gateway 可上报以下聚合指标：
 
 报告只包含聚合指标，不包含原始请求、响应或凭证。
 
-### 告警
+### 🔔 告警
 
 告警按账户、设备和 Server 范围聚合，避免同一问题重复刷屏。当前覆盖：
 
@@ -123,7 +146,7 @@ Gateway 可上报以下聚合指标：
 
 查看活动告警会标记为已读并从默认待处理列表移除。忽略活动告警会保留状态，直到问题恢复；恢复后才允许新的异常重新提醒。
 
-### 本地发现与隐私
+### 🛡️ 本地发现与隐私
 
 本地清单只展示已授权设备主动上报的脱敏摘要。不会上传或展示：
 
@@ -136,7 +159,7 @@ Gateway 可上报以下聚合指标：
 
 Token 指标根据工具定义或 MCP 调用载荷估算，不等同于模型供应商账单。
 
-### 自托管进程管理
+### 🖥️ 自托管进程管理
 
 Hub 主机上的 MCP Server 进程管理默认关闭。只有明确配置：
 
@@ -146,11 +169,15 @@ MCP_HUB_ALLOW_SERVER_PROCESS_MANAGEMENT=true
 
 并由受信任管理员使用时，才可启用安装、启动、停止、重启、更新和日志操作。普通用户的个人追踪、Gateway 监控和自托管 Hub 主机进程管理是不同边界。
 
-## 快速开始：连接现有 Hub
+---
+
+<a id="quick-start"></a>
+
+## 🚀 快速开始：连接现有 Hub
 
 这是普通用户最短的接入路径。它只在用户自己的电脑安装 CLI/Gateway，不会安装或修改远程 Hub。
 
-### 1. 安装 uv 和 mcp-hub CLI
+### 1. 📥 安装 uv 和 mcp-hub CLI
 
 Windows PowerShell：
 
@@ -209,7 +236,7 @@ where.exe mcp-hub
 
 不要把“在 D 盘目录执行命令”解释为“安装到 D 盘”；工具位置由 uv 环境变量决定。完整 Windows 安装说明见[安装与部署指南](deploy/install.md)。
 
-### 2. 检查 Hub 网络
+### 2. 🌐 检查 Hub 网络
 
 ```bash
 curl "http://<Hub地址>:3987/api/v1/health"
@@ -217,7 +244,7 @@ curl "http://<Hub地址>:3987/api/v1/health"
 
 响应中的 `status` 应为 `healthy`。如果无法访问，检查 Hub 地址、端口、防火墙、VPN 和局域网连通性。
 
-### 3. 登录网页并创建设备
+### 3. 🔑 登录网页并创建设备
 
 1. 在网页完成 GitHub 登录。
 2. 打开左侧“设备”。
@@ -227,7 +254,7 @@ curl "http://<Hub地址>:3987/api/v1/health"
 
 设备令牌只显示一次。不要截图、提交到 Git、写入公开文档或发送给他人。令牌泄露后应立即在网页撤销并重新创建。
 
-### 4. 确认 Agent 已经有 MCP Server
+### 4. 🔎 确认 Agent 已经有 MCP Server
 
 `agent setup` 负责迁移已有连接，不会替你创建第一个 MCP Server。目标 Agent 至少需要一个可用的 stdio、Streamable HTTP 或 SSE Server。
 
@@ -245,7 +272,7 @@ curl "http://<Hub地址>:3987/api/v1/health"
 
 网页配置检查目前只支持根节点包含 `mcpServers` 对象的 JSON。Codex TOML、根节点为 `servers` 的 JSON 和复杂多 Agent 配置请使用 CLI。
 
-### 5. 执行接入命令并完全重启 Agent
+### 5. 🔌 执行接入命令并完全重启 Agent
 
 示例：
 
@@ -266,7 +293,7 @@ CLI 会在确认后：
 
 完成后必须**完全重启 Agent**：退出目标 Agent 的所有进程，再重新打开。仅关闭对话、刷新窗口或重新加载页面通常不够。
 
-### 6. 触发真实调用并验证
+### 6. ✅ 触发真实调用并验证
 
 让 Agent 实际调用一次已经经过 Gateway 的 MCP 工具，再打开网页“监控”或“调用分析”刷新。
 
@@ -283,7 +310,7 @@ mcp-hub agent doctor --agent codex
 
 `agent verify` 会检查 Agent 入口、Gateway 配置、命令和 cwd、本地遥测队列、Hub 网络、设备令牌、Gateway 心跳和首次真实工具调用。默认只读；只有显式执行 `--fix` 并确认预览后才会修改可安全判定的本地状态。
 
-### 7. 后续同步追踪列表
+### 7. 🔄 后续同步追踪列表
 
 网页调整“我的 MCP”后，在本地同步 Gateway：
 
@@ -293,9 +320,13 @@ mcp-hub config sync --agent codex --server http://<Hub地址>:3987
 
 同步只更新 Gateway 管理清单，写入前会确认并备份，保留本地环境变量、请求头和工作目录。同步后需要重启 Agent。
 
-## CLI 常用命令
+---
 
-### 市场与社区
+<a id="cli"></a>
+
+## ⌨️ CLI 常用命令
+
+### 🔎 市场与社区
 
 ```bash
 mcp-hub search database
@@ -309,7 +340,7 @@ mcp-hub rate <server-id> 5
 mcp-hub review <server-id> "你的评价"
 ```
 
-### Agent 与 Gateway
+### 🔌 Agent 与 Gateway
 
 ```bash
 mcp-hub agent setup --agent codex --hub-url <url> --telemetry-token <token>
@@ -327,7 +358,7 @@ mcp-hub self rollback
 
 `self rollback` 只接受稳定的 `v<major>.<minor>.<patch>` Tag，不能回滚到 `main`。
 
-### Official MCP Registry
+### 🌍 Official MCP Registry
 
 ```bash
 mcp-hub registry-sync --source official
@@ -337,7 +368,7 @@ mcp-hub registry-sync --source official
 
 对于远程 `streamable-http` 和 SSE 条目，使用生成的结构化 MCP 配置。Hub 不猜测本地 `npx`、`pip` 或其他启动命令，也不保存或导出请求头、Token、认证值、URL 模板变量或上游原始载荷。
 
-### 本地 Hub 和自托管 Server
+### 🖥️ 本地 Hub 和自托管 Server
 
 ```bash
 # 本机快速启动，使用 SQLite
@@ -354,7 +385,9 @@ mcp-hub logs <server-id> -f
 
 运行 `mcp-hub --help` 或 `mcp-hub <command> --help` 查看完整参数。
 
-## 本机 Quickstart
+---
+
+## ⚡ 本机 Quickstart
 
 Quickstart 适合个人本机验证，使用 SQLite 并只监听 `127.0.0.1`。从源码构建前端后安装：
 
@@ -394,7 +427,11 @@ MCP_HUB_GITHUB_REDIRECT_URI
 
 直接从 GitHub URL 安装 CLI 时，未跟踪的 `web/static` 不会进入安装包；这种方式适合连接已有 Hub，不适合启动完整网页 Hub。
 
-## Docker Compose 部署
+---
+
+<a id="deployment"></a>
+
+## 🐳 Docker Compose 部署
 
 Docker Compose 会启动 PostgreSQL 和 Hub。先准备 `.env`，至少包含：
 
@@ -422,7 +459,9 @@ docker compose down
 
 生产部署中的环境变量、数据库密码和 OAuth Secret 只应放在未提交的环境文件或秘密管理系统中。不要把 `.env`、Token 或真实凭证提交到 Git。
 
-## systemd 部署
+---
+
+## ⚙️ systemd 部署
 
 仓库提供：
 
@@ -453,7 +492,9 @@ mcp_hub.api.app:create_app --factory
 
 不要把生产环境的 `.env`、数据库连接串、JWT Secret 或 GitHub OAuth Secret 放进仓库。完整部署、Windows 路径、Gateway 接入、排障、Docker 和 systemd 说明见[安装与部署指南](deploy/install.md)。
 
-## 关键边界
+---
+
+## 🛡️ 关键边界
 
 | 项目 | 实际行为 |
 |------|----------|
@@ -466,7 +507,9 @@ mcp_hub.api.app:create_app --factory
 | 告警 | 基于脱敏摘要聚合，查看会标记已读，忽略活动告警会持续隐藏直到恢复 |
 | 自托管进程管理 | 默认关闭，只适用于可信 Hub 主机上的管理员 |
 
-## API 和健康检查
+---
+
+## 🩺 API 和健康检查
 
 默认 API 前缀：
 
@@ -488,7 +531,11 @@ mcp_hub.api.app:create_app
 
 生产默认端口为 `3987`。PostgreSQL 用于生产，SQLite 适合 Quickstart 和测试。
 
-## 开发
+---
+
+<a id="development"></a>
+
+## 🛠️ 开发
 
 要求：
 
@@ -563,13 +610,19 @@ python -m twine check --strict dist/*
 
 每个确认的 Bug 都应包含回归测试。不要通过删除断言、降低检查级别或吞掉异常来让测试通过。
 
-## 文档
+---
+
+<a id="documentation"></a>
+
+## 📚 文档
 
 - [安装与部署指南](deploy/install.md)：CLI 安装、Gateway 接入、排障、Docker 和 systemd。
 - [AI Agent 安装说明](deploy/install-skillhub.md)：供自动化代理执行的最小安全流程。
 - [贡献指南](CONTRIBUTING.md)：开发环境、检查命令和 Pull Request 要求。
 
-## 贡献
+---
+
+## 🤝 贡献
 
 提交代码前请阅读[贡献指南](CONTRIBUTING.md)。Pull Request 应说明：
 
@@ -580,6 +633,14 @@ python -m twine check --strict dist/*
 
 提交前检查是否包含 `.env`、凭证、计划文档或本地运维信息。
 
-## 许可证
+---
+
+## 📄 许可证
 
 MIT © 2026 McpServerHub
+
+---
+
+<div align="center">
+  <sub>为开放、可观测且可控的 MCP 生态而构建</sub>
+</div>
