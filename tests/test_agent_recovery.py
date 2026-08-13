@@ -300,6 +300,33 @@ def test_disconnect_is_idempotent_and_does_not_create_another_backup(
     assert list(tmp_path.glob("mcp.json.mcp-hub-backup-*")) == backups_after_first
 
 
+def test_disconnect_human_output_describes_the_actual_operation(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    source = tmp_path / "mcp.json"
+    _json_source(source)
+    state_dir = tmp_path / "state"
+    setup = _run_setup(monkeypatch, source, state_dir, agent_type="cursor")
+    assert setup.exit_code == 0, setup.output
+
+    result = CliRunner().invoke(
+        agent,
+        [
+            "disconnect",
+            "--agent",
+            "cursor",
+            "--state-dir",
+            str(state_dir),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "已断开 Gateway 并恢复原 Server 直连" in result.output
+    assert "已恢复 Agent 配置" not in result.output
+
+
 def test_disconnect_preview_requires_confirmation_and_is_read_only(
     monkeypatch,
     tmp_path,

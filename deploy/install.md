@@ -4,7 +4,7 @@
 
 ## 1. 安装 CLI
 
-当前稳定版本 `0.3.1` 尚未发布到 PyPI，请从 GitHub 稳定 Tag 安装。
+当前稳定版本 `0.3.2` 尚未发布到 PyPI，请从 GitHub 稳定 Tag 安装。
 
 ### 安装 uv
 
@@ -23,7 +23,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 安装 mcp-hub
 
 ```bash
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"
 uv tool update-shell
 ```
 
@@ -60,7 +60,7 @@ uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@mai
 关闭并重新打开终端，再安装和检查路径：
 
 ```powershell
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"
 uv tool update-shell
 
 uv tool dir
@@ -214,11 +214,11 @@ CLI 会先展示修复预览并要求确认。涉及 Agent 配置时会先创建
 
 ```bash
 mcp-hub self check
-mcp-hub self check --hub-url http://<Hub地址>:3987 --gateway-version 0.2.0
+mcp-hub self check --hub-url http://<Hub地址>:3987 --gateway-version 0.3.0
 mcp-hub self upgrade
 mcp-hub self upgrade --channel test
 mcp-hub self rollback
-mcp-hub self rollback --to v0.2.0
+mcp-hub self rollback --to v0.3.0
 ```
 
 `self upgrade` 成功后才会在本地状态目录记录升级历史；`--dry-run` 可用于只查看命令。`self rollback` 只接受 `v<major>.<minor>.<patch>` 稳定 Tag，不能回滚到 `main` 或任意分支。升级、回滚均不修改 Agent 配置和设备令牌，重启 Agent 后新的 Gateway 进程才会生效。

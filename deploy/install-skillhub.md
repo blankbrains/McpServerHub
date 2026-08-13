@@ -4,10 +4,10 @@
 
 ## 安装 CLI
 
-当前稳定版本 `0.3.1` 尚未发布到 PyPI。不要执行 PyPI 安装命令，使用稳定 Tag：
+当前稳定版本 `0.3.2` 尚未发布到 PyPI。不要执行 PyPI 安装命令，使用稳定 Tag：
 
 ```bash
-uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"
+uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"
 uv tool update-shell
 mcp-hub --version
 ```

@@ -911,7 +911,7 @@ async def ingest_telemetry_events(
                     session,
                     user_id=identity.user_id,
                     stage="gateway_first_seen",
-                    occurred_at=received_at,
+                    occurred_at=latest_event_at,
                 )
             if data.source == "gateway" and tool_call_times:
                 await _record_validation_stage(
@@ -993,7 +993,7 @@ async def ingest_telemetry_inventory(
                     session,
                     user_id=identity.user_id,
                     stage="gateway_first_seen",
-                    occurred_at=received_at,
+                    occurred_at=observed_at,
                 )
             if data.configuration_errors:
                 device.last_error_code = data.configuration_errors[-1].error_code

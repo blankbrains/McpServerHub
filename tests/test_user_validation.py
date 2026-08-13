@@ -216,6 +216,53 @@ async def test_validation_starts_at_explicit_enrollment_without_replaying_histor
     }
 
 
+async def test_validation_does_not_backfill_stale_gateway_events_or_inventory() -> None:
+    await _prepare_validation_data()
+    created = await create_telemetry_device(
+        DeviceCreateRequest(name="Existing workstation", agent_type="codex"),
+        _USER_ID,
+    )
+    identity = await get_telemetry_identity(f"Bearer {created['data']['token']}")
+    stale_time = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    await update_user_validation_enrollment(
+        UserValidationEnrollmentUpdate(enabled=True),
+        user_id=_USER_ID,
+    )
+    await ingest_telemetry_events(
+        TelemetryBatchRequest(
+            source="gateway",
+            session_id="validation-stale-gateway-session",
+            events=[
+                TelemetryEventInput(
+                    event_id="validation-stale-gateway-event",
+                    event_type="heartbeat",
+                    occurred_at=stale_time,
+                )
+            ],
+        ),
+        identity,
+    )
+    await ingest_telemetry_inventory(
+        InventorySnapshotRequest(
+            event_id="validation-stale-gateway-inventory",
+            source="gateway",
+            session_id="validation-stale-inventory-session",
+            gateway_version="0.3.1",
+            runtime_version="3.13.0",
+            platform="windows",
+            architecture="amd64",
+            servers=[],
+            configuration_errors=[],
+            reported_at=stale_time,
+        ),
+        identity,
+    )
+
+    progress = await get_user_validation(user_id=_USER_ID)
+    assert progress["data"]["stages"] == []
+
+
 async def test_validation_records_only_authoritative_or_allowed_stages() -> None:
     await _prepare_validation_data()
     _created, identity = await _enrolled_device()

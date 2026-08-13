@@ -451,7 +451,7 @@ async def test_inventory_is_device_scoped_redacted_and_detects_conflicts() -> No
     assert claude_device["version_compatibility"]["status"] == "upgrade_recommended"
     assert (
         claude_device["version_compatibility"]["upgrade_command"]
-        == 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"'
+        == 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"'
     )
     assert claude_device["runtime_version"] == "3.10.14"
     assert claude_device["platform"] == "linux"

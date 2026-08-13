@@ -554,11 +554,18 @@ def _run_agent_recovery(
         )
         return
 
-    if result.changed:
-        click.echo(f"已恢复 Agent 配置，断开前备份: {result.backup_path}")
+    if operation == "disconnect":
+        if result.changed:
+            click.echo(f"已断开 Gateway 并恢复原 Server 直连，备份: {result.backup_path}")
+        else:
+            click.echo("当前配置已处于断开结果，未重复写入。")
+        click.echo("请完全退出并重新打开 Agent，使直连配置生效。")
     else:
-        click.echo("当前配置已是恢复结果，未重复写入。")
-    click.echo("请完全退出并重新打开 Agent，使直连配置生效。")
+        if result.changed:
+            click.echo(f"已恢复 Agent 配置，恢复前备份: {result.backup_path}")
+        else:
+            click.echo("当前配置已是恢复结果，未重复写入。")
+        click.echo("请完全退出并重新打开 Agent，使恢复配置生效。")
     click.echo("设备令牌不会自动撤销；如需停止 Hub 上报，请在网页单独撤销设备。")
 
 

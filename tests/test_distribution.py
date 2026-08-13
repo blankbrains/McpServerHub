@@ -25,10 +25,23 @@ def test_distribution_exposes_only_unique_cli_command() -> None:
         (root / "src" / "mcp_hub" / "web" / "package-lock.json").read_text(encoding="utf-8")
     )
 
-    assert pyproject["project"]["version"] == __version__ == "0.3.1"
+    assert pyproject["project"]["version"] == __version__ == "0.3.2"
     assert web_package["version"] == __version__
     assert web_lock["version"] == __version__
     assert web_lock["packages"][""]["version"] == __version__
     assert pyproject["project"]["scripts"] == {
         "mcp-hub": "mcp_hub.cli.app:cli",
     }
+
+
+def test_install_script_uses_the_current_stable_tag_without_pypi_fallback() -> None:
+    root = Path(__file__).parents[1]
+    script = (root / "deploy" / "install.sh").read_text(encoding="utf-8")
+
+    assert f'STABLE_TAG="v{__version__}"' in script
+    assert 'uv tool install --force "git+${REPOSITORY}@${STABLE_TAG}"' in script
+    assert "pip install mcp-hub-cli" not in script
+    assert "pip3 install" not in script
+    assert "pipx install" not in script
+    assert "mcp-hub install" not in script
+    assert "npx -y" not in script

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"'
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"'
 const WINDOWS_D_DRIVE_INSTALL_COMMAND = `[Environment]::SetEnvironmentVariable("UV_TOOL_DIR", "D:\\uv\\tools", "User")
 [Environment]::SetEnvironmentVariable("UV_TOOL_BIN_DIR", "D:\\uv\\bin", "User")
 [Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "D:\\uv\\cache", "User")
@@ -32,7 +32,7 @@ function buildSteps(hubUrl: string): GuideStep[] {
       num: 2,
       title: '安装 uv 和 mcp-hub CLI',
       icon: '⬇️',
-      description: '当前稳定版为 0.3.1，尚未发布到 PyPI，请从 GitHub Tag 安装。这一步只在你的电脑上安装 CLI 和本地 Gateway，不会修改 Hub 服务器、GitHub 仓库或项目代码。运行 uv tool update-shell 后必须关闭并重新打开终端。',
+      description: '当前稳定版为 0.3.2，尚未发布到 PyPI，请从 GitHub Tag 安装。这一步只在你的电脑上安装 CLI 和本地 Gateway，不会修改 Hub 服务器、GitHub 仓库或项目代码。运行 uv tool update-shell 后必须关闭并重新打开终端。',
       code: `${CLI_INSTALL_COMMAND}
 uv tool update-shell
 mcp-hub --version`,

@@ -205,37 +205,42 @@ async def publisher_compatibility_feedback(
 
     safe_aliases = await _safe_local_aliases(server)
     async with async_session_factory() as session:
-        eligible_users = (
-            select(UserServerModel.user_id)
+        eligible_events = (
+            select(
+                TelemetryEventModel.id,
+                TelemetryEventModel.user_id,
+            )
+            .select_from(TelemetryEventModel)
+            .join(
+                UserServerModel,
+                (UserServerModel.user_id == TelemetryEventModel.user_id)
+                & (UserServerModel.server_id == server_id),
+            )
             .join(
                 TelemetryContributionConsentModel,
-                TelemetryContributionConsentModel.user_id == UserServerModel.user_id,
+                TelemetryContributionConsentModel.user_id
+                == TelemetryEventModel.user_id,
             )
             .join(
                 TelemetryInventoryModel,
-                (TelemetryInventoryModel.user_id == UserServerModel.user_id)
-                & TelemetryInventoryModel.server_name.in_(safe_aliases)
+                (TelemetryInventoryModel.user_id == TelemetryEventModel.user_id)
+                & (TelemetryInventoryModel.device_id == TelemetryEventModel.device_id)
+                & (TelemetryInventoryModel.server_name == TelemetryEventModel.server_id)
                 & TelemetryInventoryModel.active.is_(True),
             )
             .where(
-                UserServerModel.server_id == server_id,
                 UserServerModel.user_id != user_id,
                 UserServerModel.matched.is_(True),
                 TelemetryContributionConsentModel.enabled.is_(True),
-            )
-            .distinct()
-            .subquery()
-        )
-        contributor_events = (
-            select(TelemetryEventModel.user_id)
-            .where(
-                TelemetryEventModel.user_id.in_(select(eligible_users.c.user_id)),
                 TelemetryEventModel.server_id.in_(safe_aliases),
                 TelemetryEventModel.event_type == "tool_call",
                 TelemetryEventModel.occurred_at >= since,
             )
             .distinct()
             .subquery()
+        )
+        contributor_events = (
+            select(eligible_events.c.user_id).distinct().subquery()
         )
         contributor_count = int(
             await session.scalar(select(func.count()).select_from(contributor_events)) or 0
@@ -252,10 +257,7 @@ async def publisher_compatibility_feedback(
             return {"success": True, "data": payload}
 
         event_filters = [
-            TelemetryEventModel.user_id.in_(select(contributor_events.c.user_id)),
-            TelemetryEventModel.server_id.in_(safe_aliases),
-            TelemetryEventModel.event_type == "tool_call",
-            TelemetryEventModel.occurred_at >= since,
+            TelemetryEventModel.id.in_(select(eligible_events.c.id)),
         ]
         summary = (
             await session.execute(

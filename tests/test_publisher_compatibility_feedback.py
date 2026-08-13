@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 
 from mcp_hub.api.routes_publish import publisher_compatibility_feedback
 from mcp_hub.api.routes_telemetry import (
@@ -260,6 +260,49 @@ async def test_publisher_feedback_rejects_non_owner_and_ambiguous_local_names() 
 
 async def test_publisher_feedback_requires_five_contributors_with_actual_calls() -> None:
     await _prepare_feedback_data(active_contributor_count=4)
+
+    response = await publisher_compatibility_feedback(
+        _SERVER_ID,
+        user_id=_PUBLISHER,
+    )
+
+    assert response["data"] == {
+        "server_id": _SERVER_ID,
+        "days": 30,
+        "available": False,
+        "minimum_contributors": 5,
+        "contributor_cohort": "",
+    }
+
+
+async def test_publisher_feedback_requires_active_inventory_on_the_calling_device() -> None:
+    await _prepare_feedback_data()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    alternate_ids = [f"feedback-secondary-device-{index}" for index in range(6)]
+
+    async with async_session_factory() as session:
+        await session.execute(
+            delete(TelemetryDeviceModel).where(
+                TelemetryDeviceModel.id.in_(alternate_ids)
+            )
+        )
+        for index, contributor in enumerate(_CONTRIBUTORS):
+            alternate_id = alternate_ids[index]
+            session.add(
+                TelemetryDeviceModel(
+                    id=alternate_id,
+                    user_id=contributor,
+                    name=f"secondary-device-{index}",
+                    agent_type="codex",
+                    token_hash=_device_token_hash(alternate_id),
+                )
+            )
+            await session.execute(
+                update(TelemetryEventModel)
+                .where(TelemetryEventModel.id == f"feedback-event-{index:02d}")
+                .values(device_id=alternate_id, occurred_at=now)
+            )
+        await session.commit()
 
     response = await publisher_compatibility_feedback(
         _SERVER_ID,

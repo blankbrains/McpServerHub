@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
+from mcp_hub import __version__
 from mcp_hub.api.routes_config import download_config, generate_config
 from mcp_hub.api.routes_export import export_config, export_telemetry_report
 from mcp_hub.api.routes_export import router as export_router
@@ -213,7 +214,7 @@ async def test_config_export_is_user_scoped_and_does_not_create_temp_files(
     assert set(config["mcpServers"]) == {"alice-private"}
     assert config["_meta"] == {
         "exported_by": "mcp-hub",
-        "version": "0.2.0",
+        "version": __version__,
         "server_count": 1,
     }
 

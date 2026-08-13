@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy import case, func, select
 
+from mcp_hub import __version__
 from mcp_hub.api.dependencies import get_current_user
 from mcp_hub.api.routes_config import download_config
 from mcp_hub.db.database import async_session_factory
@@ -42,7 +43,7 @@ async def export_config(
     if share:
         config["_meta"] = {
             "exported_by": "mcp-hub",
-            "version": "0.2.0",
+            "version": __version__,
             "server_count": len(server_configs) if isinstance(server_configs, dict) else 0,
         }
 

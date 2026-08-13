@@ -162,7 +162,7 @@ const AGENT_OPTIONS = [
   { id: 'generic', label: '通用 MCP 客户端' },
 ] as const
 
-const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.1"'
+const CLI_INSTALL_COMMAND = 'uv tool install --force "git+https://github.com/blankbrains/McpServerHub.git@v0.3.2"'
 
 const VALIDATION_ROLE_OPTIONS: Array<{ id: ValidationParticipantRole; label: string }> = [
   { id: 'individual_user', label: '个人 MCP 用户' },
