@@ -63,5 +63,5 @@ def test_client_compatibility_is_public_and_returns_safe_policy() -> None:
     assert payload["success"] is True
     assert payload["data"]["hub_version"] == __version__
     assert payload["data"]["cli"]["status"] == "upgrade_recommended"
-    assert payload["data"]["gateway"]["status"] == "current"
+    assert payload["data"]["gateway"]["status"] == "upgrade_recommended"
     assert "token" not in str(payload).lower()
