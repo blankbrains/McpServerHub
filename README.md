@@ -31,34 +31,15 @@ MCP Server Hub 是一个面向 MCP Server 的发现、配置、Gateway 接入、
 
 ```mermaid
 flowchart LR
-    agent["🤖 AI Agent<br/>Codex / Claude Code / Cursor"]
-    gateway["🔌 本地 mcp-hub Gateway<br/>代理连接 · 记录指标 · 可靠上报"]
-    local["🖥️ 本地 MCP Server<br/>stdio"]
-    remote["☁️ 远程 MCP Server<br/>Streamable HTTP / SSE"]
-    hub["🌐 中心 Hub<br/>账户 · 设备 · 市场 · 监控 · 告警 · 报告"]
-    telemetry["📊 脱敏遥测<br/>调用量 · 成功率 · 延迟 · 错误 · 资源 · 估算 Token"]
-
-    agent -->|"MCP 请求 / 工具调用"| gateway
-    gateway -->|"本地进程代理"| local
-    gateway -->|"远程协议代理"| remote
-    gateway -->|"仅上报聚合指标"| telemetry
-    telemetry -->|"HTTPS / API"| hub
-
-    classDef actor fill:#eef2ff,stroke:#6366f1,color:#1e1b4b
-    classDef gateway fill:#ecfeff,stroke:#0891b2,color:#164e63
-    classDef server fill:#f0fdf4,stroke:#16a34a,color:#14532d
-    classDef hub fill:#fff7ed,stroke:#ea580c,color:#7c2d12
-    classDef data fill:#f8fafc,stroke:#64748b,color:#1e293b
-
-    class agent actor
-    class gateway gateway
-    class local,remote server
-    class hub hub
-    class telemetry data
+    user["👤 用户 / 浏览器"] -->|"登录、配置、查看数据"| hub["🌐 中心 Hub"]
+    agent["🤖 AI Agent"] -->|"MCP 请求"| gateway["🔌 本地 mcp-hub Gateway"]
+    gateway -->|"代理工具调用"| server["🧩 本地或远程 MCP Server"]
+    gateway -->|"上报脱敏指标"| hub
+    hub -->|"📊 监控、🔔 告警、📄 报告"| user
 ```
 
-**请求链路**：AI Agent → 本地 Gateway → 本地或远程 MCP Server。<br>
-**观测链路**：本地 Gateway → 脱敏遥测 → 中心 Hub。<br>
+**McpServerHub 的工作方式**：用户先在中心 Hub 的网页中管理 MCP Server、设备和配置；AI Agent 运行在用户自己的电脑上，通过本地 `mcp-hub Gateway` 访问本地或远程 MCP Server。Gateway 在代理调用的同时生成脱敏遥测，并上报到中心 Hub，网页再展示监控、告警和报告。
+
 **中心 Hub 不直接连接用户电脑，也不会观察未经过本地 Gateway 的直连调用。**
 
 > 🔒 **隐私边界**
