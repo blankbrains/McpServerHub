@@ -44,7 +44,11 @@ async def _prepare_admin_filter_data() -> None:
 
     async with async_session_factory() as session:
         user_ids = ["admin-filter-admin", "admin-filter-user"]
-        server_ids = ["@admin-filter/verified", "@admin-filter/blocked"]
+        server_ids = [
+            "@admin-filter/verified",
+            "@admin-filter/blocked",
+            "@admin-filter/tools",
+        ]
         await session.execute(
             delete(UsageStatsModel).where(UsageStatsModel.server_id.in_(server_ids))
         )
@@ -69,6 +73,13 @@ async def _prepare_admin_filter_data() -> None:
                     name="blocked",
                     security_level="blocked",
                     install_command="npx blocked",
+                ),
+                ServerModel(
+                    id="@admin-filter/tools",
+                    name="tools",
+                    security_level="reviewed",
+                    install_command="npx tools",
+                    categories='["tools"]',
                 ),
                 UsageStatsModel(
                     user_id="admin-filter-user",
@@ -151,6 +162,31 @@ async def test_admin_categories_use_market_category_ids() -> None:
 
     assert "developer" not in categories
     assert categories["developer-tools"]["count"] >= 1
+    assert categories["tools"]["count"] >= 1
+
+
+async def test_admin_category_filter_matches_exact_json_item() -> None:
+    await _prepare_admin_filter_data()
+
+    tools = await admin_servers(
+        category="tools",
+        page=1,
+        page_size=20,
+        admin_user="test-admin",
+    )
+    developer_tools = await admin_servers(
+        category="developer-tools",
+        page=1,
+        page_size=20,
+        admin_user="test-admin",
+    )
+
+    assert [server["server_id"] for server in tools["data"]] == [
+        "@admin-filter/tools"
+    ]
+    assert [server["server_id"] for server in developer_tools["data"]] == [
+        "@admin-filter/verified"
+    ]
 
 
 async def test_admin_analytics_respects_metric_selection() -> None:

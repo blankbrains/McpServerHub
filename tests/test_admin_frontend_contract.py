@@ -57,3 +57,11 @@ def test_admin_audit_and_role_controls_keep_safety_boundaries_visible() -> None:
     assert "上一页" in audit
     assert "下一页" in audit
     assert "当前登录账号不可自我降级" in user_detail
+
+
+def test_admin_server_detail_metrics_are_responsive() -> None:
+    server_detail = (
+        WEB_SRC / "pages" / "admin" / "AdminServerDetail.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "grid grid-cols-2 gap-3 sm:grid-cols-4" in server_detail

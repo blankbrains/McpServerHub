@@ -84,6 +84,17 @@ def _gateway_online_cutoff() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=3)
 
 
+def _category_filter(category: str) -> ColumnElement[bool]:
+    """Match one exact string item in the JSON-encoded categories array."""
+    escaped = (
+        category.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+        .replace('"', '\\"')
+    )
+    return ServerModel.categories.ilike(f'%"{escaped}"%', escape="\\")
+
+
 def _csv_cell(value: Any) -> str:
     """Prevent spreadsheet formula execution when exported CSV is opened."""
     text_value = "" if value is None else str(value)
@@ -741,7 +752,7 @@ async def admin_servers(
                 (ServerModel.id.ilike(f"%{q}%")) | (ServerModel.name.ilike(f"%{q}%"))
             )
         if category:
-            count_stmt = count_stmt.where(ServerModel.categories.ilike(f"%{category}%"))
+            count_stmt = count_stmt.where(_category_filter(category))
         if security_level:
             count_stmt = count_stmt.where(ServerModel.security_level == security_level)
         total = (await session.execute(count_stmt)).scalar() or 0
@@ -754,7 +765,7 @@ async def admin_servers(
         if q:
             stmt = stmt.where((ServerModel.id.ilike(f"%{q}%")) | (ServerModel.name.ilike(f"%{q}%")))
         if category:
-            stmt = stmt.where(ServerModel.categories.ilike(f"%{category}%"))
+            stmt = stmt.where(_category_filter(category))
         if security_level:
             stmt = stmt.where(ServerModel.security_level == security_level)
 
@@ -1530,7 +1541,7 @@ async def admin_categories(
             r = await session.execute(
                 select(func.count())
                 .select_from(ServerModel)
-                .where(ServerModel.categories.ilike(f"%{cat['id']}%"))
+                .where(_category_filter(cat["id"]))
             )
             cat["count"] = r.scalar() or 0
     return {"success": True, "data": cats}
