@@ -30,6 +30,10 @@ body {
   color: rgb(156 163 175);
 }
 
+.dark .text-gray-400:not([class*="dark:text-"]) {
+  color: rgb(209 213 219);
+}
+
 .dark .bg-white:not([class*="dark:bg-"]),
 .dark .bg-gray-50:not([class*="dark:bg-"]) {
   background-color: rgb(31 41 55);
@@ -95,6 +99,10 @@ body {
 .dark .bg-green-50:not([class*="dark:bg-"]),
 .dark .bg-green-100:not([class*="dark:bg-"]) {
   background-color: rgb(20 83 45 / 0.35);
+}
+
+.dark .bg-green-600:not([class*="dark:bg-"]) {
+  background-color: rgb(21 128 61);
 }
 
 .dark .border-green-200:not([class*="dark:border-"]),

@@ -356,7 +356,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
 
           {/* 面包屑 */}
-          <div className="hidden md:flex items-center gap-1 px-6 pt-4 pb-0 text-xs text-gray-400 dark:text-gray-500">
+          <div className="hidden md:flex items-center gap-1 px-6 pt-4 pb-0 text-xs text-gray-400 dark:text-gray-400">
             {breadcrumbs.map((b, i) => (
               <span key={b.path} className="flex items-center gap-1">
                 {i > 0 && <span>/</span>}

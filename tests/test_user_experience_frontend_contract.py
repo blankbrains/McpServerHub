@@ -174,9 +174,12 @@ def test_legacy_public_pages_receive_dark_theme_without_overriding_explicit_vari
     assert '.border-gray-200:not([class*="dark:border-"])' in styles
     assert '.text-blue-700:not([class*="dark:text-"])' in styles
     assert '.bg-red-50:not([class*="dark:bg-"])' in styles
+    assert '.text-gray-400:not([class*="dark:text-"])' in styles
+    assert '.bg-green-600:not([class*="dark:bg-"])' in styles
     assert ".dark {" in styles
     assert "color-scheme: dark" in styles
     assert "dark:from-amber-950/40" in guide
+    assert "text-gray-400 dark:text-gray-400" in _source("components/Layout.tsx")
 
 
 def test_builder_errors_are_readable_and_form_controls_are_labeled() -> None:
