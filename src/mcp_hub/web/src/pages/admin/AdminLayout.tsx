@@ -21,6 +21,7 @@ export default function AdminLayout() {
   const [checking, setChecking] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches)
 
   useEffect(() => {
     if (!auth.token || !auth.userId) {
@@ -44,6 +45,26 @@ export default function AdminLayout() {
   }, [location.pathname])
 
   useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)')
+    const syncViewport = () => {
+      setIsDesktop(media.matches)
+      if (media.matches) setMobileOpen(false)
+    }
+    syncViewport()
+    media.addEventListener('change', syncViewport)
+    return () => media.removeEventListener('change', syncViewport)
+  }, [])
+
+  useEffect(() => {
+    if (isDesktop || !mobileOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isDesktop, mobileOpen])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMobileOpen(false)
     }
@@ -54,7 +75,7 @@ export default function AdminLayout() {
   if (checking) return <div className="flex items-center justify-center h-64 text-gray-400">验证权限中...</div>
   if (!authorized) return null
 
-  const navigationCollapsed = collapsed && !mobileOpen
+  const navigationCollapsed = isDesktop ? collapsed : !mobileOpen
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -65,6 +86,7 @@ export default function AdminLayout() {
           onClick={() => setMobileOpen(true)}
           aria-label="打开管理员导航"
           aria-expanded={mobileOpen}
+          aria-controls="admin-navigation"
           className="border border-gray-300 px-3 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-200"
         >
           菜单
@@ -80,7 +102,13 @@ export default function AdminLayout() {
             className="fixed inset-0 z-40 bg-gray-900/40 md:hidden"
           />
         )}
-        <aside className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform dark:border-gray-700 dark:bg-gray-800 ${mobileOpen ? 'translate-x-0' : ''} ${collapsed ? 'md:w-16' : 'md:w-52'} md:static md:translate-x-0`}>
+        <aside
+          id="admin-navigation"
+          aria-label="管理员导航"
+          aria-hidden={!isDesktop && !mobileOpen}
+          inert={!isDesktop && !mobileOpen ? true : undefined}
+          className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform dark:border-gray-700 dark:bg-gray-800 ${mobileOpen ? 'translate-x-0' : ''} ${collapsed ? 'md:w-16' : 'md:w-52'} md:static md:translate-x-0`}
+        >
         <div className="px-3 py-4 border-b border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between gap-2">
             <span className={`font-bold text-gray-900 dark:text-white ${navigationCollapsed ? 'text-sm' : 'text-base'}`}>
@@ -101,6 +129,7 @@ export default function AdminLayout() {
             const active = item.end ? location.pathname === item.path : location.pathname.startsWith(item.path)
             return (
               <Link key={item.path} to={item.path} title={navigationCollapsed ? item.label : undefined}
+                aria-current={active ? 'page' : undefined}
                 className={`flex items-center gap-2.5 mx-2 mb-0.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   active ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'

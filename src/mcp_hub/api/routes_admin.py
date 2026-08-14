@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
@@ -101,6 +102,11 @@ def _csv_cell(value: Any) -> str:
     if text_value.startswith(("=", "+", "-", "@", "\t", "\r")):
         return f"'{text_value}"
     return text_value
+
+
+def _catalog_allows_market_visibility(server: ServerModel) -> bool:
+    """Upstream-deleted entries stay hidden even after an administrator unblocks them."""
+    return server.catalog_status != "deleted"
 
 
 # ── 审计日志 ──────────────────────────────────────────────
@@ -208,56 +214,52 @@ async def admin_overview(
         top_servers_result = await session.execute(
             select(
                 activity.c.server_id,
+                ServerModel.name,
                 func.count().label("calls_7d"),
                 func.coalesce(install_counts.c.installs, 0).label("installs"),
             )
             .select_from(activity)
             .outerjoin(install_counts, activity.c.server_id == install_counts.c.server_id)
+            .outerjoin(ServerModel, ServerModel.id == activity.c.server_id)
             .where(activity_7d)
-            .group_by(activity.c.server_id, install_counts.c.installs)
+            .group_by(activity.c.server_id, ServerModel.name, install_counts.c.installs)
             .order_by(text("calls_7d DESC"))
             .limit(10)
         )
-        top_servers = []
-        for server_row in top_servers_result.fetchall():
-            sid = server_row[0]
-            srv = await session.execute(select(ServerModel.name).where(ServerModel.id == sid))
-            srv_name = srv.scalar() or sid
-            top_servers.append(
-                {
-                    "id": sid,
-                    "name": srv_name,
-                    "installs": server_row[2] or 0,
-                    "calls_7d": server_row[1] or 0,
-                }
-            )
+        top_servers = [
+            {
+                "id": row[0],
+                "name": row[1] or row[0],
+                "installs": row[3] or 0,
+                "calls_7d": row[2] or 0,
+            }
+            for row in top_servers_result.fetchall()
+        ]
 
         # Top 10 用户
         top_users_result = await session.execute(
             select(
                 activity.c.user_id,
+                UserModel.display_name,
                 func.count().label("calls"),
                 func.sum(activity.c.token_count).label("tokens"),
             )
             .select_from(activity)
+            .outerjoin(UserModel, UserModel.id == activity.c.user_id)
             .where(activity_7d)
-            .group_by(activity.c.user_id)
+            .group_by(activity.c.user_id, UserModel.display_name)
             .order_by(text("calls DESC"))
             .limit(10)
         )
-        top_users = []
-        for user_row in top_users_result.fetchall():
-            uid = user_row[0]
-            usr = await session.execute(select(UserModel.display_name).where(UserModel.id == uid))
-            name = usr.scalar() or uid
-            top_users.append(
-                {
-                    "user_id": uid,
-                    "display_name": name,
-                    "calls_7d": user_row[1] or 0,
-                    "tokens_7d": user_row[2] or 0,
-                }
-            )
+        top_users = [
+            {
+                "user_id": row[0],
+                "display_name": row[1] or row[0],
+                "calls_7d": row[2] or 0,
+                "tokens_7d": row[3] or 0,
+            }
+            for row in top_users_result.fetchall()
+        ]
 
     return {
         "success": True,
@@ -524,46 +526,48 @@ async def admin_user_detail(
             for device in device_rows
         ]
 
-        # Server 列表
+        # Server 列表。聚合一次后再联表，避免为每个 Server 重复查询调用量和名称。
+        user_server_activity = (
+            select(
+                activity.c.server_id.label("server_id"),
+                func.count().label("calls_7d"),
+                func.sum(activity.c.token_count).label("tokens_7d"),
+            )
+            .select_from(activity)
+            .where(activity.c.user_id == user_id, activity_7d)
+            .group_by(activity.c.server_id)
+            .subquery("user_server_activity")
+        )
         srv_result = await session.execute(
-            select(UserServerModel.server_id, UserServerModel.enabled)
+            select(
+                UserServerModel.server_id,
+                UserServerModel.enabled,
+                ServerModel.name,
+                func.coalesce(user_server_activity.c.calls_7d, 0),
+                func.coalesce(user_server_activity.c.tokens_7d, 0),
+            )
+            .outerjoin(ServerModel, ServerModel.id == UserServerModel.server_id)
+            .outerjoin(
+                user_server_activity,
+                user_server_activity.c.server_id == UserServerModel.server_id,
+            )
             .where(UserServerModel.user_id == user_id)
+            .order_by(
+                func.coalesce(user_server_activity.c.calls_7d, 0).desc(),
+                UserServerModel.server_id,
+            )
             .limit(20)
         )
-        servers = []
-        for row in srv_result.fetchall():
-            sid = row[0]
-            srv_calls = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(activity)
-                    .where(
-                        activity.c.server_id == sid,
-                        activity.c.user_id == user_id,
-                        activity_7d,
-                    )
-                )
-            ).scalar() or 0
-            srv_tokens = (
-                await session.execute(
-                    select(func.sum(activity.c.token_count))
-                    .select_from(activity)
-                    .where(
-                        activity.c.server_id == sid,
-                        activity.c.user_id == user_id,
-                        activity_7d,
-                    )
-                )
-            ).scalar() or 0
-            servers.append(
-                {
-                    "server_id": sid,
-                    "name": sid.split("/")[-1],
-                    "calls_7d": srv_calls,
-                    "tokens_7d": srv_tokens or 0,
-                    "enabled": row[1] if row[1] is not None else True,
-                }
-            )
+        servers = [
+            {
+                "server_id": row[0],
+                "name": row[2] or row[0].split("/")[-1],
+                "calls_7d": row[3] or 0,
+                "tokens_7d": row[4] or 0,
+                "enabled": row[1] if row[1] is not None else True,
+            }
+            for row in srv_result.fetchall()
+        ]
 
         # 每日趋势
         date_func = func.date(activity.c.occurred_at)
@@ -623,21 +627,22 @@ async def admin_user_servers(
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
         result = await session.execute(
-            select(UserServerModel).where(UserServerModel.user_id == user_id).limit(50)
+            select(UserServerModel, ServerModel.name)
+            .outerjoin(ServerModel, ServerModel.id == UserServerModel.server_id)
+            .where(UserServerModel.user_id == user_id)
+            .limit(50)
         )
-        servers = []
-        for row in result.scalars().all():
-            srv = await session.execute(
-                select(ServerModel.name).where(ServerModel.id == row.server_id)
-            )
-            servers.append(
-                {
-                    "server_id": row.server_id,
-                    "name": srv.scalar() or row.server_id,
-                    "enabled": row.enabled if row.enabled is not None else True,
-                    "agent": row.agent or "",
-                }
-            )
+        servers = [
+            {
+                "server_id": user_server.server_id,
+                "name": server_name or user_server.server_id,
+                "enabled": (
+                    user_server.enabled if user_server.enabled is not None else True
+                ),
+                "agent": user_server.agent or "",
+            }
+            for user_server, server_name in result.all()
+        ]
     return {"success": True, "data": servers}
 
 
@@ -739,6 +744,7 @@ async def admin_servers(
             select(
                 activity.c.server_id.label("server_id"),
                 func.count().label("calls_7d"),
+                func.sum(activity.c.token_count).label("tokens_7d"),
             )
             .select_from(activity)
             .where(activity_7d)
@@ -758,7 +764,12 @@ async def admin_servers(
         total = (await session.execute(count_stmt)).scalar() or 0
 
         stmt = (
-            select(ServerModel)
+            select(
+                ServerModel,
+                func.coalesce(install_counts.c.install_count, 0).label("install_count"),
+                func.coalesce(calls_subquery.c.calls_7d, 0).label("calls_7d"),
+                func.coalesce(calls_subquery.c.tokens_7d, 0).label("tokens_7d"),
+            )
             .outerjoin(calls_subquery, calls_subquery.c.server_id == ServerModel.id)
             .outerjoin(install_counts, install_counts.c.server_id == ServerModel.id)
         )
@@ -778,33 +789,10 @@ async def admin_servers(
 
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         result = await session.execute(stmt)
-        rows = result.scalars().all()
+        rows = result.all()
 
         servers = []
-        for s in rows:
-            install_count = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(UserServerModel)
-                    .where(UserServerModel.server_id == s.id)
-                )
-            ).scalar() or 0
-            calls_7d = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(activity)
-                    .where(activity.c.server_id == s.id, activity_7d)
-                )
-            ).scalar() or 0
-            tokens_7d = (
-                await session.execute(
-                    select(func.sum(activity.c.token_count))
-                    .select_from(activity)
-                    .where(activity.c.server_id == s.id, activity_7d)
-                )
-            ).scalar() or 0
-            import json
-
+        for s, install_count, calls_7d, tokens_7d in rows:
             try:
                 cats = json.loads(s.categories) if s.categories else []
             except Exception:
@@ -816,7 +804,7 @@ async def admin_servers(
                     "categories": cats,
                     "install_count": install_count,
                     "calls_7d": calls_7d,
-                    "tokens_7d": tokens_7d or 0,
+                    "tokens_7d": tokens_7d,
                     "rating": s.rating or 0,
                     "security_level": s.security_level or "unreviewed",
                     "market_visible": s.market_visible is not False,
@@ -870,35 +858,48 @@ async def admin_server_detail(
             )
         ).scalar() or 0
 
-        import json
-
         try:
             cats = json.loads(s.categories) if s.categories else []
         except Exception:
             cats = []
 
-        # 安装用户
-        users_result = await session.execute(
-            select(UserServerModel.user_id).where(UserServerModel.server_id == server_id).limit(20)
-        )
-        install_users = []
-        for row in users_result.fetchall():
-            uid = row[0]
-            usr = await session.execute(select(UserModel.display_name).where(UserModel.id == uid))
-            uc = (
-                await session.execute(
-                    select(func.count())
-                    .select_from(activity)
-                    .where(
-                        activity.c.server_id == server_id,
-                        activity.c.user_id == uid,
-                        activity_7d,
-                    )
-                )
-            ).scalar() or 0
-            install_users.append(
-                {"user_id": uid, "display_name": usr.scalar() or uid, "calls_7d": uc}
+        # 安装用户。按 7 日调用量排序，并一次性联出显示名和调用统计。
+        server_user_activity = (
+            select(
+                activity.c.user_id.label("user_id"),
+                func.count().label("calls_7d"),
             )
+            .select_from(activity)
+            .where(activity.c.server_id == server_id, activity_7d)
+            .group_by(activity.c.user_id)
+            .subquery("server_user_activity")
+        )
+        users_result = await session.execute(
+            select(
+                UserServerModel.user_id,
+                UserModel.display_name,
+                func.coalesce(server_user_activity.c.calls_7d, 0),
+            )
+            .outerjoin(UserModel, UserModel.id == UserServerModel.user_id)
+            .outerjoin(
+                server_user_activity,
+                server_user_activity.c.user_id == UserServerModel.user_id,
+            )
+            .where(UserServerModel.server_id == server_id)
+            .order_by(
+                func.coalesce(server_user_activity.c.calls_7d, 0).desc(),
+                UserServerModel.user_id,
+            )
+            .limit(20)
+        )
+        install_users = [
+            {
+                "user_id": row[0],
+                "display_name": row[1] or row[0],
+                "calls_7d": row[2] or 0,
+            }
+            for row in users_result.fetchall()
+        ]
 
         # 趋势
         date_func = func.date(activity.c.occurred_at)
@@ -962,20 +963,21 @@ async def admin_server_users(
 ) -> dict[str, Any]:
     async with async_session_factory() as session:
         result = await session.execute(
-            select(UserServerModel).where(UserServerModel.server_id == server_id).limit(50)
+            select(UserServerModel, UserModel.display_name)
+            .outerjoin(UserModel, UserModel.id == UserServerModel.user_id)
+            .where(UserServerModel.server_id == server_id)
+            .limit(50)
         )
-        users = []
-        for row in result.scalars().all():
-            usr = await session.execute(
-                select(UserModel.display_name).where(UserModel.id == row.user_id)
-            )
-            users.append(
-                {
-                    "user_id": row.user_id,
-                    "display_name": usr.scalar() or row.user_id,
-                    "enabled": row.enabled if row.enabled is not None else True,
-                }
-            )
+        users = [
+            {
+                "user_id": user_server.user_id,
+                "display_name": display_name or user_server.user_id,
+                "enabled": (
+                    user_server.enabled if user_server.enabled is not None else True
+                ),
+            }
+            for user_server, display_name in result.all()
+        ]
     return {"success": True, "data": users}
 
 
@@ -1168,21 +1170,25 @@ async def admin_top_servers(
         if metric not in {"calls", "tokens", "installs"}:
             return {"success": False, "error": "metric 必须是 calls、tokens 或 installs"}
 
-        ranked_rows: list[tuple[str, int, int, int]] = []
+        ranked_rows: list[tuple[str, str, int, int, int]] = []
         if metric == "installs":
             install_since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
             result = await session.execute(
                 select(
                     UserServerModel.server_id,
+                    ServerModel.name,
                     func.count().label("installs"),
                 )
+                .outerjoin(ServerModel, ServerModel.id == UserServerModel.server_id)
                 .where(UserServerModel.created_at >= install_since)
-                .group_by(UserServerModel.server_id)
+                .group_by(UserServerModel.server_id, ServerModel.name)
                 .order_by(func.count().desc())
                 .limit(limit)
             )
             for row in result.fetchall():
-                ranked_rows.append((row[0], 0, 0, int(row[1] or 0)))
+                ranked_rows.append(
+                    (row[0], row[1] or row[0], 0, 0, int(row[2] or 0))
+                )
         else:
             activity = _activity_subquery()
             time_f = _activity_time_filter(activity, days)
@@ -1194,32 +1200,38 @@ async def admin_top_servers(
             result = await session.execute(
                 select(
                     activity.c.server_id,
+                    ServerModel.name,
                     func.count().label("calls"),
                     func.sum(activity.c.token_count).label("tokens"),
                 )
                 .select_from(activity)
+                .outerjoin(ServerModel, ServerModel.id == activity.c.server_id)
                 .where(time_f)
-                .group_by(activity.c.server_id)
+                .group_by(activity.c.server_id, ServerModel.name)
                 .order_by(order_col.desc())
                 .limit(limit)
             )
             ranked_rows.extend(
-                (row[0], int(row[1] or 0), int(row[2] or 0), 0)
+                (
+                    row[0],
+                    row[1] or row[0],
+                    int(row[2] or 0),
+                    int(row[3] or 0),
+                    0,
+                )
                 for row in result.fetchall()
             )
 
-        servers: list[dict[str, Any]] = []
-        for sid, calls, tokens, installs in ranked_rows:
-            srv = await session.execute(select(ServerModel.name).where(ServerModel.id == sid))
-            servers.append(
-                {
-                    "server_id": sid,
-                    "name": srv.scalar() or sid,
-                    "calls": calls,
-                    "tokens": tokens,
-                    "installs": installs,
-                }
-            )
+        servers = [
+            {
+                "server_id": server_id,
+                "name": name,
+                "calls": calls,
+                "tokens": tokens,
+                "installs": installs,
+            }
+            for server_id, name, calls, tokens, installs in ranked_rows
+        ]
     return {"success": True, "data": servers}
 
 
@@ -1244,27 +1256,26 @@ async def admin_top_users(
         result = await session.execute(
             select(
                 activity.c.user_id,
+                UserModel.display_name,
                 func.count().label("calls"),
                 func.sum(activity.c.token_count).label("tokens"),
             )
             .select_from(activity)
+            .outerjoin(UserModel, UserModel.id == activity.c.user_id)
             .where(time_f)
-            .group_by(activity.c.user_id)
+            .group_by(activity.c.user_id, UserModel.display_name)
             .order_by(order_col.desc())
             .limit(limit)
         )
-        users = []
-        for row in result.fetchall():
-            uid = row[0]
-            usr = await session.execute(select(UserModel.display_name).where(UserModel.id == uid))
-            users.append(
-                {
-                    "user_id": uid,
-                    "display_name": usr.scalar() or uid,
-                    "calls": row[1] or 0,
-                    "tokens": row[2] or 0,
-                }
-            )
+        users = [
+            {
+                "user_id": row[0],
+                "display_name": row[1] or row[0],
+                "calls": row[2] or 0,
+                "tokens": row[3] or 0,
+            }
+            for row in result.fetchall()
+        ]
     return {"success": True, "data": users}
 
 
@@ -1282,27 +1293,24 @@ async def admin_reviews(
         total = count_result.scalar() or 0
 
         result = await session.execute(
-            select(ReviewModel)
+            select(ReviewModel, ServerModel.name)
+            .outerjoin(ServerModel, ServerModel.id == ReviewModel.server_id)
             .order_by(ReviewModel.created_at.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        reviews = []
-        for r in result.scalars().all():
-            srv = await session.execute(
-                select(ServerModel.name).where(ServerModel.id == r.server_id)
-            )
-            reviews.append(
-                {
-                    "id": r.id,
-                    "server_id": r.server_id,
-                    "server_name": srv.scalar() or r.server_id,
-                    "user_id": r.user_id,
-                    "rating": r.rating,
-                    "content": (r.content or "")[:200],
-                    "created_at": str(r.created_at) if r.created_at else "",
-                }
-            )
+        reviews = [
+            {
+                "id": review.id,
+                "server_id": review.server_id,
+                "server_name": server_name or review.server_id,
+                "user_id": review.user_id,
+                "rating": review.rating,
+                "content": review.content or "",
+                "created_at": str(review.created_at) if review.created_at else "",
+            }
+            for review, server_name in result.all()
+        ]
 
     return {
         "success": True,
@@ -1392,8 +1400,9 @@ async def admin_toggle_server(
     """启用/禁用或下架 Server。action: block/unblock/feature"""
     action = data.get("action", "")
     async with async_session_factory() as session:
-        srv = await session.execute(select(ServerModel).where(ServerModel.id == server_id))
-        server = srv.scalar_one_or_none()
+        server = await session.scalar(
+            select(ServerModel).where(ServerModel.id == server_id).with_for_update()
+        )
         if not server:
             return {"success": False, "error": "Server 不存在"}
 
@@ -1402,9 +1411,14 @@ async def admin_toggle_server(
             server.market_visible = False
             msg = f"已下架 {server_id}"
         elif action == "unblock":
-            server.security_level = "reviewed"
-            server.market_visible = True
-            msg = f"已恢复 {server_id}"
+            if server.security_level == "blocked":
+                server.security_level = "reviewed"
+            server.market_visible = _catalog_allows_market_visibility(server)
+            msg = (
+                f"已恢复 {server_id}"
+                if server.market_visible
+                else f"已解除 {server_id} 的阻止状态，但上游目录已删除，市场仍保持隐藏"
+            )
         else:
             return {"success": False, "error": "action 必须是 block 或 unblock"}
         session.add(
@@ -1438,6 +1452,8 @@ async def admin_set_security(
         server.security_level = level
         if level == "blocked":
             server.market_visible = False
+        else:
+            server.market_visible = _catalog_allows_market_visibility(server)
         session.add(
             _audit_record(admin_user, f"调整安全等级: {server_id} → {level}")
         )
@@ -1537,11 +1553,18 @@ async def admin_categories(
         {"id": "tools", "name": "通用 & 其他", "icon": "🧰"},
     ]
     async with async_session_factory() as session:
-        for cat in cats:
-            r = await session.execute(
-                select(func.count())
-                .select_from(ServerModel)
-                .where(_category_filter(cat["id"]))
+        counts = (
+            await session.execute(
+                select(
+                    *[
+                        func.sum(
+                            case((_category_filter(category["id"]), 1), else_=0)
+                        )
+                        for category in cats
+                    ]
+                ).select_from(ServerModel)
             )
-            cat["count"] = r.scalar() or 0
+        ).one()
+        for category, count in zip(cats, counts, strict=True):
+            category["count"] = count or 0
     return {"success": True, "data": cats}

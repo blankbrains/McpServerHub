@@ -35,7 +35,7 @@ export default function AdminAuditLog() {
 
   const totalPages = Math.max(1, Math.ceil(total / 50))
 
-  if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
+  if (loading) return <div role="status" className="text-center py-16 text-gray-400">加载中...</div>
 
   return (
     <div className="max-w-5xl space-y-4">
@@ -45,7 +45,7 @@ export default function AdminAuditLog() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">记录管理员的角色修改、评价删除、Server 下架和安全等级调整。</p>
       </header>
       <div className="flex gap-2">
-        <select value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1) }}
+        <select aria-label="审计操作筛选" value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="">全部操作</option>
           <option value="修改用户角色">修改角色</option>
@@ -57,7 +57,7 @@ export default function AdminAuditLog() {
       </div>
 
       {error ? (
-        <div className="text-center py-12 text-red-600">
+        <div role="alert" className="text-center py-12 text-red-600">
           <p>{error}</p>
           <button onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
         </div>
@@ -86,10 +86,12 @@ export default function AdminAuditLog() {
           {totalPages > 1 && (
             <div className="flex gap-2">
               <button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}
+                aria-label="上一页"
                 className="border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300">
                 上一页
               </button>
               <button type="button" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)}
+                aria-label="下一页"
                 className="border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-40 dark:border-gray-600 dark:text-gray-300">
                 下一页
               </button>

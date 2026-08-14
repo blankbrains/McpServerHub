@@ -199,7 +199,11 @@ class RegistrySourceSynchronizer:
         server.catalog_source = entry.source
         server.catalog_source_id = entry.upstream_id
         server.catalog_status = entry.lifecycle_status
-        server.market_visible = _is_visible(entry)
+        # Upstream lifecycle can hide a Server, but an administrator block must
+        # remain authoritative across later registry refreshes.
+        server.market_visible = (
+            _is_visible(entry) and server.security_level != "blocked"
+        )
         server.network_access = bool(entry.transport)
 
     def _update_source_entry_fields(

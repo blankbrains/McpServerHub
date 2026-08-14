@@ -69,7 +69,7 @@ export default function AdminValidation() {
         </div>
         <div className="flex border border-gray-300 dark:border-gray-600" role="group" aria-label="接入验证时间范围">
           {[7, 30, 90].map(value => (
-            <button key={value} type="button" onClick={() => setDays(value)}
+            <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)}
               className={`px-3 py-2 text-xs ${days === value ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
               {value} 天
             </button>
@@ -78,12 +78,12 @@ export default function AdminValidation() {
       </header>
 
       {error ? (
-        <div className="py-16 text-center text-red-600">
+        <div role="alert" className="py-16 text-center text-red-600">
           <p>{error}</p>
           <button type="button" onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:underline">重试</button>
         </div>
       ) : loading ? (
-        <div className="py-16 text-center text-sm text-gray-400">正在加载接入验证数据...</div>
+        <div role="status" className="py-16 text-center text-sm text-gray-400">正在加载接入验证数据...</div>
       ) : !data ? (
         <div className="py-16 text-center text-sm text-gray-400">暂无接入验证数据</div>
       ) : (

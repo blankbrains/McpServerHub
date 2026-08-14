@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiDownload, apiGet } from '../../api/client'
 
@@ -19,22 +19,26 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const requestVersion = useRef(0)
 
   const load = async () => {
+    const version = ++requestVersion.current
     setLoading(true)
     setError('')
     try {
       const params = new URLSearchParams({ q, sort, page: String(page), page_size: '20' })
       if (role) params.set('role', role)
       const result = await apiGet<any[]>(`/admin/users?${params}`)
+      if (version !== requestVersion.current) return
       setUsers(result.data || [])
       setTotal(result.meta?.total || 0)
     } catch {
+      if (version !== requestVersion.current) return
       setUsers([])
       setTotal(0)
       setError('用户与设备列表加载失败，请检查管理员权限后重试')
     } finally {
-      setLoading(false)
+      if (version === requestVersion.current) setLoading(false)
     }
   }
 
@@ -46,7 +50,10 @@ export default function AdminUsers() {
     return () => window.clearTimeout(timer)
   }, [query])
 
-  useEffect(() => { void load() }, [page, sort, q, role])
+  useEffect(() => {
+    void load()
+    return () => { requestVersion.current += 1 }
+  }, [page, sort, q, role])
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
 
@@ -75,21 +82,21 @@ export default function AdminUsers() {
             }}
             className="border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            {exporting ? '正在导出...' : '导出 CSV'}
+            {exporting ? '正在导出...' : '导出全部 CSV'}
           </button>
         </div>
       </header>
 
       <section className="flex flex-wrap gap-2">
-        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索用户名..."
+        <input type="search" aria-label="搜索用户" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索用户名..."
           className="min-w-[220px] flex-1 border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
-        <select value={sort} onChange={event => setSort(event.target.value)}
+        <select aria-label="用户排序方式" value={sort} onChange={event => { setSort(event.target.value); setPage(1) }}
           className="border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white">
           <option value="calls">按调用活跃度</option>
           <option value="installs">按追踪 Server</option>
           <option value="created">按注册时间</option>
         </select>
-        <select value={role} onChange={event => { setRole(event.target.value); setPage(1) }}
+        <select aria-label="用户角色筛选" value={role} onChange={event => { setRole(event.target.value); setPage(1) }}
           className="border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white">
           <option value="">全部角色</option>
           <option value="admin">管理员</option>
@@ -98,12 +105,12 @@ export default function AdminUsers() {
       </section>
 
       {error ? (
-        <div className="py-12 text-center text-red-600">
+        <div role="alert" className="py-12 text-center text-red-600">
           <p>{error}</p>
           <button type="button" onClick={() => void load()} className="mt-3 text-sm text-blue-600 hover:underline">重试</button>
         </div>
       ) : loading ? (
-        <div className="py-12 text-center text-sm text-gray-400">正在加载用户与设备...</div>
+        <div role="status" className="py-12 text-center text-sm text-gray-400">正在加载用户与设备...</div>
       ) : (
         <div className="overflow-x-auto border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <table className="w-full text-sm">
@@ -126,6 +133,7 @@ export default function AdminUsers() {
                 <tr
                   key={user.user_id}
                   tabIndex={0}
+                  role="link"
                   aria-label={`查看用户 ${user.display_name || user.user_id}`}
                   className="cursor-pointer border-b border-gray-100 hover:bg-blue-50/40 focus:bg-blue-50/40 focus:outline-none dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                   onClick={() => navigate(`/admin/users/${encodeURIComponent(user.user_id)}`)}
@@ -148,7 +156,7 @@ export default function AdminUsers() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs ${user.role === 'admin' ? 'text-purple-700' : 'text-gray-500'}`}>
+                    <span className={`text-xs ${user.role === 'admin' ? 'text-purple-700 dark:text-purple-300' : 'text-gray-500'}`}>
                       {user.role === 'admin' ? '🛡️ 管理员' : '普通用户'}
                     </span>
                   </td>
@@ -176,7 +184,7 @@ export default function AdminUsers() {
             .map((value, index, visible) => (
               <span key={value}>
                 {index > 0 && visible[index - 1] !== value - 1 && <span className="px-1 text-gray-300">...</span>}
-                <button type="button" onClick={() => setPage(value)} className={`h-8 w-8 text-sm ${value === page ? 'bg-blue-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
+                <button type="button" aria-current={value === page ? 'page' : undefined} aria-label={`第 ${value} 页`} onClick={() => setPage(value)} className={`h-8 w-8 text-sm ${value === page ? 'bg-blue-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'}`}>
                   {value}
                 </button>
               </span>

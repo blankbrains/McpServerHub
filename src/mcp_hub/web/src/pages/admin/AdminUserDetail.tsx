@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { apiGet, apiPatch } from '../../api/client'
 import { useAuthState } from '../../hooks/useAuthState'
 
@@ -43,41 +43,42 @@ export default function AdminUserDetail() {
     setTimeout(() => setMsg(''), 3000)
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">加载中...</div>
+  if (loading) return <div role="status" className="text-center py-16 text-gray-400">加载中...</div>
   if (error || !data) return (
-    <div className="text-center py-16 text-red-600">
+    <div role="alert" className="text-center py-16 text-red-600">
       <p>{error || '用户不存在'}</p>
       <button onClick={load} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
     </div>
   )
 
-  const { profile, stats, devices = [], servers, daily_trend, top_tools } = data
+  const { profile, stats, devices = [], servers = [], daily_trend = [], top_tools = [] } = data
   const maxCalls = Math.max(...daily_trend.map((d: any) => d.calls), 1)
 
   return (
     <div className="max-w-5xl space-y-5">
       <header>
+        <Link to="/admin/users" className="text-sm text-blue-600 hover:underline dark:text-blue-400">← 返回用户与设备</Link>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">OPERATIONS / USER DETAIL</p>
         <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">👤 用户详情</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看账号使用情况、设备接入和 Gateway 运行状态。</p>
       </header>
-      {msg && <div className={`p-2 rounded-lg text-sm ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>}
+      {msg && <div role={msg.startsWith('✅') ? 'status' : 'alert'} className={`p-2 rounded-lg text-sm ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>}
 
       {/* Profile */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           {profile.avatar_url ? <img src={profile.avatar_url} className="w-14 h-14 rounded-full" alt="" /> : <div className="w-14 h-14 rounded-full bg-blue-500 flex items-center justify-center text-white text-xl font-bold">{profile.display_name?.[0]}</div>}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{profile.display_name}</h2>
-            <p className="text-sm text-gray-500">@{profile.id} · {profile.email || '无邮箱'} · 注册于 {profile.created_at?.slice(0, 10)}</p>
+          <div className="min-w-0 flex-1">
+            <h2 className="break-words text-xl font-bold text-gray-900 dark:text-white">{profile.display_name}</h2>
+            <p className="break-all text-sm text-gray-500">@{profile.id} · {profile.email || '无邮箱'} · 注册于 {profile.created_at?.slice(0, 10)}</p>
             <div className="flex items-center gap-2 mt-2">
-              <span className={`text-xs px-2 py-0.5 rounded-full ${profile.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>{profile.role === 'admin' ? '🛡️ 管理员' : '👤 用户'}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${profile.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' : 'bg-gray-100 text-gray-600'}`}>{profile.role === 'admin' ? '🛡️ 管理员' : '👤 用户'}</span>
               {profile.role !== 'admin' ? (
-                <button onClick={() => changeRole('admin')} disabled={savingRole} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50">提升为管理员</button>
+                <button type="button" onClick={() => changeRole('admin')} disabled={savingRole} className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50">{savingRole ? '处理中...' : '提升为管理员'}</button>
               ) : profile.id === currentUserId ? (
                 <span className="text-xs text-gray-400">当前登录账号不可自我降级</span>
               ) : (
-                <button onClick={() => changeRole('user')} disabled={savingRole} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">降级为用户</button>
+                <button type="button" onClick={() => changeRole('user')} disabled={savingRole} className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">{savingRole ? '处理中...' : '降级为用户'}</button>
               )}
             </div>
           </div>
@@ -114,12 +115,12 @@ export default function AdminUserDetail() {
         ) : (
           <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-700">
             {devices.map((device: any) => (
-              <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+              <div key={device.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${device.online ? 'bg-green-500' : device.revoked ? 'bg-red-500' : 'bg-gray-300'}`} />
-                    <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{device.name}</p>
-                    <span className="text-xs text-gray-400">{device.agent_type}</span>
+                    <p className="min-w-0 break-words text-sm font-medium text-gray-800 dark:text-gray-200">{device.name}</p>
+                    <span className="shrink-0 text-xs text-gray-400">{device.agent_type}</span>
                   </div>
                   <p className="mt-1 text-xs text-gray-400">
                     Gateway {device.gateway_version || '-'} · {device.platform || 'unknown'} · {device.server_count || 0} 个 Server
@@ -140,22 +141,23 @@ export default function AdminUserDetail() {
       {/* Trend */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <h3 className="font-semibold text-gray-900 dark:text-white mb-3">📈 每日调用趋势</h3>
-        <div className="flex items-end gap-1 h-32">
+        {daily_trend.length > 0 ? <div className="flex items-end gap-1 h-32">
           {daily_trend.map((d: any) => (
             <div key={d.date} className="flex-1 bg-blue-500 dark:bg-blue-400 rounded-t-sm transition-all"
               style={{ height: `${Math.max((d.calls / maxCalls) * 100, 2)}%` }} title={`${d.date}: ${d.calls} 调用`} />
           ))}
-        </div>
+        </div> : <p className="py-8 text-sm text-gray-400">最近 30 天暂无工具调用。</p>}
       </div>
 
       {/* Servers */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">📦 已追踪 Server（{servers.length}）</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">📦 已追踪 Server（共 {stats.server_count || 0}）</h3>
+        {servers.length < (stats.server_count || 0) && <p className="mb-3 text-xs text-gray-400">按最近 7 日调用量显示前 {servers.length} 个。</p>}
         <div className="space-y-1.5">
-          {servers.map((s: any) => (
-            <div key={s.server_id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">
-              <span className="text-gray-700 dark:text-gray-300">{s.name || s.server_id}</span>
-              <div className="flex items-center gap-3 text-xs text-gray-400">
+          {servers.length === 0 ? <p className="py-6 text-sm text-gray-400">该用户尚未追踪 Server。</p> : servers.map((s: any) => (
+            <div key={s.server_id} className="flex min-w-0 items-center justify-between gap-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm">
+              <span className="min-w-0 flex-1 break-all text-gray-700 dark:text-gray-300">{s.name || s.server_id}</span>
+              <div className="flex shrink-0 items-center gap-3 text-xs text-gray-400">
                 <span>📞 {s.calls_7d}</span><span>🔤 {s.tokens_7d}</span>
                 <span className={s.enabled ? 'text-green-500' : 'text-red-400'}>{s.enabled ? '启用' : '禁用'}</span>
               </div>
@@ -170,10 +172,10 @@ export default function AdminUserDetail() {
           <h3 className="font-semibold text-gray-900 dark:text-white mb-3">🔧 最常用工具</h3>
           <div className="space-y-1">
             {top_tools.map((t: any, i: number) => (
-              <div key={t.tool_name} className="flex items-center gap-3 text-sm">
-                <span className="text-gray-400 w-5">{i + 1}.</span>
-                <span className="text-gray-700 dark:text-gray-300 flex-1">{t.tool_name}</span>
-                <span className="text-gray-400 text-xs">{t.count} 次</span>
+              <div key={t.tool_name} className="flex min-w-0 items-center gap-3 text-sm">
+                <span className="w-5 shrink-0 text-gray-400">{i + 1}.</span>
+                <span className="min-w-0 flex-1 break-all text-gray-700 dark:text-gray-300">{t.tool_name}</span>
+                <span className="shrink-0 text-gray-400 text-xs">{t.count} 次</span>
               </div>
             ))}
           </div>

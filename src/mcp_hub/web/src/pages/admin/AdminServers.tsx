@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiDownload, apiGet } from '../../api/client'
 
@@ -23,7 +23,9 @@ export default function AdminServers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const requestVersion = useRef(0)
   const load = async () => {
+    const version = ++requestVersion.current
     setLoading(true)
     setError('')
     try {
@@ -36,14 +38,16 @@ export default function AdminServers() {
       if (category) params.set('category', category)
       if (securityLevel) params.set('security_level', securityLevel)
       const result = await apiGet<any[]>(`/admin/servers?${params}`)
+      if (version !== requestVersion.current) return
       setServers(result.data || [])
       setTotal(result.meta?.total || 0)
     } catch {
+      if (version !== requestVersion.current) return
       setServers([])
       setTotal(0)
       setError('Server 列表加载失败，请检查管理员权限后重试')
     } finally {
-      setLoading(false)
+      if (version === requestVersion.current) setLoading(false)
     }
   }
   useEffect(() => {
@@ -66,7 +70,10 @@ export default function AdminServers() {
     return () => { cancelled = true }
   }, [])
 
-  useEffect(() => { void load() }, [page, sort, q, category, securityLevel])
+  useEffect(() => {
+    void load()
+    return () => { requestVersion.current += 1 }
+  }, [page, sort, q, category, securityLevel])
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
   const secLabels: Record<string, string> = { verified: '🟢', reviewed: '🟡', unreviewed: '🟠', blocked: '🔴' }
@@ -95,24 +102,24 @@ export default function AdminServers() {
           }}
           className="border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
         >
-          {exporting ? '正在导出...' : '导出 CSV'}
+          {exporting ? '正在导出...' : '导出全部 CSV'}
         </button>
       </header>
       <div className="flex gap-2 flex-wrap">
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索 Server..."
+        <input type="search" aria-label="搜索 Server" value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索 Server..."
           className="flex-1 min-w-[150px] px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-        <select value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}
+        <select aria-label="Server 排序方式" value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="installs">按追踪数</option><option value="calls">按调用量</option><option value="rating">按评分</option>
         </select>
-        <select value={category} onChange={e => { setCategory(e.target.value); setPage(1) }}
+        <select aria-label="Server 分类筛选" value={category} onChange={e => { setCategory(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="">全部分类</option>
           {categories.map(item => (
             <option key={item.id} value={item.id}>{item.icon} {item.name}（{item.count}）</option>
           ))}
         </select>
-        <select value={securityLevel} onChange={e => { setSecurityLevel(e.target.value); setPage(1) }}
+        <select aria-label="Server 安全等级筛选" value={securityLevel} onChange={e => { setSecurityLevel(e.target.value); setPage(1) }}
           className="px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
           <option value="">全部安全等级</option>
           <option value="verified">🟢 安全认证</option><option value="reviewed">🟡 已审查</option>
@@ -121,11 +128,11 @@ export default function AdminServers() {
       </div>
 
       {error ? (
-        <div className="text-center py-12 text-red-600">
+        <div role="alert" className="text-center py-12 text-red-600">
           <p>{error}</p>
           <button onClick={load} className="mt-3 text-sm text-blue-600 hover:text-blue-800 underline">重试</button>
         </div>
-      ) : loading ? <div className="text-center py-8 text-gray-400">加载中...</div> : (
+      ) : loading ? <div role="status" className="text-center py-8 text-gray-400">加载中...</div> : (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500">
@@ -140,6 +147,7 @@ export default function AdminServers() {
                 <tr
                   key={s.server_id}
                   tabIndex={0}
+                  role="link"
                   aria-label={`查看 Server ${s.name || s.server_id}`}
                   className="cursor-pointer border-b border-gray-100 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                   onClick={() => navigate(`/admin/servers/${encodeURIComponent(s.server_id)}`)}
@@ -170,7 +178,7 @@ export default function AdminServers() {
         <div className="flex justify-center gap-2">
           {Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => Math.abs(p - page) <= 2 || p === 1 || p === totalPages).map((p, idx, arr) => (
             <span key={p}>{idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-300">...</span>}
-              <button onClick={() => setPage(p)} className={`w-8 h-8 rounded text-sm ${p === page ? 'bg-blue-600 text-white' : 'border hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'}`}>{p}</button>
+              <button type="button" aria-current={p === page ? 'page' : undefined} aria-label={`第 ${p} 页`} onClick={() => setPage(p)} className={`w-8 h-8 rounded text-sm ${p === page ? 'bg-blue-600 text-white' : 'border hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'}`}>{p}</button>
             </span>
           ))}
         </div>

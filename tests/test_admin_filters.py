@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from starlette.routing import Match
 
 from mcp_hub.api.routes_admin import (
     _csv_cell,
     admin_categories,
     admin_overview,
+    admin_reviews,
     admin_servers,
     admin_set_security,
     admin_toggle_server,
@@ -26,6 +27,7 @@ from mcp_hub.api.routes_admin import (
 from mcp_hub.db.database import async_session_factory, engine
 from mcp_hub.db.models import (
     Base,
+    ReviewModel,
     ServerModel,
     TelemetryDeviceModel,
     TelemetryEventModel,
@@ -298,6 +300,153 @@ async def test_admin_security_block_hides_server_from_market() -> None:
         assert server is not None
         assert server.security_level == "blocked"
         assert server.market_visible is False
+
+
+async def test_admin_security_update_restores_active_server_visibility() -> None:
+    await _prepare_admin_filter_data()
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        server.market_visible = False
+        await session.commit()
+
+    result = await admin_set_security(
+        server_id="@admin-filter/blocked",
+        data={"level": "reviewed"},
+        admin_user="test-admin",
+    )
+    assert result["success"] is True
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        assert server.security_level == "reviewed"
+        assert server.market_visible is True
+
+
+async def test_admin_security_update_keeps_upstream_deleted_server_hidden() -> None:
+    await _prepare_admin_filter_data()
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        server.catalog_status = "deleted"
+        server.market_visible = False
+        await session.commit()
+
+    result = await admin_set_security(
+        server_id="@admin-filter/blocked",
+        data={"level": "reviewed"},
+        admin_user="test-admin",
+    )
+    assert result["success"] is True
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        assert server.security_level == "reviewed"
+        assert server.market_visible is False
+
+
+async def test_admin_unblock_keeps_upstream_deleted_server_hidden() -> None:
+    await _prepare_admin_filter_data()
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        server.catalog_status = "deleted"
+        server.market_visible = False
+        await session.commit()
+
+    result = await admin_toggle_server(
+        server_id="@admin-filter/blocked",
+        data={"action": "unblock"},
+        admin_user="test-admin",
+    )
+    assert result["success"] is True
+    assert "上游目录已删除" in result["message"]
+
+    async with async_session_factory() as session:
+        server = await session.get(ServerModel, "@admin-filter/blocked")
+        assert server is not None
+        assert server.security_level == "reviewed"
+        assert server.market_visible is False
+
+
+async def test_admin_reviews_return_complete_content() -> None:
+    await _prepare_admin_filter_data()
+    content = "管理员需要读取完整评价。" * 40
+
+    async with async_session_factory() as session:
+        await session.execute(
+            delete(ReviewModel).where(
+                ReviewModel.server_id == "@admin-filter/verified",
+                ReviewModel.user_id == "admin-filter-user",
+            )
+        )
+        session.add(
+            ReviewModel(
+                server_id="@admin-filter/verified",
+                user_id="admin-filter-user",
+                rating=1,
+                content=content,
+            )
+        )
+        await session.commit()
+
+    result = await admin_reviews(admin_user="test-admin")
+    review = next(
+        item
+        for item in result["data"]
+        if item["server_id"] == "@admin-filter/verified"
+        and item["user_id"] == "admin-filter-user"
+    )
+    assert review["content"] == content
+
+
+async def test_admin_server_list_and_categories_do_not_query_per_row() -> None:
+    await _prepare_admin_filter_data()
+
+    statements: list[str] = []
+
+    def record_statement(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        statements.clear()
+        await admin_servers(
+            admin_user="test-admin",
+            page=1,
+            page_size=1,
+        )
+        one_row_count = len(statements)
+
+        statements.clear()
+        await admin_servers(
+            admin_user="test-admin",
+            page=1,
+            page_size=20,
+        )
+        all_rows_count = len(statements)
+
+        statements.clear()
+        await admin_categories(admin_user="test-admin")
+        category_count = len(statements)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record_statement)
+
+    assert one_row_count == 2
+    assert all_rows_count == one_row_count
+    assert category_count == 1
 
 
 async def test_admin_cannot_demote_self_or_last_admin() -> None:

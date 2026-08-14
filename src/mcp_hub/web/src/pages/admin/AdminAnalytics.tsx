@@ -83,14 +83,14 @@ export default function AdminAnalytics() {
         <div className="flex flex-wrap gap-2">
           <div className="flex border border-gray-300 dark:border-gray-600" role="group" aria-label="平台分析时间范围">
             {[7, 30, 90].map(value => (
-              <button key={value} type="button" onClick={() => setDays(value)} className={`px-3 py-2 text-xs ${days === value ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+              <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)} className={`px-3 py-2 text-xs ${days === value ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
                 {value} 天
               </button>
             ))}
           </div>
           <div className="flex border border-gray-300 dark:border-gray-600" role="group" aria-label="平台分析指标">
             {(['calls', 'tokens'] as const).map(value => (
-              <button key={value} type="button" onClick={() => setMetric(value)} className={`px-3 py-2 text-xs ${metric === value ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
+              <button key={value} type="button" aria-pressed={metric === value} onClick={() => setMetric(value)} className={`px-3 py-2 text-xs ${metric === value ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'}`}>
                 {value === 'calls' ? '调用' : 'Token'}
               </button>
             ))}
@@ -102,12 +102,12 @@ export default function AdminAnalytics() {
       </header>
 
       {error ? (
-        <div className="py-16 text-center text-red-600">
+        <div role="alert" className="py-16 text-center text-red-600">
           <p>{error}</p>
           <button type="button" onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:underline">重试</button>
         </div>
       ) : loading ? (
-        <div className="py-16 text-center text-sm text-gray-400">正在加载平台遥测...</div>
+        <div role="status" className="py-16 text-center text-sm text-gray-400">正在加载平台遥测...</div>
       ) : (
         <>
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -145,19 +145,19 @@ export default function AdminAnalytics() {
             ) : <div className="py-12 text-center text-sm text-gray-400">暂无平台遥测数据</div>}
           </section>
 
-          <section className="grid gap-4 md:grid-cols-2">
+          <section className="grid min-w-0 gap-4 md:grid-cols-2">
             <RankingPanel title="🏆 活跃 Server" empty="暂无 Server 活跃数据">
               {topServers.map((item, index) => (
-                <div key={item.server_id} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
-                  <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {item.name || item.server_id}</span>
+                <div key={item.server_id} className="flex min-w-0 items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+                  <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300" title={item.name || item.server_id}>{index + 1}. {item.name || item.server_id}</span>
                   <span className="shrink-0 text-xs text-gray-400">📞 {fmtNum(item.calls)} · 🔤 {fmtNum(item.tokens)}</span>
                 </div>
               ))}
             </RankingPanel>
             <RankingPanel title="👥 活跃用户" empty="暂无用户活跃数据">
               {topUsers.map((item, index) => (
-                <div key={item.user_id} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
-                  <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {item.display_name || item.user_id}</span>
+                <div key={item.user_id} className="flex min-w-0 items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+                  <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300" title={item.display_name || item.user_id}>{index + 1}. {item.display_name || item.user_id}</span>
                   <span className="shrink-0 text-xs text-gray-400">📞 {fmtNum(item.calls)} · 🔤 {fmtNum(item.tokens)}</span>
                 </div>
               ))}
@@ -182,7 +182,7 @@ function Metric({ label, value, hint }: { label: string; value: string; hint: st
 function RankingPanel({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
   const hasItems = Children.count(children) > 0
   return (
-    <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+    <section className="min-w-0 border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
       <h2 className="font-semibold text-gray-900 dark:text-white">{title}</h2>
       <div className="mt-2">{hasItems ? children : <p className="py-6 text-sm text-gray-400">{empty}</p>}</div>
     </section>

@@ -118,6 +118,7 @@ async def test_sync_is_idempotent_and_preserves_admin_security_decision(registry
         server = await session.get(ServerModel, "@mcp-registry/example.test/demo")
         assert server is not None
         server.security_level = "blocked"
+        server.market_visible = False
         await session.commit()
 
     await _sync(
@@ -135,6 +136,7 @@ async def test_sync_is_idempotent_and_preserves_admin_security_decision(registry
         assert len(source_entries) == 1
         assert servers[0].latest_version == "1.1.0"
         assert servers[0].security_level == "blocked"
+        assert servers[0].market_visible is False
 
 
 async def test_deleted_upstream_entry_hides_catalog_but_preserves_user_relationships(

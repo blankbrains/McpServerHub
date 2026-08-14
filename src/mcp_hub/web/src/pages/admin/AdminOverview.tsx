@@ -43,10 +43,10 @@ export default function AdminOverview() {
     return () => { cancelled = true }
   }, [reloadKey])
 
-  if (loading) return <div className="py-16 text-center text-sm text-gray-400">正在加载平台数据...</div>
+  if (loading) return <div role="status" className="py-16 text-center text-sm text-gray-400">正在加载平台数据...</div>
   if (error || !data) {
     return (
-      <div className="py-16 text-center text-red-600">
+      <div role="alert" className="py-16 text-center text-red-600">
         <p>{error || '无法加载平台概览'}</p>
         <button type="button" onClick={() => setReloadKey(value => value + 1)} className="mt-3 text-sm text-blue-600 hover:underline">重试</button>
       </div>
@@ -112,19 +112,19 @@ export default function AdminOverview() {
         )}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid min-w-0 gap-4 md:grid-cols-2">
         <RankPanel title="🏆 活跃 Server" link="/admin/servers" linkText="查看全部">
           {topServers.length > 0 ? topServers.map((server, index) => (
-            <Link key={server.id} to={`/admin/servers/${encodeURIComponent(server.id)}`} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
-              <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {server.name || server.id}</span>
+            <Link key={server.id} to={`/admin/servers/${encodeURIComponent(server.id)}`} className="flex min-w-0 items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+              <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300" title={server.name || server.id}>{index + 1}. {server.name || server.id}</span>
               <span className="shrink-0 text-xs text-gray-400">追踪 {server.installs} · 调用 {fmtNum(server.calls_7d)}</span>
             </Link>
           )) : <Empty text="暂无 Server 活跃数据" />}
         </RankPanel>
         <RankPanel title="👥 活跃用户" link="/admin/users" linkText="查看设备">
           {topUsers.length > 0 ? topUsers.map((user, index) => (
-            <Link key={user.user_id} to={`/admin/users/${encodeURIComponent(user.user_id)}`} className="flex items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
-              <span className="truncate text-gray-700 dark:text-gray-300">{index + 1}. {user.display_name || user.user_id}</span>
+            <Link key={user.user_id} to={`/admin/users/${encodeURIComponent(user.user_id)}`} className="flex min-w-0 items-center justify-between gap-3 border-b border-gray-100 py-2.5 text-sm last:border-0 dark:border-gray-700">
+              <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300" title={user.display_name || user.user_id}>{index + 1}. {user.display_name || user.user_id}</span>
               <span className="shrink-0 text-xs text-gray-400">📞 {fmtNum(user.calls_7d)} · 🔤 {fmtNum(user.tokens_7d)}</span>
             </Link>
           )) : <Empty text="暂无活跃用户数据" />}
@@ -163,7 +163,7 @@ function Metric({ label, value, hint, tone }: { label: string; value: string; hi
 
 function RankPanel({ title, link, linkText, children }: { title: string; link: string; linkText: string; children: ReactNode }) {
   return (
-    <section className="border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
+    <section className="min-w-0 border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="font-semibold text-gray-900 dark:text-white">{title}</h2>
         <Link to={link} className="text-xs text-blue-600 hover:underline">{linkText}</Link>
