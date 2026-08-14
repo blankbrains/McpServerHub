@@ -55,6 +55,9 @@ async def _prepare_admin_filter_data() -> None:
             delete(UsageStatsModel).where(UsageStatsModel.server_id.in_(server_ids))
         )
         await session.execute(
+            delete(ReviewModel).where(ReviewModel.server_id.in_(server_ids))
+        )
+        await session.execute(
             delete(UserServerModel).where(UserServerModel.server_id.in_(server_ids))
         )
         await session.execute(delete(ServerModel).where(ServerModel.id.in_(server_ids)))
