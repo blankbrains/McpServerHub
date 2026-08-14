@@ -180,6 +180,7 @@ def test_legacy_public_pages_receive_dark_theme_without_overriding_explicit_vari
     assert "color-scheme: dark" in styles
     assert "dark:from-amber-950/40" in guide
     assert "text-gray-400 dark:text-gray-400" in _source("components/Layout.tsx")
+    assert _source("pages/ConfigPage.tsx").count("dark:text-gray-300") >= 4
 
 
 def test_builder_errors_are_readable_and_form_controls_are_labeled() -> None:

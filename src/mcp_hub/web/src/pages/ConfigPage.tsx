@@ -176,9 +176,9 @@ export default function ConfigPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">📤 步骤 1：检查你的 MCP 配置</h2>
         <p className="text-sm text-gray-500 mb-4">
-          仅支持根节点为 <code className="px-1 bg-gray-100 rounded text-xs">mcpServers</code> 的 JSON，例如
-          <code className="mx-1 px-1 bg-gray-100 rounded text-xs">claude_desktop_config.json</code>。
-          Codex TOML 和 VS Code Copilot 的 <code className="px-1 bg-gray-100 rounded text-xs">servers</code> JSON 请在步骤 4 使用 agent setup
+          仅支持根节点为 <code className="px-1 bg-gray-100 rounded text-xs dark:text-gray-300">mcpServers</code> 的 JSON，例如
+          <code className="mx-1 px-1 bg-gray-100 rounded text-xs dark:text-gray-300">claude_desktop_config.json</code>。
+          Codex TOML 和 VS Code Copilot 的 <code className="px-1 bg-gray-100 rounded text-xs dark:text-gray-300">servers</code> JSON 请在步骤 4 使用 agent setup
         </p>
 
         {/* 文件选择区 */}
@@ -327,7 +327,7 @@ export default function ConfigPage() {
           </p>
           <p className="text-xs text-gray-500 mb-3">
             此文件会让 Agent 直接连接 Server，不经过 Gateway，因此不会产生 Hub 调用监控数据。合并到
-            <code className="mx-1 px-1 bg-gray-200 rounded text-xs">{agent?.path || '~/.claude.json'}</code>
+            <code className="mx-1 px-1 bg-gray-200 rounded text-xs dark:text-gray-300">{agent?.path || '~/.claude.json'}</code>
             前请先备份现有配置。
           </p>
           <button onClick={handleDownload} disabled={downloading}
