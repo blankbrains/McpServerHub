@@ -20,6 +20,7 @@ from mcp_hub.db.database import async_session_factory
 from mcp_hub.db.models import UserServerModel
 from mcp_hub.exceptions import ConfigError
 from mcp_hub.logging_config import get_logger
+from mcp_hub.runtime_config import has_runnable_server_config
 
 logger = get_logger(__name__)
 
@@ -149,7 +150,10 @@ async def download_config(
         cmd = s.get("install_command", "")
         name = server_config_name(s["id"], s)
         config_template = s.get("config_template", {})
-        if cmd or config_template:
+        if has_runnable_server_config(
+            cmd,
+            config_template if isinstance(config_template, dict) else None,
+        ):
             fragment = get_config_for_agent(
                 name,
                 cmd,
@@ -506,7 +510,10 @@ async def build_config(data: dict[str, Any]) -> Response | dict[str, Any]:
             cmd = server.get("install_command", "")
             name = server_config_name(sid, server)
             config_template = server.get("config_template", {})
-            if cmd or config_template:
+            if has_runnable_server_config(
+                cmd,
+                config_template if isinstance(config_template, dict) else None,
+            ):
                 fragment = get_config_for_agent(
                     name,
                     cmd,
@@ -546,7 +553,10 @@ async def generate_config(_admin_id: str = Depends(get_admin_user)) -> Response:
         cmd = s.get("install_command", "")
         name = server_config_name(s["id"], s)
         config_template = s.get("config_template", {})
-        if cmd or config_template:
+        if has_runnable_server_config(
+            cmd,
+            config_template if isinstance(config_template, dict) else None,
+        ):
             fragment = get_config_for_agent(
                 name,
                 cmd,

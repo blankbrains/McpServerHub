@@ -110,6 +110,8 @@ async def get_reliability(server_id: str) -> dict[str, Any]:
             "uptime_stats": [
                 {
                     "window": u.window,
+                    "total_checks": u.total_checks,
+                    "passed_checks": u.passed_checks,
                     "uptime_pct": u.uptime_pct,
                     "avg_response_time_ms": u.avg_response_time_ms,
                 }

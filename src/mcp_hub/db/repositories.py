@@ -17,6 +17,10 @@ from mcp_hub.db.models import (
     ServerModel,
     UserModel,
 )
+from mcp_hub.runtime_config import (
+    has_runnable_server_config,
+    is_legacy_inferred_github_command,
+)
 
 
 class ServerRepository:
@@ -31,6 +35,17 @@ class ServerRepository:
             config_template = json.loads(server.config_template) if server.config_template else {}
         except json.JSONDecodeError:
             config_template = {}
+        install_command = server.install_command or ""
+        if is_legacy_inferred_github_command(
+            server.id,
+            server.install_package or "",
+            install_command,
+        ):
+            install_command = ""
+        runnable_config = has_runnable_server_config(
+            install_command,
+            config_template if isinstance(config_template, dict) else None,
+        )
         return {
             "id": server.id,
             "name": server.name,
@@ -44,7 +59,8 @@ class ServerRepository:
             "tags": json.loads(server.tags) if server.tags else [],
             "install_type": server.install_type or "",
             "install_package": server.install_package or "",
-            "install_command": server.install_command or "",
+            "install_command": install_command,
+            "runtime_config_available": runnable_config,
             "config_template": config_template if isinstance(config_template, dict) else {},
             "catalog_source": server.catalog_source or "",
             "catalog_source_id": server.catalog_source_id or "",

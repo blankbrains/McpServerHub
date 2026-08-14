@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getLoginUrl, getAuthState, clearAuth, getMe } from '../api/client'
+import { getLoginUrl, getAuthState, clearAuth, getMe, setAuth } from '../api/client'
+import { useAuthState } from '../hooks/useAuthState'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [auth, setAuth] = useState(getAuthState())
+  const auth = useAuthState()
   const [loggingIn, setLoggingIn] = useState(false)
   const [userInfo, setUserInfo] = useState<any>(null)
   const [userInfoLoading, setUserInfoLoading] = useState(true)
@@ -18,7 +19,6 @@ export default function Login() {
 
   const handleLogout = () => {
     clearAuth()
-    setAuth({ token: null, userId: null })
     setUserInfo(null)
   }
 
@@ -30,7 +30,6 @@ export default function Login() {
       .then(r => setUserInfo(r.data || r))
       .catch(() => {
         clearAuth()
-        setAuth({ token: null, userId: null })
       })
       .finally(() => setUserInfoLoading(false))
   }, [auth.token, auth.userId])
@@ -41,7 +40,7 @@ export default function Login() {
     const timer = setInterval(() => {
       const state = getAuthState()
       if (state.token && state.userId) {
-        setAuth(state)
+        setAuth(state.token, state.userId)
         setLoggingIn(false)
         clearInterval(timer)
         navigate('/')
@@ -53,12 +52,6 @@ export default function Login() {
       clearTimeout(timeout)
     }
   }, [loggingIn, navigate])
-
-  // 页面打开时也检测一次
-  useEffect(() => {
-    const state = getAuthState()
-    if (state.token !== auth.token) setAuth(state)
-  }, [])
 
   if (auth.token && auth.userId) {
     const avatarUrl = userInfo?.avatar_url || `https://github.com/${auth.userId}.png`

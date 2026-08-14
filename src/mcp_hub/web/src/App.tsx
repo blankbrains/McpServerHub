@@ -28,6 +28,7 @@ import AdminAnalytics from './pages/admin/AdminAnalytics'
 import AdminValidation from './pages/admin/AdminValidation'
 import AdminReviews from './pages/admin/AdminReviews'
 import AdminAuditLog from './pages/admin/AdminAuditLog'
+import NotFound from './pages/NotFound'
 
 function HubRoutes() {
   return (
@@ -56,6 +57,7 @@ function HubRoutes() {
         <Route path="/alerts" element={<NotificationsPage />} />
         <Route path="/notifications" element={<Navigate to="/alerts" replace />} />
         <Route path="/presets" element={<PresetMarket />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>
   )

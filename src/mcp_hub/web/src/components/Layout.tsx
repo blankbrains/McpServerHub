@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { ReactNode, useState, useEffect, useRef } from 'react'
-import { getAuthState, clearAuth, AuthState, searchServers, ServerInfo, apiGet, getMe } from '../api/client'
+import { getAuthState, clearAuth, searchServers, ServerInfo, apiGet, getMe } from '../api/client'
+import { useAuthState } from '../hooks/useAuthState'
 import { NOTIFICATION_COUNT_EVENT } from '../utils/notifications'
 import McpWorkspaceNav from './McpWorkspaceNav'
 import TelemetryWorkspaceNav from './TelemetryWorkspaceNav'
@@ -37,7 +38,7 @@ function matchesRoute(pathname: string, prefixes: readonly string[]): boolean {
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const [auth, setAuthState] = useState<AuthState>({ token: null, userId: null })
+  const auth = useAuthState()
   const [isAdmin, setIsAdmin] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [unreadNotif, setUnreadNotif] = useState(0)
@@ -114,13 +115,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    setAuthState(getAuthState())
-    const handler = () => setAuthState(getAuthState())
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
     if (!auth.token) {
       setIsAdmin(false)
@@ -140,14 +134,18 @@ export default function Layout({ children }: { children: ReactNode }) {
     const popup = window.open('/api/v1/auth/login', 'github-oauth', 'width=600,height=700')
     if (!popup) { alert('请允许弹出窗口以完成登录'); return }
     const timer = setInterval(() => {
-      if (popup.closed) { clearInterval(timer); const s = getAuthState(); if (s.token) { setAuthState(s); window.location.reload() } }
+      if (popup.closed) {
+        clearInterval(timer)
+        const state = getAuthState()
+        if (state.token) window.location.reload()
+      }
     }, 500)
     loginTimers.current.push(timer)
     const safetyTimeout = setTimeout(() => { clearInterval(timer); loginTimers.current = loginTimers.current.filter(t => t !== timer) }, 120_000)
     loginTimers.current.push(safetyTimeout as any)
   }
 
-  const handleLogout = () => { clearAuth(); setAuthState({ token: null, userId: null }) }
+  const handleLogout = () => clearAuth()
 
   // 面包屑
   const pathParts = location.pathname.split('/').filter(Boolean)

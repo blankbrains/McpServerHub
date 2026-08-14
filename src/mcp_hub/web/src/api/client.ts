@@ -1,4 +1,8 @@
 const API_BASE = '/api/v1'
+const AUTH_TOKEN_KEY = 'mcp_hub_token'
+const AUTH_USER_KEY = 'mcp_hub_user'
+
+export const AUTH_STATE_EVENT = 'mcp-hub-auth-state'
 
 export class ApiRequestError extends Error {
   constructor(public readonly status: number, message?: string) {
@@ -7,12 +11,65 @@ export class ApiRequestError extends Error {
   }
 }
 
+export interface AuthState {
+  token: string | null
+  userId: string | null
+}
+
+let cachedAuthState: AuthState = { token: null, userId: null }
+
+function readAuthState(): AuthState {
+  if (typeof window === 'undefined') return cachedAuthState
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  const userId = token ? localStorage.getItem(AUTH_USER_KEY) : null
+  if (cachedAuthState.token !== token || cachedAuthState.userId !== userId) {
+    cachedAuthState = { token, userId }
+  }
+  return cachedAuthState
+}
+
+function publishAuthState(): void {
+  window.dispatchEvent(new Event(AUTH_STATE_EVENT))
+}
+
+export function subscribeAuthState(listener: () => void): () => void {
+  const handleAuthState = () => listener()
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === AUTH_TOKEN_KEY || event.key === AUTH_USER_KEY || event.key === null) {
+      listener()
+    }
+  }
+  window.addEventListener(AUTH_STATE_EVENT, handleAuthState)
+  window.addEventListener('storage', handleStorage)
+  return () => {
+    window.removeEventListener(AUTH_STATE_EVENT, handleAuthState)
+    window.removeEventListener('storage', handleStorage)
+  }
+}
+
 export function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('mcp_hub_token')
+  const token = readAuthState().token
   if (token) {
     return { 'Authorization': `Bearer ${token}` }
   }
   return {}
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const tokenUsed = readAuthState().token
+  const headers = new Headers(init.headers)
+  if (tokenUsed && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${tokenUsed}`)
+  }
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  if (
+    response.status === 401
+    && tokenUsed
+    && localStorage.getItem(AUTH_TOKEN_KEY) === tokenUsed
+  ) {
+    clearAuth()
+  }
+  return response
 }
 
 export interface ServerInfo {
@@ -35,6 +92,7 @@ export interface ServerInfo {
   catalog_source?: string
   catalog_source_id?: string
   catalog_status?: string
+  runtime_config_available?: boolean
   config_template?: Record<string, string>
   registry?: {
     source: string
@@ -52,17 +110,15 @@ export interface ServerInfo {
 }
 
 export async function apiGet<T>(path: string): Promise<{ success: boolean; data: T; meta?: any }> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: getAuthHeaders(),
-  })
+  const res = await apiFetch(path)
   if (!res.ok) throw new ApiRequestError(res.status)
   return res.json()
 }
 
 export async function apiPost<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new ApiRequestError(res.status)
@@ -70,18 +126,17 @@ export async function apiPost<T>(path: string, body?: any): Promise<{ success: b
 }
 
 export async function apiDelete<T>(path: string): Promise<{ success: boolean; data?: T; message?: string }> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     method: 'DELETE',
-    headers: getAuthHeaders(),
   })
   if (!res.ok) throw new ApiRequestError(res.status)
   return res.json()
 }
 
 export async function apiPatch<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new ApiRequestError(res.status)
@@ -89,9 +144,9 @@ export async function apiPatch<T>(path: string, body?: any): Promise<{ success: 
 }
 
 export async function apiPut<T>(path: string, body?: any): Promise<{ success: boolean; data?: T; message?: string }> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(path, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) throw new ApiRequestError(res.status)
@@ -99,9 +154,7 @@ export async function apiPut<T>(path: string, body?: any): Promise<{ success: bo
 }
 
 export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: getAuthHeaders(),
-  })
+  const res = await apiFetch(path)
   if (!res.ok) throw new ApiRequestError(res.status)
   const disposition = res.headers.get('Content-Disposition') || ''
   const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
@@ -181,27 +234,25 @@ export async function getFavoriteServers(): Promise<{ success: boolean; data: Se
   return apiGet<ServerInfo[]>('/community/favorites')
 }
 
-// === Auth ===
-
-export interface AuthState {
-  token: string | null
-  userId: string | null
-}
-
 export function getAuthState(): AuthState {
-  const token = localStorage.getItem('mcp_hub_token')
-  const userId = token ? localStorage.getItem('mcp_hub_user') : null
-  return { token, userId }
+  return readAuthState()
 }
 
 export function setAuth(token: string, userId: string) {
-  localStorage.setItem('mcp_hub_token', token)
-  localStorage.setItem('mcp_hub_user', userId)
+  localStorage.setItem(AUTH_TOKEN_KEY, token)
+  localStorage.setItem(AUTH_USER_KEY, userId)
+  readAuthState()
+  publishAuthState()
 }
 
 export function clearAuth() {
-  localStorage.removeItem('mcp_hub_token')
-  localStorage.removeItem('mcp_hub_user')
+  const hadAuth = Boolean(
+    localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(AUTH_USER_KEY)
+  )
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_USER_KEY)
+  readAuthState()
+  if (hadAuth) publishAuthState()
 }
 
 export function getLoginUrl(): string {
@@ -209,13 +260,8 @@ export function getLoginUrl(): string {
 }
 
 export async function getMe(): Promise<any> {
-  const { token } = getAuthState()
-  if (!token) throw new Error('Not logged in')
-  const res = await fetch(`${API_BASE}/auth/me`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error('Auth failed')
-  return res.json()
+  if (!getAuthState().token) throw new Error('Not logged in')
+  return apiGet('/auth/me')
 }
 
 // === SSE / Realtime ===
@@ -253,39 +299,35 @@ export async function uploadConfig(
 ): Promise<any> {
   const form = new FormData()
   form.append('file', file)
-  const headers: Record<string, string> = getAuthHeaders()
+  const headers: Record<string, string> = {}
   if (agentId) headers['x-agent-id'] = agentId
   headers['x-track-servers'] = String(trackServers)
-  const res = await fetch(`${API_BASE}/config/upload`, {
+  const res = await apiFetch('/config/upload', {
     method: 'POST',
     body: form,
     headers,
   })
-  if (!res.ok) throw new Error(`Upload config failed: ${res.status}`)
+  if (!res.ok) throw new ApiRequestError(res.status, `Upload config failed: ${res.status}`)
   return res.json()
 }
 
 export async function downloadConfig(): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/config/download`, {
-    headers: getAuthHeaders(),
-  })
-  if (!res.ok) throw new Error(`Download config failed: ${res.status}`)
+  const res = await apiFetch('/config/download')
+  if (!res.ok) throw new ApiRequestError(res.status, `Download config failed: ${res.status}`)
   return res.blob()
 }
 
 export async function exportConfig(share: boolean): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/export/config?share=${share}`, {
-    headers: getAuthHeaders(),
-  })
-  if (!res.ok) throw new Error(`Export config failed: ${res.status}`)
+  const res = await apiFetch(`/export/config?share=${share}`)
+  if (!res.ok) throw new ApiRequestError(res.status, `Export config failed: ${res.status}`)
   return res.blob()
 }
 
 export async function exportTelemetryReport(days: number = 7): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/export/telemetry-report?days=${days}`, {
-    headers: getAuthHeaders(),
-  })
-  if (!res.ok) throw new Error(`Telemetry report export failed: ${res.status}`)
+  const res = await apiFetch(`/export/telemetry-report?days=${days}`)
+  if (!res.ok) {
+    throw new ApiRequestError(res.status, `Telemetry report export failed: ${res.status}`)
+  }
   return res.blob()
 }
 
@@ -304,10 +346,8 @@ export async function searchAdvanced(params: {
   if (params.sort) qs.set('sort', params.sort)
   if (params.page) qs.set('page', String(params.page))
   qs.set('page_size', '9')
-  const res = await fetch(`${API_BASE}/search/advanced?${qs}`, {
-    headers: getAuthHeaders(),
-  })
-  if (!res.ok) throw new Error(`Search failed: ${res.status}`)
+  const res = await apiFetch(`/search/advanced?${qs}`)
+  if (!res.ok) throw new ApiRequestError(res.status, `Search failed: ${res.status}`)
   return res.json()
 }
 

@@ -180,8 +180,8 @@ export default function Guide() {
 
                 {/* Commands */}
                 {step.code && (
-                  <div className="bg-gray-900 rounded-lg p-4">
-                    <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
+                  <div className="min-w-0 max-w-full overflow-x-auto bg-gray-900 rounded-lg p-4">
+                    <pre className="min-w-max text-green-400 text-sm font-mono whitespace-pre">
                       {step.code}
                     </pre>
                   </div>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { apiGet, apiPatch, getAuthState } from '../../api/client'
+import { apiGet, apiPatch } from '../../api/client'
+import { useAuthState } from '../../hooks/useAuthState'
 
 export default function AdminUserDetail() {
   const { userId } = useParams<{ userId: string }>()
-  const currentUserId = getAuthState().userId
+  const currentUserId = useAuthState().userId
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')

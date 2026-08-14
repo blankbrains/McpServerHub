@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   apiDelete,
   apiGet,
   apiPost,
-  getAuthState,
   searchAdvanced,
   ServerInfo,
 } from '../api/client'
 import ServerCard from '../components/ServerCard'
+import { useAuthState } from '../hooks/useAuthState'
 
 const PAGE_SIZE = 9
 
 export default function Market() {
-  const isAuthenticated = Boolean(getAuthState().token)
+  const auth = useAuthState()
+  const navigate = useNavigate()
+  const isAuthenticated = Boolean(auth.token)
   const [query, setQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [category, setCategory] = useState('')
@@ -33,12 +35,7 @@ export default function Market() {
   const [showFilters, setShowFilters] = useState(false)
   const [trackedFilter, setTrackedFilter] = useState('')
   const [message, setMessage] = useState('')
-  const [addedServers, setAddedServers] = useState<Set<string>>(() => {
-    try {
-      const existing = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-      return new Set(existing.map((x: any) => x.name || x.hub_id))
-    } catch { return new Set() }
-  })
+  const [addedServers, setAddedServers] = useState<Set<string>>(new Set())
 
   // Search debounce: 300ms delay before updating query
   useEffect(() => {
@@ -48,25 +45,19 @@ export default function Market() {
 
   // 从服务端加载 user_servers（与 localStorage 合并）
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated) {
+      setAddedServers(new Set())
+      setTrackedFilter('')
+      return
+    }
     apiGet<any[]>('/config/user-servers')
       .then(r => {
-        if (r.data && r.data.length > 0) {
-          const apiIds: string[] = r.data.map((s: any) => String(s.name || s.hub_id || ''))
-          setAddedServers(prev => {
-            const merged = new Set([...prev, ...apiIds])
-            return merged
-          })
-          // 合并到 localStorage：保留已有字段（command/enabled等），新增API中的ID
-          const localServers: any[] = JSON.parse(localStorage.getItem('mcp_hub_my_servers') || '[]')
-          const localMap = new Map(localServers.map((x: any) => [x.name || x.hub_id, x]))
-          for (const id of apiIds) {
-            if (!localMap.has(id)) localMap.set(id, { name: id, hub_id: id, matched: true })
-          }
-          localStorage.setItem('mcp_hub_my_servers', JSON.stringify([...localMap.values()]))
-        }
+        const apiIds = (r.data || [])
+          .map((server: any) => String(server.hub_id || server.name || ''))
+          .filter(Boolean)
+        setAddedServers(new Set(apiIds))
       })
-      .catch((e) => { console.error('User servers load failed:', e) })
+      .catch(() => setAddedServers(new Set()))
   }, [isAuthenticated])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -269,7 +260,7 @@ export default function Market() {
                       onClick={async (e) => {
                         e.preventDefault()
                         if (!isAuthenticated) {
-                          setMessage('请先登录后管理自己的 Server')
+                          navigate('/login')
                           return
                         }
                         try {

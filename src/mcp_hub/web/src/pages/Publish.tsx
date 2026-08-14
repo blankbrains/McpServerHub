@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiRequestError, apiGet, apiPost, getAuthState } from '../api/client'
+import { ApiRequestError, apiGet, apiPost } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface PublishForm {
   name: string
@@ -97,6 +99,7 @@ function loadForm(): PublishForm {
 }
 
 export default function Publish() {
+  const { userId, token } = useAuthState()
   const [form, setForm] = useState<PublishForm>(loadForm)
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
@@ -104,8 +107,6 @@ export default function Publish() {
   const [publishedLoading, setPublishedLoading] = useState(true)
   const [publishedError, setPublishedError] = useState('')
   const [feedbackByServer, setFeedbackByServer] = useState<Record<string, CompatibilityFeedback>>({})
-  const { userId, token } = getAuthState()
-
   const saveForm = (data: PublishForm) => {
     try { sessionStorage.setItem('mcp_hub_publish_form', JSON.stringify(data)) } catch {}
   }
@@ -155,7 +156,7 @@ export default function Publish() {
     }
   }
 
-  useEffect(() => { loadPublished() }, [])
+  useEffect(() => { void loadPublished() }, [token, userId])
 
   const handleChange = (field: keyof PublishForm, value: string) => {
     const next = { ...form, [field]: value }
@@ -223,6 +224,15 @@ export default function Publish() {
       setMessage(error instanceof ApiRequestError && error.status === 401 ? '登录状态已失效，请重新登录' : '下架失败，请稍后重试')
     }
     setTimeout(() => setMessage(''), 3000)
+  }
+
+  if (!token || !userId) {
+    return (
+      <AuthRequired
+        title="登录后发布 MCP Server"
+        description="发布记录、兼容性反馈和下架操作属于当前账户，登录后才能提交和维护。"
+      />
+    )
   }
 
   return (

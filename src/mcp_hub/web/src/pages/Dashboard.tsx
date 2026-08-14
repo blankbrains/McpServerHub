@@ -4,7 +4,6 @@ import {
   ApiRequestError,
   ServerInfo,
   apiGet,
-  getAuthState,
   getTopRated,
   getTrending,
   healthCheck,
@@ -12,6 +11,7 @@ import {
 import InfoTooltip from '../components/InfoTooltip'
 import ServerCard from '../components/ServerCard'
 import StatusBadge from '../components/StatusBadge'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface MonitorServer {
   server_id: string
@@ -61,7 +61,8 @@ function formatLastSeen(value: string | null | undefined): string {
 }
 
 export default function Dashboard() {
-  const authenticated = Boolean(getAuthState().token)
+  const auth = useAuthState()
+  const authenticated = Boolean(auth.token)
   const [monitor, setMonitor] = useState<MonitorData | null>(null)
   const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null)
   const [trending, setTrending] = useState<ServerInfo[]>([])

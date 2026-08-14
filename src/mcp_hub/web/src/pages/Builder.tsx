@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
 
 interface Tool {
@@ -43,7 +44,7 @@ export default function Builder() {
   }, [name, language, description, author, selectedTools])
 
   useEffect(() => {
-    fetch('/api/v1/builder/tools')
+    apiFetch('/builder/tools')
       .then(r => r.json())
       .then(r => { if (r.data) setAvailableTools(r.data) })
       .catch(() => setError('无法加载工具模板列表'))
@@ -73,7 +74,7 @@ export default function Builder() {
         author: author || 'developer',
         tools,
       })
-      const res = await fetch(`/api/v1/builder/generate?${params}`)
+      const res = await apiFetch(`/builder/generate?${params}`)
       if (!res.ok) {
         const errText = await res.text().catch(() => '')
         throw new Error(errText ? `服务器错误: ${errText}` : `生成失败 (${res.status})`)

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apiGet, getAuthState } from '../api/client'
+import { apiGet } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface InventoryServer {
   server_name: string
@@ -90,11 +91,12 @@ function compatibilityClass(status: InventoryServer['compatibility']['status']):
 }
 
 export default function LocalDiscovery() {
+  const auth = useAuthState()
   const [data, setData] = useState<InventoryData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<'devices' | 'compare' | 'conflicts'>('devices')
-  const authenticated = Boolean(getAuthState().token)
+  const authenticated = Boolean(auth.token)
 
   const load = async () => {
     setLoading(true)
@@ -116,15 +118,10 @@ export default function LocalDiscovery() {
 
   if (!authenticated) {
     return (
-      <div className="mx-auto max-w-3xl space-y-5">
-        <h1 className="text-2xl font-bold text-gray-900">本地清单</h1>
-        <div className="border border-gray-200 bg-white p-8 text-center">
-          <p className="text-sm text-gray-600">登录后查看由你的本地 Agent 设备主动上报的 MCP 清单。</p>
-          <Link to="/login" className="mt-4 inline-flex bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
-            登录
-          </Link>
-        </div>
-      </div>
+      <AuthRequired
+        title="登录后查看本地清单"
+        description="本地清单仅来自你授权的 Agent 设备，并按账户隔离，登录后才能查看设备上报结果。"
+      />
     )
   }
 

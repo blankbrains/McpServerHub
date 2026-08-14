@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiGet, apiPost, apiPut } from '../api/client'
+import { useAuthState } from '../hooks/useAuthState'
 import { copyStatus, copyText } from '../utils/clipboard'
+import AuthRequired from './AuthRequired'
 import ConnectionStatusPanel, {
   type ConnectionStatusData,
   type VersionCompatibility,
@@ -215,6 +217,7 @@ function formatUptime(value: number): string {
 type TelemetryView = 'devices' | 'analytics' | 'validation'
 
 export default function TelemetryPanel({ view }: { view: TelemetryView }) {
+  const auth = useAuthState()
   const [summary, setSummary] = useState<TelemetrySummary | null>(null)
   const [servers, setServers] = useState<TelemetryServer[]>([])
   const [devices, setDevices] = useState<TelemetryDevice[]>([])
@@ -271,6 +274,26 @@ export default function TelemetryPanel({ view }: { view: TelemetryView }) {
 
   useEffect(() => {
     let active = true
+    if (!auth.token) {
+      setSummary(null)
+      setServers([])
+      setDevices([])
+      setAgents([])
+      setTools([])
+      setPoints([])
+      setResources([])
+      setErrors([])
+      setOperations([])
+      setLifecycleEvents([])
+      setConnectionStatus(null)
+      setValidationProgress(null)
+      setError('')
+      setLoading(false)
+      return () => {
+        active = false
+      }
+    }
+
     const query = selectedAgent
       ? `&agent_type=${encodeURIComponent(selectedAgent)}`
       : ''
@@ -356,7 +379,7 @@ export default function TelemetryPanel({ view }: { view: TelemetryView }) {
     return () => {
       active = false
     }
-  }, [days, refreshVersion, selectedAgent, view])
+  }, [auth.token, days, refreshVersion, selectedAgent, view])
 
   const refresh = () => {
     setRefreshVersion((version) => version + 1)
@@ -510,6 +533,24 @@ export default function TelemetryPanel({ view }: { view: TelemetryView }) {
   if (selectedAgent) registeredAgentTypes.add(selectedAgent)
   const visibleAgents = AGENT_OPTIONS.filter((agent) => registeredAgentTypes.has(agent.id))
   const maxTrendCalls = Math.max(...points.map((point) => point.total_calls), 1)
+
+  if (!auth.token) {
+    const content = view === 'devices'
+      ? {
+          title: '登录后管理本地 Agent 设备',
+          description: '设备令牌、Gateway 接入状态和本地清单按账户隔离，登录后才能创建或查看。',
+        }
+      : view === 'validation'
+      ? {
+          title: '登录后参与用户验证',
+          description: '用户验证只记录你主动提交的接入阶段和固定答案，需要登录后管理参与状态。',
+        }
+      : {
+          title: '登录后查看调用分析',
+          description: '调用、延迟、错误和估算 Token 来自你授权的本地 Gateway，登录后才能查看账户数据。',
+        }
+    return <AuthRequired title={content.title} description={content.description} />
+  }
 
   return (
     <section className="space-y-4" aria-labelledby="telemetry-heading">

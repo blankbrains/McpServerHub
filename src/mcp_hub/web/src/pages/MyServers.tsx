@@ -6,10 +6,11 @@ import {
   apiGet,
   apiPost,
   favoriteServer,
-  getAuthState,
   getFavoriteServers,
 } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 
 type TabId = 'all' | 'discovered' | 'tracked' | 'connected' | 'attention' | 'conflicts'
 
@@ -125,6 +126,7 @@ function StateBadge({ kind, label }: { kind: string; label: string }) {
 }
 
 export default function MyServers() {
+  const auth = useAuthState()
   const [data, setData] = useState<OverviewData | null>(null)
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -138,9 +140,12 @@ export default function MyServers() {
   const [notice, setNotice] = useState('')
 
   const load = async (refresh = false) => {
-    if (!getAuthState().token) {
+    if (!auth.token) {
       setData({ days: 7, summary: EMPTY_SUMMARY, servers: [] })
-      setError('请先登录后查看自己的 MCP。')
+      setFavorites(new Set())
+      setSelected(new Set())
+      setError('')
+      setNotice('')
       setLoading(false)
       return
     }
@@ -169,7 +174,7 @@ export default function MyServers() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [auth.token])
 
   const servers = data?.servers || []
   const summary = data?.summary || EMPTY_SUMMARY
@@ -330,6 +335,15 @@ export default function MyServers() {
     await load(true)
     if (failed > 0) setError(`${failed}/${selectedServers.length} 个操作失败。`)
     else setNotice(`已完成 ${selectedServers.length} 个 Server 的批量操作。`)
+  }
+
+  if (!auth.token) {
+    return (
+      <AuthRequired
+        title="登录后管理我的 MCP"
+        description="追踪列表、Gateway 状态、配置冲突和真实调用都属于当前账户，登录后才能查看和操作。"
+      />
+    )
   }
 
   if (loading) {

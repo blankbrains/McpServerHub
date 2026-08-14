@@ -348,13 +348,14 @@ async def _register_github_repo(
     desc: str,
     stars: int,
     topics: list[str],
-    lang: str,
+    _lang: str,
 ) -> None:
     """注册 GitHub 仓库到数据库。"""
     from sqlalchemy import select
 
     from mcp_hub.db.database import async_session_factory
     from mcp_hub.db.models import ServerModel
+    from mcp_hub.runtime_config import is_legacy_inferred_github_command
 
     server_id = f"@github/{full_name}"
     name = full_name.split("/")[-1]
@@ -362,21 +363,17 @@ async def _register_github_repo(
 
     async with async_session_factory() as session:
         existing = await session.execute(select(ServerModel).where(ServerModel.id == server_id))
-        if existing.scalar_one_or_none():
+        existing_server = existing.scalar_one_or_none()
+        if existing_server:
+            if is_legacy_inferred_github_command(
+                existing_server.id,
+                existing_server.install_package or "",
+                existing_server.install_command or "",
+            ):
+                existing_server.install_type = "source"
+                existing_server.install_command = ""
+                await session.commit()
             return
-
-        # 判断安装方式
-        install_type = "pip"
-        install_cmd = f"uvx {name}"
-        if "node" in lang.lower() or "typescript" in lang.lower():
-            install_type = "npx"
-            install_cmd = f"npx -y {full_name}"
-        elif "python" in lang.lower():
-            install_type = "pip"
-            install_cmd = f"uvx {name}"
-        elif "go" in lang.lower():
-            install_type = "pip"
-            install_cmd = f"go install {full_name}@latest"
 
         cats = json.dumps(topics[:3] if topics else ["tools"])
         tags = json.dumps(topics[:5] if topics else ["github"])
@@ -390,9 +387,9 @@ async def _register_github_repo(
             author=full_name.split("/")[0],
             categories=cats,
             tags=tags,
-            install_type=install_type,
+            install_type="source",
             install_package=full_name,
-            install_command=install_cmd,
+            install_command="",
             security_level="reviewed",
             network_access=True,
             rating=round(rating, 1),

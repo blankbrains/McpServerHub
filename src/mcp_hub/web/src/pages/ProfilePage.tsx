@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiRequestError, getAuthState, apiGet } from '../api/client'
+import { ApiRequestError, apiGet } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface UserProfile {
   id: string
@@ -28,7 +30,7 @@ function fmtNum(n: number): string {
 }
 
 export default function ProfilePage() {
-  const { userId, token } = getAuthState()
+  const { userId, token } = useAuthState()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [servers, setServers] = useState<ServerStat[]>([])
   const [usageSummary, setUsageSummary] = useState<any>(null)
@@ -117,16 +119,10 @@ export default function ProfilePage() {
 
   if (!userId || !token) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">👤 个人中心</h1>
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-700 font-medium">登录后查看你的追踪 Server、调用和估算 Token 数据</p>
-          <div className="mt-4 flex justify-center gap-4 text-sm">
-            <Link to="/login" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
-            <Link to="/market" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">浏览市场</Link>
-          </div>
-        </div>
-      </div>
+      <AuthRequired
+        title="登录后查看个人中心"
+        description="个人资料、追踪 Server、调用和估算 Token 数据按账户隔离，登录后才能查看。"
+      />
     )
   }
 

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from click.testing import CliRunner
 
 from mcp_hub.cli.daemon import serve
@@ -165,6 +166,55 @@ async def test_gateway_spawns_structured_command_with_only_explicit_server_env(
     assert "PIP_INDEX_URL" not in keyword["env"]
     assert "SSH_AUTH_SOCK" not in keyword["env"]
     await gateway.shutdown()
+
+
+async def test_inspect_server_tools_initializes_reads_tools_and_closes(monkeypatch) -> None:
+    gateway = McpGateway()
+    spec = GatewayServerSpec(server_id="weather", command="weather-server")
+    managed = MagicMock()
+    managed.initialize = AsyncMock(return_value=True)
+    managed.close = AsyncMock()
+    managed.tools = [
+        {"name": "forecast", "description": "Get a forecast"},
+        "invalid-tool-entry",
+    ]
+
+    monkeypatch.setattr(gateway, "_load_server_specs", AsyncMock(return_value=[spec]))
+    create_managed = AsyncMock(return_value=managed)
+    monkeypatch.setattr(gateway, "_create_managed_server", create_managed)
+
+    tools = await gateway.inspect_server_tools("weather")
+
+    assert tools == [{"name": "forecast", "description": "Get a forecast"}]
+    create_managed.assert_awaited_once_with(spec)
+    managed.initialize.assert_awaited_once_with()
+    managed.close.assert_awaited_once_with()
+
+
+async def test_inspect_server_tools_closes_connection_when_initialization_fails(
+    monkeypatch,
+) -> None:
+    gateway = McpGateway()
+    spec = GatewayServerSpec(server_id="weather", command="weather-server")
+    managed = MagicMock()
+    managed.initialize = AsyncMock(return_value=False)
+    managed.close = AsyncMock()
+
+    monkeypatch.setattr(gateway, "_load_server_specs", AsyncMock(return_value=[spec]))
+    monkeypatch.setattr(gateway, "_create_managed_server", AsyncMock(return_value=managed))
+
+    with pytest.raises(GatewayError, match="初始化失败"):
+        await gateway.inspect_server_tools("weather")
+
+    managed.close.assert_awaited_once_with()
+
+
+async def test_inspect_server_tools_rejects_unknown_server(monkeypatch) -> None:
+    gateway = McpGateway()
+    monkeypatch.setattr(gateway, "_load_server_specs", AsyncMock(return_value=[]))
+
+    with pytest.raises(GatewayError, match="没有找到该 Server"):
+        await gateway.inspect_server_tools("missing")
 
 
 def test_server_environment_can_explicitly_authorize_filtered_variable_names(

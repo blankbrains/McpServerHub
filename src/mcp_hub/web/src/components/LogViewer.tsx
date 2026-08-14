@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { connectLogSSE } from '../api/client'
+import { apiFetch, connectLogSSE } from '../api/client'
 
 interface LogViewerProps {
   serverId: string
@@ -21,8 +21,11 @@ export default function LogViewer({
 
   useEffect(() => {
     // 从 REST API 加载初始日志
-    fetch(`/api/v1/servers/${encodeURIComponent(serverId)}/logs?lines=${maxLines}`)
-      .then(res => res.json())
+    apiFetch(`/servers/${encodeURIComponent(serverId)}/logs?lines=${maxLines}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Log request failed: ${res.status}`)
+        return res.json()
+      })
       .then(data => {
         if (data.success && data.data) {
           setLines(data.data.map((l: string) => l.replace(/\n$/, '')))

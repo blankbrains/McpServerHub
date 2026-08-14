@@ -15,4 +15,5 @@ def test_reports_page_exposes_authenticated_telemetry_report_export() -> None:
     assert "导出报告" in report_page
     assert "mcp-hub-telemetry-report-7d.json" in report_page
     assert "/export/telemetry-report?days=${days}" in client
-    assert "headers: getAuthHeaders()" in client
+    assert "const res = await apiFetch(`/export/telemetry-report?days=${days}`)" in client
+    assert "if (tokenUsed && !headers.has('Authorization'))" in client

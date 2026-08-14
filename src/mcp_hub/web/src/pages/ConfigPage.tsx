@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAuthHeaders, getAuthState, uploadConfig, downloadConfig } from '../api/client'
+import { apiDelete, apiFetch, getAuthState, uploadConfig } from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
 import { copyStatus, copyText } from '../utils/clipboard'
 
@@ -129,11 +129,7 @@ export default function ConfigPage() {
     const failedIds: string[] = []
     for (const sid of serverIds) {
       try {
-        const response = await fetch(`/api/v1/config/user-servers/${encodeURIComponent(sid)}`, {
-          method: 'DELETE',
-          headers: getAuthHeaders(),
-        })
-        if (!response.ok) failedIds.push(sid)
+        await apiDelete(`/config/user-servers/${encodeURIComponent(sid)}`)
       } catch {
         failedIds.push(sid)
       }
@@ -155,9 +151,7 @@ export default function ConfigPage() {
     }
     setDownloading(true)
     try {
-      const res = await fetch(`/api/v1/config/download?agent=${selectedAgent}`, {
-        headers: getAuthHeaders(),
-      })
+      const res = await apiFetch(`/config/download?agent=${encodeURIComponent(selectedAgent)}`)
       if (!res.ok) throw new Error(`下载失败: ${res.status}`)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

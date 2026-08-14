@@ -5,8 +5,9 @@ import {
   apiGet,
   apiPatch,
   apiPost,
-  getAuthState,
 } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
+import { useAuthState } from '../hooks/useAuthState'
 import { publishNotificationCount } from '../utils/notifications'
 
 type AlertStatus = 'all' | 'active' | 'resolved' | 'suppressed'
@@ -90,6 +91,7 @@ function statusLabel(status: string): string {
 }
 
 export default function NotificationsPage() {
+  const auth = useAuthState()
   const [items, setItems] = useState<NotifItem[]>([])
   const [rules, setRules] = useState<AlertRule[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -99,7 +101,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState('')
   const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set())
   const [savingRules, setSavingRules] = useState<Set<string>>(new Set())
-  const { token } = getAuthState()
+  const { token } = auth
 
   const loadNotifications = async (nextStatus = status) => {
     if (!token) {
@@ -147,7 +149,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [token])
 
   const selectStatus = (nextStatus: AlertStatus) => {
     setStatus(nextStatus)
@@ -267,16 +269,10 @@ export default function NotificationsPage() {
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-semibold text-gray-950 dark:text-white">通知中心</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">登录后查看设备、Gateway 和本地 MCP 的运行告警。</p>
-        <div className="mt-8 border-y border-gray-200 py-12 text-center dark:border-gray-700">
-          <p className="text-sm text-gray-600 dark:text-gray-300">告警和通知按账户隔离，仅展示你的设备遥测摘要。</p>
-          <Link to="/login" className="mt-4 inline-flex border border-gray-900 bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 dark:border-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
-            登录 GitHub
-          </Link>
-        </div>
-      </div>
+      <AuthRequired
+        title="登录后查看告警和通知"
+        description="设备、Gateway 和本地 MCP 告警按账户隔离，登录后才能查看、处理和调整规则。"
+      />
     )
   }
 

@@ -792,6 +792,65 @@ class McpGateway:
 
         return _handle
 
+    async def _create_managed_server(
+        self,
+        spec: GatewayServerSpec,
+    ) -> ManagedMCP | RemoteMCP:
+        """Create one MCP connection without registering or reporting it."""
+        if spec.transport == "stdio":
+            proc = await asyncio.create_subprocess_exec(
+                spec.executable,
+                *spec.args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=spec.process_env(_filter_gateway_env()),
+                cwd=spec.cwd,
+            )
+            if proc.stdin is None or proc.stdout is None:
+                raise GatewayError(
+                    "MCP Server stdio 管道创建失败",
+                    server_id=spec.server_id,
+                )
+            if proc.stderr is not None:
+                asyncio.ensure_future(_drain_stderr(spec.server_id, proc.stderr))
+            return ManagedMCP(
+                spec.server_id,
+                proc,
+                proc.stdin,
+                proc.stdout,
+                version=spec.version,
+                transport=spec.transport,
+                on_notification=self._server_notification_handler(spec.server_id),
+            )
+        return RemoteMCP(
+            spec,
+            on_notification=self._server_notification_handler(spec.server_id),
+        )
+
+    async def inspect_server_tools(self, server_id: str) -> list[dict[str, Any]]:
+        """Probe one configured Server and return its live tools without keeping it running."""
+        specs = await self._load_server_specs()
+        spec = next((item for item in specs if item.server_id == server_id), None)
+        if spec is None:
+            raise GatewayError(
+                "本地 Gateway 配置中没有找到该 Server",
+                server_id=server_id,
+            )
+        managed = await self._create_managed_server(spec)
+        try:
+            if not await managed.initialize():
+                raise GatewayError(
+                    "MCP Server 初始化失败，无法读取实际工具列表",
+                    server_id=server_id,
+                )
+            return [
+                tool for tool in managed.tools
+                if isinstance(tool, dict)
+            ]
+        finally:
+            await managed.close()
+
     async def start_all_managed(self) -> list[str]:
         """启动所有已安装且已启用的 MCP Server 并初始化。
 
@@ -810,38 +869,7 @@ class McpGateway:
             sid = spec.server_id
             started_at = _time.perf_counter()
             try:
-                managed: ManagedMCP | RemoteMCP
-                if spec.transport == "stdio":
-                    proc = await asyncio.create_subprocess_exec(
-                        spec.executable,
-                        *spec.args,
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        env=spec.process_env(_filter_gateway_env()),
-                        cwd=spec.cwd,
-                    )
-                    if proc.stdin is None or proc.stdout is None:
-                        raise GatewayError(
-                            "MCP Server stdio 管道创建失败",
-                            server_id=sid,
-                        )
-                    if proc.stderr is not None:
-                        asyncio.ensure_future(_drain_stderr(sid, proc.stderr))
-                    managed = ManagedMCP(
-                        sid,
-                        proc,
-                        proc.stdin,
-                        proc.stdout,
-                        version=spec.version,
-                        transport=spec.transport,
-                        on_notification=self._server_notification_handler(sid),
-                    )
-                else:
-                    managed = RemoteMCP(
-                        spec,
-                        on_notification=self._server_notification_handler(sid),
-                    )
+                managed = await self._create_managed_server(spec)
                 ok = await managed.initialize()
                 startup_duration_ms = int((_time.perf_counter() - started_at) * 1000)
                 if ok:

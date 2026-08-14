@@ -21,6 +21,7 @@ from mcp_hub.exceptions import (
     ServerNotFoundError,
 )
 from mcp_hub.logging_config import get_logger
+from mcp_hub.runtime_config import has_runnable_server_config
 
 logger = get_logger(__name__)
 
@@ -86,14 +87,19 @@ async def install_server(
 
     # 3. 生成各 Agent 配置片段
     configs: list[dict[str, Any]] = []
-    for agent_key in AGENT_CONFIGS:
-        cfg = get_config_for_agent(
-            server_config_name(req.server_id, server_data),
-            command,
-            agent_key,
-            config_template=config_template if isinstance(config_template, dict) else None,
-        )
-        configs.append(cfg)
+    runtime_config_available = has_runnable_server_config(
+        command,
+        config_template if isinstance(config_template, dict) else None,
+    )
+    if runtime_config_available:
+        for agent_key in AGENT_CONFIGS:
+            cfg = get_config_for_agent(
+                server_config_name(req.server_id, server_data),
+                command,
+                agent_key,
+                config_template=config_template if isinstance(config_template, dict) else None,
+            )
+            configs.append(cfg)
 
     # 4. 记录安装历史
     try:
@@ -123,9 +129,14 @@ async def install_server(
             "detail": "已添加到配置",
             "install_command": command,
             "config_template": config_template if isinstance(config_template, dict) else {},
+            "runtime_config_available": runtime_config_available,
             "configs": configs,
         },
-        "message": f"✅ {display_name} 已添加到配置，请在本地终端运行安装命令",
+        "message": (
+            f"✅ {display_name} 已添加到配置，请在本地终端运行安装命令"
+            if command
+            else f"✅ {display_name} 已添加到配置，请查看项目主页获取安装与启动说明"
+        ),
     }
 
 
@@ -320,7 +331,7 @@ async def download_all_config(
         config_template = s.get("config_template", {})
         if isinstance(config_template, dict) and config_template:
             server_configs[name] = config_template
-        elif cmd:
+        elif has_runnable_server_config(cmd):
             server_configs[name] = command_config(cmd)
     config: dict[str, Any] = {"mcpServers": server_configs}
 

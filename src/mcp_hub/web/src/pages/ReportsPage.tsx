@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { exportTelemetryReport, getAuthState } from '../api/client'
+import { exportTelemetryReport } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
+import { useAuthState } from '../hooks/useAuthState'
 
 export default function ReportsPage() {
+  const auth = useAuthState()
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
-  const authenticated = Boolean(getAuthState().token)
+  const authenticated = Boolean(auth.token)
 
   const exportReport = async () => {
     if (!authenticated) {
@@ -30,6 +33,15 @@ export default function ReportsPage() {
     } finally {
       setExporting(false)
     }
+  }
+
+  if (!authenticated) {
+    return (
+      <AuthRequired
+        title="登录后导出遥测报告"
+        description="报告聚合当前账户授权设备的调用、性能和错误指标，登录后才能生成和下载。"
+      />
+    )
   }
 
   return (

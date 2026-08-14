@@ -648,7 +648,7 @@ class TokenAnalyzer:
         context_pct = total_tokens / CONTEXT_WINDOW_SIZE * 100
 
         suggestions = [
-            "💡 安装此 Server 并运行 `mcp analyze --live <server>` 获取精确 token 数据",
+            "💡 安装并配置此 Server 后运行 `mcp-hub analyze --deep <server>` 获取实际工具定义",
             "💡 此分析为估算值，实际消耗取决于 Server 暴露的具体工具",
         ]
 
@@ -796,7 +796,10 @@ def format_report(report: AnalysisReport, verbose: bool = False) -> str:
     # 如果只有估算，显示实际测量的方法
     if report.estimated:
         lines.append("")
-        lines.append("  💡 提示: 安装此 Server 后运行 mcp analyze --deep <server> 获取精确分析")
+        lines.append(
+            "  💡 提示: 配置此 Server 后运行 mcp-hub analyze --deep <server> "
+            "获取实际工具定义"
+        )
 
     lines.append("")
     return "\n".join(lines)

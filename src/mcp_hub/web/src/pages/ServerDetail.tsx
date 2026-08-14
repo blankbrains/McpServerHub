@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   getServer, installServer, rateServer, favoriteServer,
-  apiDelete, apiGet, apiPost, getAuthState, getFavoriteServers, ServerInfo, SecurityScanResult, TokenAnalysisResult,
+  apiDelete, apiGet, apiPost, getFavoriteServers, ReliabilityResult, ServerInfo, SecurityScanResult, TokenAnalysisResult,
   scanServerSecurity, analyzeServerTokens, getServerReliability,
 } from '../api/client'
 import StarRating from '../components/StarRating'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 import { copyStatus, copyText } from '../utils/clipboard'
 
 const AGENTS = [
@@ -85,6 +86,7 @@ function compatibilityClass(status: CompatibilityObservation['compatibility']['s
 }
 
 export default function ServerDetail() {
+  const { token, userId } = useAuthState()
   const { id } = useParams<{ id: string }>()
   const [server, setServer] = useState<ServerInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -100,7 +102,7 @@ export default function ServerDetail() {
   // New feature states
   const [security, setSecurity] = useState<SecurityScanResult | null>(null)
   const [tokenAnalysis, setTokenAnalysis] = useState<TokenAnalysisResult | null>(null)
-  const [reliability, setReliability] = useState<any>(null)
+  const [reliability, setReliability] = useState<ReliabilityResult | null>(null)
   const [recommendations, setRecommendations] = useState<ServerInfo[]>([])
   const [compatibilityObservations, setCompatibilityObservations] = useState<CompatibilityObservation[]>([])
 
@@ -110,7 +112,6 @@ export default function ServerDetail() {
   const [reviewRating, setReviewRating] = useState(5)
   const [submittingReview, setSubmittingReview] = useState(false)
   const [replyTo, setReplyTo] = useState<any>(null)
-  const { token, userId } = getAuthState()
   const currentUser = userId || ''
 
   // 追踪状态来自当前账户的服务端记录，不使用浏览器缓存作为账户数据。
@@ -142,10 +143,23 @@ export default function ServerDetail() {
   useEffect(() => {
     if (!id) return
     const sid = decodeURIComponent(id)
-    getServer(sid)
-      .then(setServer)
-      .catch(() => setMessage('加载失败'))
-      .finally(() => setLoading(false))
+    const loadServer = async () => {
+      try {
+        const loadedServer = await getServer(sid)
+        setServer(loadedServer)
+        if (loadedServer.runtime_config_available === false) return
+        const result = await apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=claude-code`)
+        if (result.data) {
+          setConfigData(result.data)
+          setShowConfig(true)
+        }
+      } catch {
+        setMessage('加载失败')
+      } finally {
+        setLoading(false)
+      }
+    }
+    void loadServer()
 
     // Load extra data in parallel
     Promise.all([
@@ -154,10 +168,6 @@ export default function ServerDetail() {
       getServerReliability(sid).then(r => setReliability(r.data)).catch(() => {}),
       apiGet<any[]>(`/community/reviews/${encodeURIComponent(sid)}`).then(r => setReviews(r.data || [])).catch(() => {}),
       apiGet<ServerInfo[]>(`/market/recommendations?server_id=${encodeURIComponent(sid)}&limit=4`).then(r => setRecommendations(r.data || [])).catch(() => {}),
-      // Auto-fetch config for first agent
-      apiGet<any>(`/servers/${encodeURIComponent(sid)}/config?agent=claude-code`)
-        .then(r => { if (r.data) { setConfigData(r.data); setShowConfig(true) }})
-        .catch(() => {}),
     ])
   }, [id])
 
@@ -230,6 +240,10 @@ export default function ServerDetail() {
   if (!server) return <div className="text-center py-16 text-gray-400">Server 未找到</div>
 
   const handleInstall = async () => {
+    if (!token) {
+      setMessage('请先登录后添加追踪或管理 Server')
+      return
+    }
     setInstalling(true)
     setMessage('')
     try {
@@ -266,6 +280,10 @@ export default function ServerDetail() {
   }
 
   const handleRate = async (rating: number) => {
+    if (!token) {
+      setMessage('请先登录后评分')
+      return
+    }
     try {
       await rateServer(server.id, rating)
       setMyRating(rating)
@@ -280,6 +298,10 @@ export default function ServerDetail() {
   }
 
   const handleFavorite = async () => {
+    if (!token) {
+      setMessage('请先登录后收藏')
+      return
+    }
     try {
       const r = await favoriteServer(server.id)
       const favd = r.favorited
@@ -291,6 +313,10 @@ export default function ServerDetail() {
   }
 
   const handleSubmitReview = async () => {
+    if (!token) {
+      setMessage('请先登录后再写评价')
+      return
+    }
     if (!reviewText.trim()) { setMessage('请填写评价内容'); return }
     setSubmittingReview(true)
     try {
@@ -406,11 +432,16 @@ export default function ServerDetail() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 flex-wrap">
-          {!isTracked && (
+          {!isTracked && token && (
             <button onClick={handleInstall} disabled={installing}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${installing ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
               {installing ? '⏳ 保存中...' : '＋ 加入追踪'}
             </button>
+          )}
+          {!isTracked && !token && (
+            <Link to="/login" className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+              登录后加入追踪
+            </Link>
           )}
           {isTracked && (
             <span className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
@@ -422,9 +453,15 @@ export default function ServerDetail() {
               停止追踪
             </button>
           )}
-          <button onClick={handleFavorite} className={`px-4 py-2 border rounded-lg transition-colors ${isFavorited ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'border-gray-300 hover:bg-gray-50'}`}>
-            {isFavorited ? '⭐ 已收藏' : '☆ 收藏'}
-          </button>
+          {token ? (
+            <button onClick={handleFavorite} className={`px-4 py-2 border rounded-lg transition-colors ${isFavorited ? 'bg-yellow-50 border-yellow-300 text-yellow-700' : 'border-gray-300 hover:bg-gray-50'}`}>
+              {isFavorited ? '⭐ 已收藏' : '☆ 收藏'}
+            </button>
+          ) : (
+            <Link to="/login" className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
+              登录后收藏
+            </Link>
+          )}
           {server.homepage && (
             /^https?:\/\//i.test(server.homepage) ? (
               <a href={server.homepage} target="_blank" rel="noopener noreferrer" className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
@@ -611,8 +648,16 @@ export default function ServerDetail() {
           </div>
           <div className="grid grid-cols-3 gap-4 mb-3">
             <div>
-              <p className={`text-2xl font-bold ${reliability.reliability_score >= 90 ? 'text-green-600' : reliability.reliability_score >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                {reliability.reliability_score}
+              <p className={`text-2xl font-bold ${
+                reliability.total_checks === 0
+                  ? 'text-gray-400'
+                  : reliability.reliability_score >= 90
+                  ? 'text-green-600'
+                  : reliability.reliability_score >= 60
+                  ? 'text-yellow-600'
+                  : 'text-red-600'
+              }`}>
+                {reliability.total_checks > 0 ? reliability.reliability_score : '-'}
               </p>
               <p className="text-xs text-gray-500"><InfoTooltip description="依据已记录的健康检查计算的 0-100 分指标；没有检查记录时不应将低分解释为不可靠。">可靠性评分</InfoTooltip></p>
             </div>
@@ -622,7 +667,12 @@ export default function ServerDetail() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {(() => { const u = (reliability.uptime_stats as any[])?.find((u: any) => u.window === '24h'); return u ? (u.uptime_pct != null ? u.uptime_pct.toFixed(1) : '-') : '-'; })()}%
+                {(() => {
+                  const uptime = reliability.uptime_stats?.find(item => item.window === '24h')
+                  return uptime && uptime.total_checks > 0
+                    ? `${uptime.uptime_pct.toFixed(1)}%`
+                    : '-'
+                })()}
               </p>
               <p className="text-xs text-gray-500"><InfoTooltip description="过去 24 小时健康检查中成功的比例；没有检查记录时显示“-”。">24h Uptime</InfoTooltip></p>
             </div>
@@ -671,10 +721,14 @@ export default function ServerDetail() {
                     </div>
                   </div>
                   {r.content && <p className="text-sm text-gray-600 mb-2">{r.content}</p>}
-                  <button onClick={() => {
-                    setReplyTo(r)
-                    reviewInputRef.current?.focus()
-                  }} className="text-xs text-blue-500 hover:text-blue-700">↩ 回复</button>
+                  {token ? (
+                    <button onClick={() => {
+                      setReplyTo(r)
+                      reviewInputRef.current?.focus()
+                    }} className="text-xs text-blue-500 hover:text-blue-700">↩ 回复</button>
+                  ) : (
+                    <Link to="/login" className="text-xs text-blue-500 hover:text-blue-700">登录后回复</Link>
+                  )}
 
                   {/* Replies */}
                   {r.replies && r.replies.length > 0 && (
@@ -702,6 +756,7 @@ export default function ServerDetail() {
         </div>
 
         {/* Review form */}
+        {token ? (
         <div className="border-t border-gray-100 pt-4">
           <p className="text-sm font-medium text-gray-700 mb-2">
             {replyTo ? `↩ 回复 ${replyTo.user_id}` : '写评价'}
@@ -722,6 +777,12 @@ export default function ServerDetail() {
             {submittingReview ? '提交中...' : replyTo ? '提交回复' : '提交评价'}
           </button>
         </div>
+        ) : (
+          <div className="border-t border-gray-100 pt-4 text-sm text-gray-500">
+            <p>登录后可以写评价、回复和管理自己的评价。</p>
+            <Link to="/login" className="mt-2 inline-flex text-blue-600 hover:text-blue-800">前往 GitHub 登录</Link>
+          </div>
+        )}
       </div>
 
       {/* Gateway monitoring boundary */}
@@ -739,43 +800,51 @@ export default function ServerDetail() {
             选择 Agent 后，将配置合并到本地对应文件。该方式绕过 Gateway，适合不需要统一调用监控的场景。
           </p>
 
-          <div className="flex items-center gap-2 mb-4">
-            {AGENTS.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => { setSelectedAgent(a.id); fetchConfig(a.id) }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  selectedAgent === a.id ? a.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {a.name}
-              </button>
-            ))}
-          </div>
-
-      {showConfig && configData && (
-            <div className="space-y-3">
-              {server.catalog_source === 'official_mcp' && server.config_template?.url && (
-                <p className="border-l-2 border-cyan-500 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
-                  Remote MCP configuration. No local install command is required.
-                </p>
-              )}
-              <p className="text-sm text-gray-500">
-                将以下 {(configData.config_format || 'json').toUpperCase()} 合并到
-                <code className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{configData.config_path}</code>
-              </p>
-              <div className="relative bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
-                  {configData.config_text || JSON.stringify(configData.config_content, null, 2)}
-                </pre>
-              </div>
-              <button
-                onClick={handleCopy}
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
-              >
-                {copied ? '✅ 已复制!' : '📋 复制配置'}
-              </button>
+          {server.runtime_config_available === false ? (
+            <div className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              当前条目只有安装说明，没有可验证的 MCP 启动配置。请先查看项目主页或官方文档，确认实际启动命令后再添加到 Agent。
             </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {AGENTS.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => { setSelectedAgent(a.id); fetchConfig(a.id) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      selectedAgent === a.id ? a.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+
+              {showConfig && configData && (
+                <div className="space-y-3">
+                  {server.catalog_source === 'official_mcp' && server.config_template?.url && (
+                    <p className="border-l-2 border-cyan-500 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+                      Remote MCP configuration. No local install command is required.
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-500">
+                    将以下 {(configData.config_format || 'json').toUpperCase()} 合并到
+                    <code className="ml-1 bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{configData.config_path}</code>
+                  </p>
+                  <div className="relative bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                    <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap">
+                      {configData.config_text || JSON.stringify(configData.config_content, null, 2)}
+                    </pre>
+                  </div>
+                  <button
+                    onClick={handleCopy}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                  >
+                    {copied ? '✅ 已复制!' : '📋 复制配置'}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

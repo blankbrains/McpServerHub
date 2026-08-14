@@ -11,6 +11,8 @@ import tomli_w
 
 from mcp_hub.core.agent_config import get_agent_profiles
 from mcp_hub.core.gateway_config import split_legacy_command
+from mcp_hub.exceptions import ConfigError
+from mcp_hub.runtime_config import has_runnable_server_config
 
 # 各 Agent 配置文件路径
 AGENT_CONFIGS: dict[str, dict[str, Any]] = {
@@ -80,6 +82,11 @@ def get_config_for_agent(
             raise ValueError("Invalid structured MCP Server configuration")
         server_config: dict[str, object] = {"type": transport, "url": url}
     else:
+        if not has_runnable_server_config(command):
+            raise ConfigError(
+                "该市场条目只有安装说明，缺少可验证的 MCP 运行配置。"
+                "请查看项目主页获取启动命令，或使用官方 Registry 提供的结构化配置。"
+            )
         server_config = command_config(command)
     if cfg.get("requires_stdio_type") and not config_template:
         server_config = {"type": "stdio", **server_config}
@@ -247,7 +254,10 @@ class ConfigManager:
             name = server_config_name(s["id"], s)
             cmd = str(s.get("install_command", "") or "")
             config_template = s.get("config_template", {})
-            if cmd or config_template:
+            if has_runnable_server_config(
+                cmd,
+                config_template if isinstance(config_template, dict) else None,
+            ):
                 if isinstance(config_template, dict) and config_template:
                     server_config = dict(config_template)
                 else:
@@ -285,7 +295,11 @@ class ConfigManager:
         hub_servers: dict[str, str] = {}
         for s in installed:
             cmd = str(s.get("install_command", "") or "")
-            if cmd:
+            config_template = s.get("config_template", {})
+            if has_runnable_server_config(
+                cmd,
+                config_template if isinstance(config_template, dict) else None,
+            ):
                 hub_servers[s["id"].split("/")[-1]] = cmd
 
         # 计算差异

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiRequestError, apiGet, apiPost, getAuthState } from '../api/client'
+import { ApiRequestError, apiGet, apiPost } from '../api/client'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface Preset {
   id: number
@@ -16,6 +17,7 @@ interface Preset {
 }
 
 export default function PresetMarket() {
+  const { token, userId } = useAuthState()
   const [presets, setPresets] = useState<Preset[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -25,8 +27,6 @@ export default function PresetMarket() {
   const [importing, setImporting] = useState<Set<number>>(new Set())
   const [creating, setCreating] = useState(false)
   const [sort, setSort] = useState('hot')
-  const { token, userId } = getAuthState()
-
   // 创建表单
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')

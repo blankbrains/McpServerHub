@@ -9,6 +9,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+from mcp_hub.core.mcp_gateway import McpGateway
 from mcp_hub.core.registry import Registry
 from mcp_hub.core.token_analyzer import (
     TokenAnalyzer,
@@ -28,13 +29,13 @@ console = Console()
 @click.option("--all", "scan_all", is_flag=True, help="分析所有 Server")
 @click.option("--verbose", "-v", is_flag=True, help="显示每个工具的明细")
 @click.option("--json", "json_output", is_flag=True, help="以 JSON 格式输出")
-@click.option("--deep", is_flag=True, help="尝试连接运行中的 Server 获取实际工具列表")
+@click.option("--deep", is_flag=True, help="临时启动指定 Server，读取实际工具列表后立即关闭")
 def analyze(
     server_name: str | None,
     scan_all: bool,
     verbose: bool,
     json_output: bool,
-    _deep: bool,
+    deep: bool,
 ) -> None:
     """分析 MCP Server 的 Token 消耗。
 
@@ -46,12 +47,13 @@ def analyze(
       mcp-hub analyze --all                    分析全部 Server
       mcp-hub analyze @anthropic/web-search -v  显示每个工具的明细
       mcp-hub analyze @anthropic/web-search --json  输出 JSON
-      mcp-hub analyze @anthropic/web-search --deep  尝试连接实时 Server
+      mcp-hub analyze @anthropic/web-search --deep  临时读取实际工具列表
     """
 
     async def _run() -> None:
         analyzer = TokenAnalyzer()
         registry = Registry()
+        gateway = McpGateway() if deep else None
         results = []
 
         if scan_all:
@@ -66,7 +68,15 @@ def analyze(
                 for s in servers:
                     sid = s.get("id", "?")
                     status.update(f"[bold green]分析 {sid}...[/bold green]")
-                    report = analyzer.analyze_server(s)
+                    if gateway is not None:
+                        try:
+                            tools = await gateway.inspect_server_tools(sid)
+                            report = analyzer.analyze_server({**s, "tool_definitions": tools})
+                        except Exception as exc:
+                            console.print(f"[red]❌ 深度分析 {sid} 失败: {exc}[/red]")
+                            continue
+                    else:
+                        report = analyzer.analyze_server(s)
                     results.append(report)
 
             if json_output:
@@ -123,7 +133,25 @@ def analyze(
                 console.print(f"[red]❌ Server '{sid}' 未找到[/red]")
                 return
 
-            report = analyzer.analyze_server(server)
+            if gateway is not None:
+                try:
+                    tools = await gateway.inspect_server_tools(sid)
+                except Exception as exc:
+                    message = f"深度分析失败: {exc}"
+                    if json_output:
+                        console.print(
+                            json.dumps(
+                                {"server_id": sid, "error": message},
+                                ensure_ascii=False,
+                                indent=2,
+                            )
+                        )
+                    else:
+                        console.print(f"[red]❌ {message}[/red]")
+                    return
+                report = analyzer.analyze_server({**server, "tool_definitions": tools})
+            else:
+                report = analyzer.analyze_server(server)
 
             if json_output:
                 output_data = {

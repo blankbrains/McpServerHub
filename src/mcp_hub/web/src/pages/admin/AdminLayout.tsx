@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getAuthState, getMe } from '../../api/client'
+import { getMe } from '../../api/client'
+import { useAuthState } from '../../hooks/useAuthState'
 
 const adminNav = [
   { path: '/admin', label: '平台概览', icon: '📊', end: true },
@@ -13,6 +14,7 @@ const adminNav = [
 ]
 
 export default function AdminLayout() {
+  const auth = useAuthState()
   const location = useLocation()
   const navigate = useNavigate()
   const [authorized, setAuthorized] = useState(false)
@@ -21,8 +23,13 @@ export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
-    const { userId, token } = getAuthState()
-    if (!token || !userId) { navigate('/'); return }
+    if (!auth.token || !auth.userId) {
+      setAuthorized(false)
+      setChecking(false)
+      navigate('/')
+      return
+    }
+    setChecking(true)
     getMe()
       .then(d => {
         if ((d.data?.role || d.role) === 'admin') { setAuthorized(true) }
@@ -30,7 +37,7 @@ export default function AdminLayout() {
       })
       .catch(() => navigate('/'))
       .finally(() => setChecking(false))
-  }, [])
+  }, [auth.token, auth.userId, navigate])
 
   useEffect(() => {
     setMobileOpen(false)

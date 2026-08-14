@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom'
 import {
   ApiRequestError,
   apiDelete,
+  apiFetch,
   apiGet,
   apiPost,
-  getAuthHeaders,
-  getAuthState,
   uploadConfig,
 } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
+import { useAuthState } from '../hooks/useAuthState'
 import { copyStatus, copyText } from '../utils/clipboard'
 
 interface ConfigServer {
@@ -34,6 +35,7 @@ const SYNC_AGENT_OPTIONS = [
 ] as const
 
 export default function MyConfig() {
+  const { token, userId } = useAuthState()
   const [servers, setServers] = useState<ConfigServer[]>([])
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
@@ -41,7 +43,6 @@ export default function MyConfig() {
   const [trackingStatus, setTrackingStatus] = useState<'idle' | 'uploaded' | 'cancelled'>('idle')
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [syncAgent, setSyncAgent] = useState('claude-code')
-  const { token, userId } = getAuthState()
   const syncCommand = `mcp-hub config sync --agent ${syncAgent} --server ${window.location.origin}`
 
   const toPreviewServers = (result: any): ConfigServer[] => [
@@ -200,9 +201,7 @@ export default function MyConfig() {
     }
     setDownloading(true)
     try {
-      const res = await fetch('/api/v1/config/download?agent=generic', {
-        headers: getAuthHeaders(),
-      })
+      const res = await apiFetch('/config/download?agent=generic')
       if (!res.ok) throw new Error(`下载失败: ${res.status}`)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -220,13 +219,10 @@ export default function MyConfig() {
 
   if (!token || !userId) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">配置与同步</h1>
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-700 font-medium">登录后检查配置、维护追踪列表并同步本地 Gateway</p>
-          <Link to="/login" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登录</Link>
-        </div>
-      </div>
+      <AuthRequired
+        title="登录后管理配置与同步"
+        description="配置检查、账户追踪列表和 Gateway 同步清单按用户隔离，登录后才能查看和修改。"
+      />
     )
   }
 

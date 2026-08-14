@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   apiGet,
-  getAuthHeaders,
-  getAuthState,
   getFavoriteServers,
 } from '../api/client'
+import AuthRequired from '../components/AuthRequired'
 import InfoTooltip from '../components/InfoTooltip'
+import { useAuthState } from '../hooks/useAuthState'
 
 interface ServerMetric {
   server_id: string
@@ -67,6 +67,7 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
 }
 
 export default function MonitorDashboard() {
+  const auth = useAuthState()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -80,12 +81,18 @@ export default function MonitorDashboard() {
   const [updateCount, setUpdateCount] = useState(0)
   const [trackedServerIds, setTrackedServerIds] = useState<Set<string>>(new Set())
 
-  const userId = getAuthState().userId
+  const userId = auth.userId
 
   const errorCountRef = useRef(0)
   const hasDataRef = useRef(false)
 
   const load = async (manual = false) => {
+    if (!auth.token) {
+      setData(null)
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
     if (manual) setRefreshing(true)
     try {
       const r = await apiGet<DashboardData>('/monitor/dashboard')
@@ -107,6 +114,14 @@ export default function MonitorDashboard() {
   const getInterval = () => Math.min(10 * Math.pow(2, errorCountRef.current), 60) * 1000
 
   useEffect(() => {
+    if (!auth.token) {
+      setData(null)
+      setLoading(false)
+      setErrorMsg(null)
+      hasDataRef.current = false
+      errorCountRef.current = 0
+      return
+    }
     let timer: ReturnType<typeof setTimeout>
     let cancelled = false
     const scheduleNext = async () => {
@@ -118,7 +133,7 @@ export default function MonitorDashboard() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [])
+  }, [auth.token])
 
   // 加载 SaaS 概览数据
   useEffect(() => {
@@ -135,9 +150,8 @@ export default function MonitorDashboard() {
       .then(r => setFavCount((r.data || []).length))
       .catch(() => setFavCount(0))
     // 有更新的 Server 数量
-    fetch('/api/v1/servers/check-updates', { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(r => { if (r.data?.updates) setUpdateCount(r.data.updates.length) })
+    apiGet<{ updates: unknown[] }>('/servers/check-updates')
+      .then(r => setUpdateCount(r.data?.updates?.length || 0))
       .catch(() => {})
   }, [userId])
 
@@ -162,6 +176,15 @@ export default function MonitorDashboard() {
         return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1)
       })
     : []
+
+  if (!auth.token) {
+    return (
+      <AuthRequired
+        title="登录后查看运行监控"
+        description="运行状态、真实调用和待处理事项来自你授权的本地 Gateway，登录后才能查看当前账户数据。"
+      />
+    )
+  }
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="text-gray-400 text-lg">加载监控大屏...</div></div>
