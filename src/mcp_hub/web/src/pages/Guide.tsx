@@ -250,7 +250,7 @@ export default function Guide() {
       </section>
 
       {/* Quick tips */}
-      <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6">
+      <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6 dark:from-amber-950/40 dark:to-orange-950/30 dark:border-amber-800">
         <h3 className="font-semibold text-gray-900 mb-3">💡 常见问题</h3>
         <div className="space-y-3 text-sm">
           <div>

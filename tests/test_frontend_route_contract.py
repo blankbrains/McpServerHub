@@ -86,7 +86,11 @@ def test_split_workflow_routes_keep_legacy_urls_available() -> None:
 
 def test_desktop_sidebar_keeps_auxiliary_actions_at_viewport_bottom() -> None:
     layout = (WEB_SRC / "components" / "Layout.tsx").read_text(encoding="utf-8")
-    aside = re.search(r"<aside className=\{`(.*?)`\}>", layout, re.DOTALL)
+    aside = re.search(
+        r"<aside\b[^>]*className=\{`(.*?)`\}>",
+        layout,
+        re.DOTALL,
+    )
 
     assert aside is not None
     aside_classes = aside.group(1)

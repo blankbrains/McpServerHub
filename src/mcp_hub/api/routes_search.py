@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
+from mcp_hub.api.dependencies import get_optional_user
 from mcp_hub.db.database import async_session_factory
-from mcp_hub.db.models import ServerModel
+from mcp_hub.db.models import ServerModel, UserServerModel
 from mcp_hub.db.repositories import ServerRepository
 
 router = APIRouter(tags=["search"])
@@ -88,12 +89,20 @@ async def advanced_search(
     language: str | None = Query(None, description="编程语言"),
     install_type: str | None = Query(None, description="安装方式"),
     security_level: str | None = Query(None, description="安全等级"),
+    tracked_filter: Literal["tracked", "untracked"] | None = Query(
+        None,
+        description="当前账户的追踪状态",
+    ),
     min_stars: int | None = Query(None, description="最低 Star 数"),
     sort: str = Query("hot", description="排序"),
     page: int = Query(1, ge=1),
     page_size: int = Query(9, ge=1, le=100),
+    user_id: str | None = Depends(get_optional_user),
 ) -> dict[str, Any]:
-    """高级搜索 — 9 维筛选。"""
+    """高级搜索，并在认证后支持账户级追踪状态筛选。"""
+    if tracked_filter and not user_id:
+        raise HTTPException(status_code=401, detail="登录后才能按追踪状态筛选")
+
     async with async_session_factory() as session:
         query = select(ServerModel)
         count_query = select(func.count(ServerModel.id))
@@ -145,7 +154,21 @@ async def advanced_search(
         if security_level:
             conditions.append(ServerModel.security_level == security_level)
 
-        # 8) 最低 Star/下载数
+        # 8) 当前账户追踪状态
+        if tracked_filter and user_id:
+            tracked_exists = (
+                select(UserServerModel.server_id)
+                .where(
+                    UserServerModel.user_id == user_id,
+                    UserServerModel.server_id == ServerModel.id,
+                )
+                .exists()
+            )
+            conditions.append(
+                tracked_exists if tracked_filter == "tracked" else ~tracked_exists
+            )
+
+        # 9) 最低 Star/下载数
         if min_stars:
             conditions.append(ServerModel.download_count >= min_stars)
 
@@ -187,6 +210,7 @@ async def advanced_search(
                 "language": language,
                 "install_type": install_type,
                 "security_level": security_level,
+                "tracked_filter": tracked_filter,
                 "min_stars": min_stars,
             },
         },

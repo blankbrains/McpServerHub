@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { getLoginUrl, getAuthState, clearAuth, getMe, setAuth } from '../api/client'
 import { useAuthState } from '../hooks/useAuthState'
@@ -10,11 +10,19 @@ export default function Login() {
   const [userInfo, setUserInfo] = useState<any>(null)
   const [userInfoLoading, setUserInfoLoading] = useState(true)
   const [imgFailed, setImgFailed] = useState(false)
+  const [loginError, setLoginError] = useState('')
+  const popupRef = useRef<Window | null>(null)
 
   const handleLogin = () => {
+    setLoginError('')
     setLoggingIn(true)
     const popup = window.open(getLoginUrl(), 'github-oauth', 'width=600,height=700')
-    if (!popup) setLoggingIn(false)
+    if (!popup) {
+      setLoggingIn(false)
+      setLoginError('浏览器阻止了授权窗口，请允许此站点打开弹窗后重试')
+      return
+    }
+    popupRef.current = popup
   }
 
   const handleLogout = () => {
@@ -41,12 +49,24 @@ export default function Login() {
       const state = getAuthState()
       if (state.token && state.userId) {
         setAuth(state.token, state.userId)
+        popupRef.current = null
         setLoggingIn(false)
         clearInterval(timer)
         navigate('/')
+        return
+      }
+      if (popupRef.current?.closed) {
+        popupRef.current = null
+        setLoggingIn(false)
+        setLoginError('GitHub 授权窗口已关闭，登录未完成')
+        clearInterval(timer)
       }
     }, 500)
-    const timeout = setTimeout(() => setLoggingIn(false), 120_000)
+    const timeout = setTimeout(() => {
+      popupRef.current = null
+      setLoggingIn(false)
+      setLoginError('GitHub 授权等待超时，请重新登录')
+    }, 120_000)
     return () => {
       clearInterval(timer)
       clearTimeout(timeout)
@@ -119,6 +139,9 @@ export default function Login() {
         </button>
         {loggingIn && (
           <p className="text-xs text-blue-500">等待 GitHub 授权完成；若未弹出授权窗口，请允许此站点打开弹窗后重试</p>
+        )}
+        {loginError && (
+          <p className="text-xs text-red-600" role="alert">{loginError}</p>
         )}
         <p className="text-xs text-gray-400">
           登录即表示同意服务条款。我们仅获取您的公开信息。

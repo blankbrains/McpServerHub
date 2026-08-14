@@ -121,3 +121,57 @@ def test_reliability_empty_state_is_not_rendered_as_a_failure_score() -> None:
     assert "reliability.total_checks > 0 ? reliability.reliability_score : '-'" in server_detail
     assert "uptime && uptime.total_checks > 0" in server_detail
     assert "`${uptime.uptime_pct.toFixed(1)}%`" in server_detail
+
+
+def test_login_cancel_and_sidebar_responsive_states_are_recoverable() -> None:
+    login = _source("pages/Login.tsx")
+    layout = _source("components/Layout.tsx")
+
+    assert "const popupRef = useRef<Window | null>(null)" in login
+    assert "if (popupRef.current?.closed)" in login
+    assert "GitHub 授权窗口已关闭，登录未完成" in login
+    assert 'role="alert"' in login
+
+    assert "window.matchMedia('(min-width: 768px)')" in layout
+    assert "if (event.matches) setSidebarOpen(false)" in layout
+    assert "handleCollapsedSearch" in layout
+    assert 'aria-label="展开侧栏并搜索 Server"' in layout
+    assert 'aria-label="搜索 Server"' in layout
+    assert 'aria-expanded={sidebarOpen}' in layout
+    assert 'aria-controls="primary-sidebar"' in layout
+
+
+def test_market_pagination_scrolls_to_server_results_only_after_page_changes() -> None:
+    market = _source("pages/Market.tsx")
+
+    assert "const resultsRef = useRef<HTMLParagraphElement>(null)" in market
+    assert "const shouldScrollToResults = useRef(false)" in market
+    assert "resultsRef.current?.scrollIntoView" in market
+    assert "shouldScrollToResults.current = true" in market
+    assert "onClick={() => changePage(page + 1)}" in market
+    assert ".filter(s => {" not in market
+    assert "登录后筛选追踪状态" in market
+
+
+def test_server_security_badge_uses_one_icon_and_one_text_label() -> None:
+    card = _source("components/ServerCard.tsx")
+
+    assert "verified: '安全认证'" in card
+    assert "reviewed: '已审查'" in card
+    assert "unreviewed: '未审查'" in card
+    assert "blocked: '已阻止'" in card
+    assert "verified: '🔒 安全认证'" not in card
+
+
+def test_legacy_public_pages_receive_dark_theme_without_overriding_explicit_variants() -> None:
+    styles = _source("index.css")
+    guide = _source("pages/Guide.tsx")
+
+    assert '.text-gray-900:not([class*="dark:text-"])' in styles
+    assert '.bg-white:not([class*="dark:bg-"])' in styles
+    assert '.border-gray-200:not([class*="dark:border-"])' in styles
+    assert '.text-blue-700:not([class*="dark:text-"])' in styles
+    assert '.bg-red-50:not([class*="dark:bg-"])' in styles
+    assert ".dark {" in styles
+    assert "color-scheme: dark" in styles
+    assert "dark:from-amber-950/40" in guide

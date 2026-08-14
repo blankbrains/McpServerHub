@@ -27,9 +27,10 @@ function SecBadge({ level }: { level: string }) {
 
 export default function ServerCard({ server }: ServerCardProps) {
   const securityLabels: Record<string, string> = {
-    verified: '🔒 安全认证',
-    reviewed: '⚪ 已审查',
-    unreviewed: '⚠️ 未审查',
+    verified: '安全认证',
+    reviewed: '已审查',
+    unreviewed: '未审查',
+    blocked: '已阻止',
   }
   const name = server.display_name || server.name || server.id.split('/').pop() || '?'
 

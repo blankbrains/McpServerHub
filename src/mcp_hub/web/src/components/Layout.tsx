@@ -51,6 +51,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [searchResults, setSearchResults] = useState<ServerInfo[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const loginTimers = useRef<ReturnType<typeof setInterval>[]>([])
   useEffect(() => () => loginTimers.current.forEach(clearInterval), [])
 
@@ -62,6 +63,16 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   // Close sidebar on mobile when route changes
   useEffect(() => { setSidebarOpen(false); setSearchQuery(''); setSearchOpen(false) }, [location.pathname])
+
+  // Mobile drawer state must not leak into the persistent desktop sidebar.
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const handleBreakpointChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setSidebarOpen(false)
+    }
+    desktop.addEventListener('change', handleBreakpointChange)
+    return () => desktop.removeEventListener('change', handleBreakpointChange)
+  }, [])
 
   // Close search on click outside
   useEffect(() => {
@@ -147,6 +158,11 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const handleLogout = () => clearAuth()
 
+  const handleCollapsedSearch = () => {
+    setCollapsed(false)
+    window.requestAnimationFrame(() => searchInputRef.current?.focus())
+  }
+
   // 面包屑
   const pathParts = location.pathname.split('/').filter(Boolean)
   const breadcrumbs = pathParts.length > 0
@@ -171,25 +187,39 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       {/* Search */}
       <div className="flex-shrink-0 px-2 py-2" ref={searchRef}>
-        <div className="relative">
-          <input
-            type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
-            placeholder={sidebarCollapsed ? '' : '搜索 Server...'}
-            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-blue-400 outline-none"
-          />
-          {searchOpen && searchResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-              {searchResults.map(s => (
-                <Link key={s.id} to={`/servers/${encodeURIComponent(s.id)}`} onClick={() => { setSearchOpen(false); setSearchQuery('') }}
-                  className="block px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-50 dark:border-gray-700 last:border-0">
-                  <span className="font-medium text-gray-800 dark:text-gray-200">{s.id.split('/').pop()}</span>
-                  <span className="text-gray-400 ml-2">{s.description?.slice(0, 40)}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={handleCollapsedSearch}
+            className="flex h-8 w-full items-center justify-center rounded-lg text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            aria-label="展开侧栏并搜索 Server"
+            title="搜索 Server"
+          >
+            🔎
+          </button>
+        ) : (
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+              placeholder="搜索 Server..."
+              aria-label="搜索 Server"
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-blue-400 outline-none"
+            />
+            {searchOpen && searchResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                {searchResults.map(s => (
+                  <Link key={s.id} to={`/servers/${encodeURIComponent(s.id)}`} onClick={() => { setSearchOpen(false); setSearchQuery('') }}
+                    className="block px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-50 dark:border-gray-700 last:border-0">
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{s.id.split('/').pop()}</span>
+                    <span className="text-gray-400 ml-2">{s.description?.slice(0, 40)}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Nav items */}
@@ -243,11 +273,13 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="mx-2 mb-1 flex flex-shrink-0 items-center gap-1">
         <button onClick={() => setDark(!dark)}
           className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          aria-label={dark ? '切换亮色模式' : '切换深色模式'}
           title={dark ? '切换亮色模式' : '切换深色模式'}>
           {dark ? '☀️' : '🌙'}
         </button>
         <button onClick={() => setCollapsed(!collapsed)}
           className="hidden flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors md:block"
+          aria-label={collapsed ? '展开菜单' : '收起菜单'}
           title={collapsed ? '展开菜单' : '收起菜单'}>
           {collapsed ? '▶' : '◀'}
         </button>
@@ -289,12 +321,12 @@ export default function Layout({ children }: { children: ReactNode }) {
         )}
 
         {/* Sidebar — 桌面端常显，移动端 overlay */}
-        <aside className={`z-50 flex flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 dark:border-gray-700 dark:bg-gray-800
+        <aside id="primary-sidebar" className={`z-50 flex flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-200 dark:border-gray-700 dark:bg-gray-800
           ${sidebarOpen ? 'fixed inset-y-0 left-0' : 'hidden'}
           md:sticky md:top-0 md:flex md:h-screen md:self-start
           ${sidebarCollapsed ? 'w-16' : 'w-52'}`}>
           {/* 移动端关闭按钮 */}
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg">✕</button>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg" aria-label="关闭导航菜单">✕</button>
           {sidebar}
         </aside>
 
@@ -304,9 +336,23 @@ export default function Layout({ children }: { children: ReactNode }) {
 
           {/* 移动端顶栏 */}
           <div className="md:hidden flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-            <button onClick={() => setSidebarOpen(true)} className="text-gray-600 dark:text-gray-300 text-xl">☰</button>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="text-gray-600 dark:text-gray-300 text-xl"
+              aria-label="打开导航菜单"
+              aria-expanded={sidebarOpen}
+              aria-controls="primary-sidebar"
+            >
+              ☰
+            </button>
             <span className="font-bold text-gray-900 dark:text-white">MCP Hub</span>
-            <button onClick={() => setDark(!dark)} className="text-lg">{dark ? '☀️' : '🌙'}</button>
+            <button
+              onClick={() => setDark(!dark)}
+              className="text-lg"
+              aria-label={dark ? '切换亮色模式' : '切换深色模式'}
+            >
+              {dark ? '☀️' : '🌙'}
+            </button>
           </div>
 
           {/* 面包屑 */}

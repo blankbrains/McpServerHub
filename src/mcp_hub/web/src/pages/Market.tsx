@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   apiDelete,
@@ -36,6 +36,8 @@ export default function Market() {
   const [trackedFilter, setTrackedFilter] = useState('')
   const [message, setMessage] = useState('')
   const [addedServers, setAddedServers] = useState<Set<string>>(new Set())
+  const resultsRef = useRef<HTMLParagraphElement>(null)
+  const shouldScrollToResults = useRef(false)
 
   // Search debounce: 300ms delay before updating query
   useEffect(() => {
@@ -89,6 +91,14 @@ export default function Market() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
+    if (loading || !shouldScrollToResults.current) return
+    shouldScrollToResults.current = false
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [loading, page])
+
+  useEffect(() => {
     apiGet<any[]>('/market/categories').then((r) => {
       if (r.data) setCategories([{ id: '', name: '🏠 全部' }, ...r.data.map((c: any) => ({ id: c.id, name: `${c.icon || ''} ${c.name}`, icon: c.icon }))])
     }).catch(() => {})
@@ -100,6 +110,13 @@ export default function Market() {
   }, [])
 
   useEffect(() => { setPage(1) }, [query, category, tag, author, language, installType, securityLevel, trackedFilter, sort])
+
+  const changePage = (nextPage: number) => {
+    const boundedPage = Math.min(totalPages, Math.max(1, nextPage))
+    if (boundedPage === page) return
+    shouldScrollToResults.current = true
+    setPage(boundedPage)
+  }
 
   return (
     <div className="space-y-6">
@@ -179,12 +196,19 @@ export default function Market() {
               <option value="go">🔵 go install</option>
             </select>
             {/* Tracked filter */}
-            <select value={trackedFilter} onChange={(e) => setTrackedFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm">
-              <option value="">📋 全部 Server</option>
-              <option value="tracked">✅ 已追踪</option>
-              <option value="untracked">➕ 未追踪</option>
-            </select>
+            {isAuthenticated ? (
+              <select value={trackedFilter} onChange={(e) => setTrackedFilter(e.target.value)}
+                aria-label="按追踪状态筛选"
+                className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm">
+                <option value="">📋 全部 Server</option>
+                <option value="tracked">✅ 已追踪</option>
+                <option value="untracked">➕ 未追踪</option>
+              </select>
+            ) : (
+              <Link to="/login" className="flex items-center px-3 py-2 text-sm text-blue-700 hover:text-blue-900">
+                登录后筛选追踪状态
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <span className="font-medium">🏷️ 功能标签:</span>
@@ -206,7 +230,7 @@ export default function Market() {
           {message}
         </div>
       )}
-      <p className="text-sm text-gray-500">
+      <p ref={resultsRef} className="scroll-mt-4 text-sm text-gray-500">
         共 {total} 个结果 {totalPages > 1 && <span>· 第 {page}/{totalPages} 页</span>}
       </p>
 
@@ -215,13 +239,7 @@ export default function Market() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {servers
-              .filter(s => {
-                if (trackedFilter === 'tracked') return addedServers.has(s.id)
-                if (trackedFilter === 'untracked') return !addedServers.has(s.id)
-                return true
-              })
-              .map((s) => (
+            {servers.map((s) => (
               <div key={s.id} className="relative group">
                 <ServerCard server={s} />
                 <div className="absolute top-2 right-2">
@@ -301,7 +319,7 @@ export default function Market() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 py-6">
-              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
+              <button onClick={() => changePage(page - 1)} disabled={page <= 1}
                 className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50">← 上一页</button>
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
@@ -309,12 +327,12 @@ export default function Market() {
                   <span key={p} className="flex items-center gap-1">
                     {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400">...</span>}
                     <button
-                      onClick={() => setPage(p)}
+                      onClick={() => changePage(p)}
                       aria-current={page === p ? 'page' : undefined}
                       className={`w-9 h-9 rounded-lg text-sm font-medium ${page === p ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}>{p}</button>
                   </span>
                 ))}
-              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+              <button onClick={() => changePage(page + 1)} disabled={page >= totalPages}
                 className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50">下一页 →</button>
             </div>
           )}

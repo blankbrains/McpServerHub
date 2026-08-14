@@ -50,13 +50,16 @@ async def generate_project(
     builder = ServerBuilder()
     tool_list = [t.strip() for t in tools.split(",") if t.strip()]
 
-    project = builder.create_project(
-        name=name,
-        language=normalized_language,
-        description=description or f"MCP Server: {name}",
-        author=author or "developer",
-        tools=tool_list,
-    )
+    try:
+        project = builder.create_project(
+            name=name,
+            language=normalized_language,
+            description=description or f"MCP Server: {name}",
+            author=author or "developer",
+            tools=tool_list,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # 生成 ZIP 内存文件
     buf = io.BytesIO()
