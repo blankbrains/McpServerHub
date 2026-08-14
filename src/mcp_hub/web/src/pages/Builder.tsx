@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { apiFetch } from '../api/client'
+import { ApiRequestError, apiFetch, readApiErrorMessage } from '../api/client'
 import InfoTooltip from '../components/InfoTooltip'
 
 interface Tool {
@@ -76,8 +76,10 @@ export default function Builder() {
       })
       const res = await apiFetch(`/builder/generate?${params}`)
       if (!res.ok) {
-        const errText = await res.text().catch(() => '')
-        throw new Error(errText ? `服务器错误: ${errText}` : `生成失败 (${res.status})`)
+        throw new ApiRequestError(
+          res.status,
+          await readApiErrorMessage(res, `生成失败 (${res.status})`),
+        )
       }
       const blob = await res.blob()
       if (blob.size === 0) throw new Error('生成的文件为空')
@@ -109,13 +111,13 @@ export default function Builder() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" role="alert">
           {error}
-          <button onClick={() => setError('')} className="float-right text-red-400 hover:text-red-600">✕</button>
+          <button type="button" onClick={() => setError('')} className="float-right text-red-400 hover:text-red-600" aria-label="关闭错误提示">✕</button>
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700" role="status">
           {success}
         </div>
       )}
@@ -123,49 +125,49 @@ export default function Builder() {
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         {/* 项目名称 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">项目名称 *</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)}
+          <label htmlFor="builder-name" className="block text-sm font-medium text-gray-700 mb-1">项目名称 *</label>
+          <input id="builder-name" type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="my-mcp-server"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
 
         {/* 语言 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">语言</label>
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 mb-2">语言</legend>
           <div className="flex gap-2">
-            <button onClick={() => setLanguage('python')}
+            <button type="button" onClick={() => setLanguage('python')} aria-pressed={language === 'python'}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${language === 'python' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               🐍 Python
             </button>
-            <button onClick={() => setLanguage('typescript')}
+            <button type="button" onClick={() => setLanguage('typescript')} aria-pressed={language === 'typescript'}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${language === 'typescript' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               📘 TypeScript
             </button>
           </div>
-        </div>
+        </fieldset>
 
         {/* 描述 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
-          <input type="text" value={description} onChange={e => setDescription(e.target.value)}
+          <label htmlFor="builder-description" className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+          <input id="builder-description" type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="MCP Server: my-mcp-server"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
 
         {/* 作者 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">作者</label>
-          <input type="text" value={author} onChange={e => setAuthor(e.target.value)}
+          <label htmlFor="builder-author" className="block text-sm font-medium text-gray-700 mb-1">作者</label>
+          <input id="builder-author" type="text" value={author} onChange={e => setAuthor(e.target.value)}
             placeholder="developer"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
 
         {/* 工具选择 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 mb-2">
             <InfoTooltip description="工具模板会生成 MCP 工具的输入参数和示例处理逻辑，便于在下载后继续实现业务能力。">工具模板</InfoTooltip>
             <span className="text-gray-400 font-normal">（至少要选一个）</span>
-          </label>
+          </legend>
           {loading ? (
             <div className="text-sm text-gray-400">加载中...</div>
           ) : error ? (
@@ -175,7 +177,8 @@ export default function Builder() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {availableTools.map(tool => (
-                <button key={tool.name} onClick={() => toggleTool(tool.name)}
+                <button key={tool.name} type="button" onClick={() => toggleTool(tool.name)}
+                  aria-pressed={selectedTools.has(tool.name)}
                   className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
                     selectedTools.has(tool.name)
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -190,10 +193,10 @@ export default function Builder() {
               ))}
             </div>
           )}
-        </div>
+        </fieldset>
 
         {/* 下载按钮 */}
-        <button onClick={handleDownload} disabled={!name.trim() || downloading || selectedTools.size === 0}
+        <button type="button" onClick={handleDownload} disabled={!name.trim() || downloading || selectedTools.size === 0}
           className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           {downloading ? '⏳ 生成中...' : '📥 下载项目 ZIP'}
         </button>

@@ -72,6 +72,28 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return response
 }
 
+export async function readApiErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const payload = await response.json()
+    const nestedMessage = payload?.error?.message
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
+      return nestedMessage.trim()
+    }
+    if (typeof payload?.detail === 'string' && payload.detail.trim()) {
+      return payload.detail.trim()
+    }
+    if (typeof payload?.message === 'string' && payload.message.trim()) {
+      return payload.message.trim()
+    }
+  } catch {
+    // Non-JSON errors use the caller's stable fallback.
+  }
+  return fallback
+}
+
 export interface ServerInfo {
   id: string
   name: string

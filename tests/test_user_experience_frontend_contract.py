@@ -99,6 +99,8 @@ def test_protected_fetches_use_the_shared_api_client() -> None:
     assert "fetch(" not in logs
     assert "apiFetch('/builder/tools')" in builder
     assert "apiFetch(`/builder/generate?" in builder
+    assert "readApiErrorMessage" in builder
+    assert "await res.text()" not in builder
     assert "fetch(" not in builder
 
 
@@ -175,3 +177,18 @@ def test_legacy_public_pages_receive_dark_theme_without_overriding_explicit_vari
     assert ".dark {" in styles
     assert "color-scheme: dark" in styles
     assert "dark:from-amber-950/40" in guide
+
+
+def test_builder_errors_are_readable_and_form_controls_are_labeled() -> None:
+    builder = _source("pages/Builder.tsx")
+    client = _source("api/client.ts")
+
+    assert "export async function readApiErrorMessage" in client
+    assert "payload?.error?.message" in client
+    assert "new ApiRequestError(" in builder
+    assert 'role="alert"' in builder
+    assert 'role="status"' in builder
+    assert 'htmlFor="builder-name"' in builder
+    assert 'id="builder-name"' in builder
+    assert 'aria-pressed={language === \'python\'}' in builder
+    assert 'aria-pressed={selectedTools.has(tool.name)}' in builder
