@@ -173,6 +173,12 @@ def test_legacy_public_pages_receive_dark_theme_without_overriding_explicit_vari
     assert '.bg-white:not([class*="dark:bg-"])' in styles
     assert '.border-gray-200:not([class*="dark:border-"])' in styles
     assert '.text-blue-700:not([class*="dark:text-"])' in styles
+    assert '.text-blue-900:not([class*="dark:text-"])' in styles
+    assert '.text-green-800:not([class*="dark:text-"])' in styles
+    assert '.text-red-800:not([class*="dark:text-"])' in styles
+    assert '.text-amber-800:not([class*="dark:text-"])' in styles
+    assert '.text-amber-900:not([class*="dark:text-"])' in styles
+    assert '.text-yellow-800:not([class*="dark:text-"])' in styles
     assert '.bg-red-50:not([class*="dark:bg-"])' in styles
     assert '.text-gray-400:not([class*="dark:text-"])' in styles
     assert '.bg-green-600:not([class*="dark:bg-"])' in styles
